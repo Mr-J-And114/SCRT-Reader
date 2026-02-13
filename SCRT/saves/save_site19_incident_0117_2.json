@@ -1,8 +1,11 @@
 {
-	"current_path": "/",
+	"current_path": "/reports",
 	"player_clearance": 0,
 	"read_files": [
-		"/notice.txt"
+		"/notice.txt",
+		"/welcome.txt",
+		"/reports/final_report.txt",
+		"/reports/scp_173.txt"
 	],
 	"story_id": "site19_incident_0117_2",
 	"unlocked_file_passwords": [],

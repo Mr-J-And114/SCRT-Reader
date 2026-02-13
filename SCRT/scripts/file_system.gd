@@ -169,6 +169,7 @@ func build_box(lines_data: Array[String], color: String) -> String:
 		var line: String = lines_data[i]
 		var line_width: int = display_width(line)
 		var pad_total: int = inner_width - line_width
+		@warning_ignore("integer_division")
 		var pad_left: int = pad_total / 2
 		var pad_right: int = pad_total - pad_left
 		result += "[color=" + color + "]║" + " ".repeat(pad_left) + line + " ".repeat(pad_right) + "║[/color]\n"
@@ -196,6 +197,7 @@ func build_box_sectioned(sections: Array, color: String) -> String:
 			var line_str: String = str(line)
 			var line_width: int = display_width(line_str)
 			var pad_total: int = inner_width - line_width
+			@warning_ignore("integer_division")
 			var pad_left: int = pad_total / 2
 			var pad_right: int = pad_total - pad_left
 			result += "[color=" + color + "]║" + " ".repeat(pad_left) + line_str + " ".repeat(pad_right) + "║[/color]\n"

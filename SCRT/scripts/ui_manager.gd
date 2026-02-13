@@ -195,7 +195,7 @@ static func setup_crt_effect(crt_node: Node) -> void:
 # ============================================================
 # 自定义鼠标光标（CRT风格像素光标）
 # ============================================================
-static func setup_custom_cursor(parent: Control) -> void:
+static func setup_custom_cursor(_parent: Control) -> void:
 	# 生成像素风格的箭头光标
 	var cursor_image := _generate_crt_cursor()
 	var cursor_texture := ImageTexture.create_from_image(cursor_image)
