@@ -1,11 +1,16 @@
 {
 	"current_path": "/reports",
-	"player_clearance": 0,
+	"player_clearance": 2,
 	"read_files": [
 		"/welcome.txt",
-		"/reports/scp_173.txt"
+		"/reports/scp_173.txt",
+		"/reports/incident_0117.txt"
 	],
 	"story_id": "site19_incident_0117",
-	"unlocked_file_passwords": [],
-	"unlocked_passwords": []
+	"unlocked_file_passwords": [
+		"/reports/incident_0117.txt"
+	],
+	"unlocked_passwords": [
+		"0117alpha"
+	]
 }

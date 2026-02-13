@@ -1,0 +1,194 @@
+[gd_scene format=3 uid="uid://uhsux752tkeg"]
+
+[ext_resource type="Script" uid="uid://by6hl02fxdxr2" path="res://scripts/main.gd" id="1_0wfyh"]
+[ext_resource type="FontFile" uid="uid://b50el2p7bgxaw" path="res://fonts/SarasaMonoSC-Regular.ttf" id="1_o5qli"]
+[ext_resource type="Shader" uid="uid://dstpfg503ggco" path="res://shaders/background_vignette.gdshader" id="2_tbgi4"]
+[ext_resource type="Shader" uid="uid://d15a6o7448c2c" path="res://shaders/crt_effect.gdshader" id="3_sugp2"]
+[ext_resource type="Texture2D" uid="uid://c83uujkdiwckt" path="res://images/backround.png" id="3_tefeu"]
+[ext_resource type="Script" uid="uid://cceugfkhn5rwt" path="res://scripts/crt_shader.gd" id="4_jyhfs"]
+[ext_resource type="Texture2D" uid="uid://7wuc5ejee4i" path="res://images/矢量SCP.png" id="4_o6xl0"]
+[ext_resource type="Shader" uid="uid://bwe4hihwr806w" path="res://shaders/background_logo.gdshader" id="4_tipki"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tefeu"]
+shader = ExtResource("2_tbgi4")
+shader_parameter/vignette_strength = 1.442000068495
+shader_parameter/vignette_radius = 0.77100003336262
+shader_parameter/glow_strength = 0.0
+shader_parameter/glow_radius = 0.46700001892262
+shader_parameter/brightness = 0.68800003268
+shader_parameter/tint_color = Color(0.1, 0.3, 0.1, 0.15)
+shader_parameter/alpha = 0.50000002375
+shader_parameter/hue_shift = 0.0
+shader_parameter/saturation = 1.0
+shader_parameter/contrast = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_85g3d"]
+shader = ExtResource("4_tipki")
+shader_parameter/vignette_strength = 0.0
+shader_parameter/vignette_radius = 0.10000000149012
+shader_parameter/glow_strength = 0.0
+shader_parameter/glow_radius = 0.10000000149012
+shader_parameter/brightness = 0.0
+shader_parameter/tint_color = Color(0.1, 0.3, 0.1, 0.15)
+shader_parameter/alpha = 0.400000019
+shader_parameter/hue_shift = 0.0
+shader_parameter/saturation = 1.0
+shader_parameter/contrast = 0.7290000346275
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_o5qli"]
+bg_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0wfyh"]
+bg_color = Color(0, 0, 0, 0)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jyhfs"]
+shader = ExtResource("3_sugp2")
+shader_parameter/scanline_intensity = 0.15
+shader_parameter/scanline_frequency = 300.0
+shader_parameter/scanline_speed = 1.0
+shader_parameter/curvature = 1.0000000475
+shader_parameter/chromatic_aberration = 0.30000001425
+shader_parameter/vignette_intensity = 0.4
+shader_parameter/vignette_size = 0.6
+shader_parameter/flicker_intensity = 0.03
+shader_parameter/flicker_speed = 8.0
+shader_parameter/noise_intensity = 0.0800000038
+shader_parameter/glow_intensity = 0.15
+shader_parameter/bloom_spread = 3.0
+shader_parameter/bloom_intensity = 0.5
+shader_parameter/phosphor_color = Color(0.1, 1, 0.3, 1)
+shader_parameter/phosphor_boost = 0.35
+shader_parameter/brightness = 1.1
+shader_parameter/contrast = 1.1
+
+[node name="Main" type="Control" unique_id=1421056992]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_0wfyh")
+
+[node name="Background" type="ColorRect" parent="." unique_id=37645157]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 1)
+
+[node name="Backgrund" type="TextureRect" parent="Background" unique_id=2042601375]
+material = SubResource("ShaderMaterial_tefeu")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -3.0517578e-05
+offset_top = -1.5258789e-05
+offset_right = 1727.9998
+offset_bottom = 971.99976
+grow_horizontal = 2
+grow_vertical = 2
+scale = Vector2(0.4, 0.4)
+mouse_filter = 2
+texture = ExtResource("3_tefeu")
+stretch_mode = 6
+
+[node name="CenterContainer" type="CenterContainer" parent="Background" unique_id=31554897]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BackgroundLogo" type="TextureRect" parent="Background/CenterContainer" unique_id=1093779827]
+material = SubResource("ShaderMaterial_85g3d")
+custom_minimum_size = Vector2(600, 600)
+layout_mode = 2
+texture = ExtResource("4_o6xl0")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="MainContent" type="VBoxContainer" parent="." unique_id=1990169080]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 0
+
+[node name="StatusFrame" type="PanelContainer" parent="MainContent" unique_id=1180756798]
+layout_mode = 2
+
+[node name="StatusBar" type="HBoxContainer" parent="MainContent/StatusFrame" unique_id=398646271]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+
+[node name="PathLabel" type="Label" parent="MainContent/StatusFrame/StatusBar" unique_id=1273623993]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.2, 1, 0.2, 1)
+theme_override_fonts/font = ExtResource("1_o5qli")
+text = "[/root]"
+
+[node name="MailIcon" type="Label" parent="MainContent/StatusFrame/StatusBar" unique_id=167748524]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.2, 1, 0.2, 1)
+theme_override_fonts/font = ExtResource("1_o5qli")
+text = "[✉]"
+horizontal_alignment = 2
+
+[node name="OutputArea" type="ScrollContainer" parent="MainContent" unique_id=1965710342]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="OutputText" type="RichTextLabel" parent="MainContent/OutputArea" unique_id=525445924]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_colors/default_color = Color(0.2, 1, 0.2, 1)
+theme_override_fonts/normal_font = ExtResource("1_o5qli")
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+
+[node name="InputFrame" type="PanelContainer" parent="MainContent" unique_id=947368178]
+layout_mode = 2
+
+[node name="InputArea" type="HBoxContainer" parent="MainContent/InputFrame" unique_id=1284721036]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+
+[node name="Prompt" type="Label" parent="MainContent/InputFrame/InputArea" unique_id=2000884672]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.2, 1, 0.2, 1)
+theme_override_fonts/font = ExtResource("1_o5qli")
+text = "> "
+
+[node name="InputField" type="LineEdit" parent="MainContent/InputFrame/InputArea" unique_id=468744714]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.2, 1, 0.2, 1)
+theme_override_colors/font_placeholder_color = Color(0.2, 1, 0.2, 1)
+theme_override_colors/caret_color = Color(0.2, 1, 0.2, 1)
+theme_override_fonts/font = ExtResource("1_o5qli")
+theme_override_styles/normal = SubResource("StyleBoxFlat_o5qli")
+theme_override_styles/focus = SubResource("StyleBoxFlat_0wfyh")
+placeholder_text = "输入命令..."
+
+[node name="CRTEffect" type="CanvasLayer" parent="." unique_id=2008200683]
+layer = 10
+
+[node name="CRTShader" type="ColorRect" parent="CRTEffect" unique_id=457470277]
+material = SubResource("ShaderMaterial_jyhfs")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_jyhfs")
