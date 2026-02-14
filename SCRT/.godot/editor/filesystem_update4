@@ -2,7 +2,8 @@ res://scenes/main.tscn
 res://shaders/background_vignette.gdshader
 res://shaders/crt_effect.gdshader
 res://shaders/background_logo.gdshader
-res://scripts/ui_manager.gd
-res://scripts/disc_manager.gd
-res://scripts/main.gd
+res://scripts/theme_manager.gd
 res://scripts/command_handler.gd.gd
+res://scripts/main.gd
+res://scripts/typewriter.gd
+res://scripts/ui_manager.gd

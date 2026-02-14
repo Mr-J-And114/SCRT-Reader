@@ -10,6 +10,7 @@ extends Node
 # ============================================================
 var output_text: RichTextLabel = null
 var scroll_container: ScrollContainer = null
+var T = null   # ThemeManager.ThemeColors 引用
 
 # ============================================================
 # 打字机状态
@@ -41,6 +42,7 @@ var _scroll_delay: int = 0  # 延迟帧计数器
 func setup(p_output: RichTextLabel, p_scroll: ScrollContainer) -> void:
 	output_text = p_output
 	scroll_container = p_scroll
+	T = ThemeManager.current
 
 # ============================================================
 # 外部接口：追加文本到队列
@@ -179,19 +181,19 @@ func show_progress_bar(file_size: int, speed_override: float = -1.0) -> void:
 
 	if output_text.get_parsed_text().length() > 0:
 		output_text.append_text("\n")
-	output_text.append_text("[color=#66FF66]加载中 [[/color]")
+	output_text.append_text("[color=" + T.primary_hex + "]加载中 [[/color]")
 
 	for i in range(bar_width):
 		if instant:
 			var remaining: int = bar_width - i
-			output_text.append_text("[color=#33FF33]" + "█".repeat(remaining) + "[/color]")
+			output_text.append_text("[color=" + T.primary_hex + "]" + "█".repeat(remaining) + "[/color]")
 			break
-		output_text.append_text("[color=#33FF33]█[/color]")
+		output_text.append_text("[color=" + T.primary_hex + "]█[/color]")
 		_do_scroll()
 		var jitter: float = randf_range(0.7, 1.5)
 		await get_tree().create_timer(base_delay * jitter).timeout
 
-	output_text.append_text("[color=#66FF66]] 完成[/color]\n")
+	output_text.append_text("[color=" + T.primary_hex + "]] 完成[/color]\n")
 	_do_scroll()
 
 # ============================================================

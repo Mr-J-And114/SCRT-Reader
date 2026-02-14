@@ -135,8 +135,9 @@ func get_completions(partial: String) -> Array[String]:
 				if cmd_info.get("disc_only", false) and main._desktop_mode:
 					continue
 				results.append(cmd_key)
+
 	elif parts.size() == 1 and ends_with_space:
-		# 输入了命令+空格，列出所有可选文件/目录
+		# 输入了命令+空格，列出所有可选子参数
 		var cmd: String = parts[0].to_lower()
 		if cmd in ["cd", "open", "cat"]:
 			var children: Array = fs.get_children_at_path(main.current_path)
@@ -150,11 +151,23 @@ func get_completions(partial: String) -> Array[String]:
 					results.append(cmd + " " + child_str)
 				elif cmd in ["open", "cat"] and node.type == "file":
 					results.append(cmd + " " + child_str)
+		elif cmd == "theme":
+			# ★ 这里是修复点：theme + 空格时列出所有主题名
+			var themes: Array[String] = ThemeManager.get_available_themes()
+			for theme_name in themes:
+				results.append(cmd + " " + theme_name)
+
 	elif parts.size() >= 2:
-		# 补全文件/目录名（部分输入）
+		# 补全子参数（部分输入）
 		var cmd: String = parts[0].to_lower()
 		var partial_name: String = parts[-1]
-		if cmd in ["cd", "open", "cat"]:
+		if cmd == "theme":
+			# ★ theme 放在最前面，避免被 cd/open/cat 的兜底逻辑截获
+			var themes: Array[String] = ThemeManager.get_available_themes()
+			for theme_name in themes:
+				if theme_name.to_lower().begins_with(partial_name.to_lower()):
+					results.append(cmd + " " + theme_name)
+		elif cmd in ["cd", "open", "cat"]:
 			var items: Array = fs.get_children_at_path(main.current_path)
 			for item in items:
 				var item_str: String = str(item)
@@ -171,6 +184,7 @@ func get_completions(partial: String) -> Array[String]:
 						results.append(cmd + " " + item_str)
 
 	return results
+
 
 ## ══════════════════════════════════════════
 ## 历史命令导航
@@ -210,29 +224,30 @@ func _cmd_exit(_args: Array = []) -> void:
 	await main.get_tree().create_timer(1.0).timeout
 	main.get_tree().quit()
 
+
 func _cmd_reboot(_args: Array = []) -> void:
 	main.append_output("[color=" + T.muted_hex + "]正在重启终端...[/color]\n", false)
 	while tw.is_typing:
 		await main.get_tree().process_frame
 	await main.get_tree().create_timer(0.5).timeout
 
-	# 重置命令历史
 	command_history.clear()
 	history_index = -1
-
-	# 静默重置所有磁盘和主控状态（不含动画）
 	disc_mgr.reset_all()
 
-	# 重启动画
 	main.output_text.append_text("[color=" + T.muted_hex + "]...[/color]\n")
 	await main.get_tree().create_timer(0.3).timeout
 	main.output_text.append_text("[color=" + T.muted_hex + "]终端系统重新初始化中...[/color]\n")
 	await main.get_tree().create_timer(0.5).timeout
 
-	# 清屏并显示桌面欢迎
 	main.output_text.text = ""
 	disc_mgr.show_desktop_welcome()
 	main.input_field.grab_focus()
+
+	# ★ 重启后刷新所有 Shader，确保主题完全生效
+	ThemeManager._refresh_all_ui(main)
+
+
 
 func _cmd_help(_args: Array = []) -> void:
 	var p: String = T.primary_hex
@@ -244,7 +259,8 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]load <编号>[/color]   加载指定虚拟磁盘")
 		lines.append("  [color=" + p + "]scan[/color]          重新扫描vdisc目录")
 		lines.append("  [color=" + p + "]vdisc[/color]         查看磁盘列表详情")
-		lines.append("  [color=" + p + "]clear[/color]         清空屏幕")
+		lines.append("  [color=" + p + "]theme[/color]         查看/切换主题")
+		lines.append("  [color=" + p + "]clear/cls[/color]     清空屏幕")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
 		lines.append("  [color=" + p + "]clearsave[/color]     清除存档")
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
@@ -262,6 +278,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]whoami[/color]        查看当前用户信息")
 		lines.append("  [color=" + p + "]vdisc[/color]         查看虚拟磁盘列表和信息")
 		lines.append("  [color=" + p + "]scan[/color]          重新扫描虚拟磁盘")
+		lines.append("  [color=" + p + "]theme[/color]         查看/切换主题")
 		lines.append("  [color=" + p + "]unlock[/color]        进入密码认证(或 unlock <密码>)")
 		lines.append("  [color=" + p + "]eject[/color]         卸载磁盘，返回桌面")
 		lines.append("  [color=" + p + "]save[/color]          保存进度")
@@ -411,7 +428,6 @@ func _cmd_open(args: Array = []) -> void:
 		main._file_password_target = file_path
 		main._file_password_filename = filename
 		# 进入文件密码模式，placeholder 由焦点事件管理
-		# 如果当前有焦点，手动清空；否则 focus_exited 会设置正确的提示
 		if main.input_field.has_focus():
 			main.input_field.placeholder_text = ""
 		return
@@ -608,6 +624,6 @@ func _cmd_clearsave(args: Array = []) -> void:
 
 func _cmd_theme(args: Array = []) -> void:
 	if args.is_empty():
-		T.show_themes(main)
+		ThemeManager.show_themes(main)
 	else:
-		T.apply_theme(str(args[0]), main)
+		ThemeManager.request_theme_change(str(args[0]), main)

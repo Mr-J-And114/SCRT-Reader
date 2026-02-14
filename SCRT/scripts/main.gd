@@ -24,6 +24,7 @@ var crtml = null
 @onready var mail_icon: Label = $MainContent/StatusFrame/StatusBar/MailIcon
 @onready var status_frame: PanelContainer = $MainContent/StatusFrame
 @onready var input_frame: PanelContainer = $MainContent/InputFrame
+@onready var prompt_label: Label = $MainContent/InputFrame/InputArea/Prompt
 var background: TextureRect = null
 
 # ══════════════════════════════════════════
@@ -44,15 +45,16 @@ var _file_password_mode: bool = false
 var _file_password_target: String = ""
 var _file_password_filename: String = ""
 var _command_running: bool = false
-
 # 滚动控制（用帧计数代替 await，避免协程堆积）
 var _scroll_pending_frames: int = 0
+var _theme_confirm_mode: bool = false
+
 
 # ══════════════════════════════════════════
 #  初始化
 # ══════════════════════════════════════════
 func _ready() -> void:
-	# 初始化主题
+	# 初始化主题（自动读取上次保存的偏好，无则用默认绿色）
 	ThemeManager.init("phosphor_green")
 	T = ThemeManager.current
 
@@ -80,6 +82,9 @@ func _ready() -> void:
 		input_frame, input_field, output_text, scroll_container)
 	UIManager.setup_crt_effect($CRTEffect)
 	UIManager.setup_custom_cursor(self)
+
+	# 设置 > 提示符颜色跟随主题
+	prompt_label.add_theme_color_override("font_color", T.primary)
 
 	# 输入框设置
 	input_field.context_menu_enabled = false
@@ -111,6 +116,8 @@ func _ready() -> void:
 	_update_status_bar()
 	disc_mgr.show_desktop_welcome()
 	input_field.grab_focus()
+	# 应用主题到所有 Shader（首次启动时与主题匹配）
+	ThemeManager._refresh_all_ui(self)
 
 # ══════════════════════════════════════════
 #  输入框焦点控制 placeholder 显示
@@ -119,14 +126,17 @@ func _on_input_focus_entered() -> void:
 	# 获得焦点时隐藏提示文字，只显示光标
 	input_field.placeholder_text = ""
 
+
 func _on_input_focus_exited() -> void:
-	# 失去焦点时根据当前模式恢复提示文字
 	if _password_mode:
 		input_field.placeholder_text = "请输入密码..."
 	elif _file_password_mode:
 		input_field.placeholder_text = "请输入文件密码..."
+	elif _theme_confirm_mode:
+		input_field.placeholder_text = "输入 Y 确认，其它取消..."
 	else:
 		input_field.placeholder_text = "按 Enter 输入命令..."
+
 
 ## 获取当前模式下应显示的 placeholder（供外部调用）
 func _get_default_placeholder() -> String:
@@ -141,7 +151,6 @@ func _get_default_placeholder() -> String:
 #  回车提交（由 text_submitted 信号触发，仅此一处）
 # ══════════════════════════════════════════
 func _on_input_submitted(_text: String) -> void:
-	# 立刻取出文本并清空
 	var raw: String = input_field.text.strip_edges()
 	input_field.text = ""
 	input_field.clear()
@@ -152,15 +161,39 @@ func _on_input_submitted(_text: String) -> void:
 	if _command_running:
 		return
 
-	# 打字机正在打字时，跳过打字而不是执行命令
 	if tw.is_typing:
 		tw.skip()
 		return
 
-	# 密码模式处理
+	# ★ 主题确认模式处理
+	if _theme_confirm_mode:
+		_theme_confirm_mode = false
+		output_text.append_text("> " + raw + "\n")
+		if raw.to_lower() == "y":
+			ThemeManager.confirm_and_apply(self)
+			await get_tree().create_timer(0.8).timeout
+			output_text.text = ""
+			tw.clear_queue()
+			cmd_handler.command_history.clear()
+			cmd_handler.history_index = -1
+			disc_mgr.reset_all()
+			output_text.append_text("[color=" + T.muted_hex + "]...[/color]\n")
+			await get_tree().create_timer(0.3).timeout
+			output_text.append_text("[color=" + T.muted_hex + "]终端系统重新初始化中...[/color]\n")
+			await get_tree().create_timer(0.5).timeout
+			output_text.text = ""
+			# 应用主题到所有 Shader（首次启动时与主题匹配）
+			ThemeManager._refresh_all_ui(self)
+			disc_mgr.show_desktop_welcome()
+			input_field.grab_focus()
+		else:
+			ThemeManager.cancel_theme_change(self)
+		_request_scroll()
+		return
+
+	# 密码模式处理（原有代码不变）
 	if _password_mode:
 		_password_mode = false
-		# 焦点在输入框上，placeholder 为空（由 focus_entered 控制）
 		output_text.append_text("> " + "*".repeat(raw.length()) + "\n")
 		if raw.to_lower() == "cancel":
 			append_output("[color=" + T.muted_hex + "]已取消密码输入。[/color]\n", false)
@@ -169,10 +202,9 @@ func _on_input_submitted(_text: String) -> void:
 		_request_scroll()
 		return
 
-	# 文件密码模式处理
+	# 文件密码模式处理（原有代码不变）
 	if _file_password_mode:
 		_file_password_mode = false
-		# 焦点在输入框上，placeholder 为空（由 focus_entered 控制）
 		output_text.append_text("> " + "*".repeat(raw.length()) + "\n")
 		if raw.to_lower() == "cancel":
 			append_output("[color=" + T.muted_hex + "]已取消文件密码输入。[/color]\n", false)
@@ -183,10 +215,12 @@ func _on_input_submitted(_text: String) -> void:
 		_request_scroll()
 		return
 
-	# 正常命令执行
+	# 正常命令执行（原有代码不变）
 	append_output("> " + raw + "\n", false)
 	_request_scroll()
 	_run_command(raw)
+
+
 
 func _run_command(raw: String) -> void:
 	_command_running = true

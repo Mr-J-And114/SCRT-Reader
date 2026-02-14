@@ -182,7 +182,7 @@ static func setup_input_field(input_field: LineEdit) -> void:
 # ============================================================
 static func setup_output_text(output_text: RichTextLabel) -> void:
 	var t := ThemeManager.current
-	output_text.text = ""
+	# （不清空内容，只设置样式）
 	output_text.bbcode_enabled = true
 	output_text.selection_enabled = true
 	output_text.meta_underlined = true

@@ -1,10 +1,10 @@
+Label
 CenterContainer
 TextureRect
 PanelContainer
 ColorRect
 CanvasLayer
 LineEdit
-Label
 HBoxContainer
 RichTextLabel
 ScrollContainer
