@@ -41,27 +41,25 @@ func _get_vdisc_dir() -> String:
 ## ============================================================
 ## 扫描 vdisc/ 目录中的可用故事磁盘
 ## ============================================================
-func scan_stories() -> void:
+func scan_stories(silent: bool = false) -> void:
 	available_stories.clear()
 	var vdisc_dir: String = _get_vdisc_dir()
-
-	# 调试输出（确认扫描路径）
+	
 	print("[DiscManager] 扫描路径: " + vdisc_dir)
 	print("[DiscManager] 目录是否存在: " + str(DirAccess.dir_exists_absolute(vdisc_dir)))
-
-	# 如果目录不存在，先创建
+	
 	if not DirAccess.dir_exists_absolute(vdisc_dir):
 		DirAccess.make_dir_recursive_absolute(vdisc_dir)
 		print("[DiscManager] 已创建 vdisc 目录: " + vdisc_dir)
-
+	
 	var dir: DirAccess = DirAccess.open(vdisc_dir)
 	if dir == null:
 		var err_code: int = DirAccess.get_open_error()
 		print("[DiscManager] 无法打开目录，错误码: " + str(err_code))
-		main.append_output("[color=" + str(T.warning_hex) + "]vdisc/ 目录无法访问。[/color]\n", false)
+		if not silent:
+			main.append_output("[color=" + str(T.warning_hex) + "]vdisc/ 目录无法访问。[/color]\n", false)
 		return
-
-	# 遍历目录中的文件
+	
 	dir.list_dir_begin()
 	var file_name: String = dir.get_next()
 	while not file_name.is_empty():
@@ -78,14 +76,18 @@ func scan_stories() -> void:
 				print("[DiscManager] 无法读取磁盘信息: " + file_name)
 		file_name = dir.get_next()
 	dir.list_dir_end()
-
-	# 输出扫描结果
-	if available_stories.is_empty():
-		main.append_output("[color=" + str(T.warning_hex) + "]vdisc/ 目录为空，未找到 .scp 或 .zip 文件。[/color]\n", false)
-	else:
-		main.append_output("[color=" + str(T.primary_hex) + "]扫描完成，发现 " + str(available_stories.size()) + " 个虚拟磁盘。[/color]\n", false)
-
+	
+	# 只在非静默模式下输出扫描结果
+	if not silent:
+		if available_stories.is_empty():
+			main.append_output("[color=" + str(T.warning_hex) + "]vdisc/ 目录为空，未找到 .scp 或 .zip 文件。[/color]\n", true)
+		else:
+			main.append_output("[color=" + str(T.primary_hex) + "]扫描完成，发现 " + str(available_stories.size()) + " 个虚拟磁盘。[/color]\n", true)
+	
 	print("[DiscManager] 扫描完成，共 " + str(available_stories.size()) + " 个磁盘")
+
+
+
 
 ## ============================================================
 ## 快速预览 .scp/.zip 中的 manifest 信息（不完全加载）
@@ -233,10 +235,8 @@ func _load_story_by_index(index: int) -> bool:
 		if save_data.has("unlocked_file_passwords"):
 			for fp in save_data["unlocked_file_passwords"]:
 				fs.unlocked_file_passwords.append(str(fp))
-		if save_data.has("current_path"):
-			var saved_path: String = save_data["current_path"]
-			if fs.has_clearance(saved_path):
-				main.current_path = saved_path
+		# 无论存档记录了什么路径，始终从根目录开始
+		main.current_path = "/"
 		print("[DiscManager] 存档已恢复，权限: " + str(fs.player_clearance))
 	else:
 		fs.player_clearance = start_clearance
@@ -288,6 +288,9 @@ func eject_story() -> void:
 ## 桌面欢迎界面
 ## ============================================================
 func show_desktop_welcome() -> void:
+	# 先清空，防止之前的 scan 输出和欢迎信息混叠
+	main.output_text.text = ""
+	tw.clear_queue()
 	var p: String = str(T.primary_hex)
 	var w: String = str(T.warning_hex)
 	var m: String = str(T.muted_hex)
@@ -345,3 +348,46 @@ func show_story_info() -> void:
 
 	lines.append("[color=" + p + "]════════════════════════════════════════════[/color]")
 	main.append_output("\n".join(lines) + "\n", false)
+
+
+
+
+## 重置所有状态（reboot/restart 时调用）
+## 注意：这是静默重置，不包含动画和 await，不会调用 eject_story()
+func reset_all() -> void:
+	# 如果有磁盘在用，先静默保存
+	if story_id != "" and main.story_id != "":
+		save_mgr.auto_save(story_id, fs.player_clearance, main.read_files,
+			main.unlocked_passwords, fs.unlocked_file_passwords, main.current_path)
+	
+	# 重置文件系统
+	fs.clear_all()
+	
+	# 重置磁盘管理器自身状态
+	story_manifest.clear()
+	current_story_path = ""
+	story_id = ""
+	current_story_index = -1
+	
+	# 重置主控状态
+	main.current_path = "/"
+	main.read_files.clear()
+	main.unlocked_passwords.clear()
+	main.story_id = ""
+	main.story_manifest = {}
+	main.current_story_index = -1
+	main.has_new_mail = false
+	main._desktop_mode = true
+	main._password_mode = false
+	main._file_password_mode = false
+	main._file_password_target = ""
+	main._file_password_filename = ""
+	main._command_running = false
+	
+	# 清空输出
+	main.output_text.text = ""
+	tw.clear_queue()
+	
+	# 重新扫描磁盘
+	scan_stories()
+	main._update_status_bar()

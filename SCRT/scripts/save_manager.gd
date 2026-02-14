@@ -95,3 +95,39 @@ func load_save(story_id: String) -> Variant:
 
 	print("[SaveManager] 已加载存档: " + path)
 	return data
+
+
+## 删除指定故事的存档
+func delete_save(p_story_id: String) -> bool:
+	var path: String = get_save_path(p_story_id)
+	if FileAccess.file_exists(path):
+		var err := DirAccess.remove_absolute(path)
+		if err == OK:
+			print("[SaveManager] 已删除存档: " + path)
+			return true
+		else:
+			print("[SaveManager] 删除存档失败: " + str(err))
+			return false
+	print("[SaveManager] 存档不存在: " + path)
+	return false
+
+## 删除所有存档
+func delete_all_saves() -> int:
+	var saves_dir: String = get_game_root_dir() + "saves/"
+	var count: int = 0
+	if not DirAccess.dir_exists_absolute(saves_dir):
+		return 0
+	var dir := DirAccess.open(saves_dir)
+	if dir == null:
+		return 0
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.begins_with("save_") and file_name.ends_with(".json"):
+			var err := DirAccess.remove_absolute(saves_dir + file_name)
+			if err == OK:
+				count += 1
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	print("[SaveManager] 已删除 " + str(count) + " 个存档")
+	return count

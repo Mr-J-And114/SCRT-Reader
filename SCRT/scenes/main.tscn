@@ -178,7 +178,6 @@ theme_override_colors/caret_color = Color(0.2, 1, 0.2, 1)
 theme_override_fonts/font = ExtResource("1_o5qli")
 theme_override_styles/normal = SubResource("StyleBoxFlat_o5qli")
 theme_override_styles/focus = SubResource("StyleBoxFlat_0wfyh")
-placeholder_text = "输入命令..."
 
 [node name="CRTEffect" type="CanvasLayer" parent="." unique_id=2008200683]
 layer = 10

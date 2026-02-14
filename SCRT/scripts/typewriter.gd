@@ -33,6 +33,7 @@ var _current_char_speed: float = 0.008   # 当前生效速度（可被 [speed=] 
 # 滚动控制
 # ============================================================
 var _needs_scroll: bool = false
+var _scroll_delay: int = 0  # 延迟帧计数器
 
 # ============================================================
 # 初始化
@@ -196,14 +197,25 @@ func show_progress_bar(file_size: int, speed_override: float = -1.0) -> void:
 # ============================================================
 # 滚动控制
 # ============================================================
+# typewriter.gd - 替换整个滚动控制部分
 func _do_scroll() -> void:
 	_needs_scroll = true
+	_scroll_delay = 2  # 延迟2帧，确保布局完成
 
 func process_scroll() -> void:
 	if _needs_scroll:
-		var v_scroll: VScrollBar = scroll_container.get_v_scroll_bar()
-		scroll_container.scroll_vertical = int(v_scroll.max_value)
+		if _scroll_delay > 0:
+			_scroll_delay -= 1
+			return
 		_needs_scroll = false
+		var v_scroll: VScrollBar = scroll_container.get_v_scroll_bar()
+		if v_scroll:
+			scroll_container.scroll_vertical = int(v_scroll.max_value)
+		# 备用：也滚动 output_text 自身
+		var rt_vscroll := output_text.get_v_scroll_bar()
+		if rt_vscroll:
+			rt_vscroll.value = rt_vscroll.max_value
+
 
 # ============================================================
 # 重置
