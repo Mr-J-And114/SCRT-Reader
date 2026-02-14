@@ -94,35 +94,51 @@ func _typewrite_text(text: String, extra_newline: bool = true) -> void:
 			if close_bracket != -1:
 				var tag: String = text.substr(i, close_bracket - i + 1)
 
-				# 自定义速度标签 [speed=0.05]
+				# ── 自定义速度标签 [speed=0.05] ──
 				if tag.begins_with("[speed="):
 					var speed_str: String = tag.substr(7, tag.length() - 8)
-					_current_char_speed = speed_str.to_float()
+					var new_speed: float = speed_str.to_float()
+					if new_speed > 0.0:
+						_current_char_speed = new_speed
 					i = close_bracket + 1
 					continue
 				elif tag == "[/speed]":
 					_current_char_speed = base_speed
 					i = close_bracket + 1
 					continue
+
+				# ── 暂停标签 [pause=500] ──
+				# 支持两种单位：>1 视为毫秒，<=1 视为秒
 				elif tag.begins_with("[pause="):
-					# 自定义暂停标签 [pause=0.5]
 					var pause_str: String = tag.substr(7, tag.length() - 8)
-					var pause_time: float = pause_str.to_float()
-					await get_tree().create_timer(pause_time).timeout
+					var pause_value: float = pause_str.to_float()
+					if not instant:
+						# 大于1的值视为毫秒，转换为秒
+						var pause_seconds: float = pause_value / 1000.0 if pause_value > 1.0 else pause_value
+						pause_seconds = clampf(pause_seconds, 0.0, 30.0)  # 安全上限30秒
+						if pause_seconds > 0.0:
+							await get_tree().create_timer(pause_seconds).timeout
 					i = close_bracket + 1
 					continue
 
-				# 判断是否是合法的BBCode标签
+				# ── 清屏标签 [clear] ──
+				elif tag == "[clear]":
+					output_text.text = ""
+					_do_scroll()
+					i = close_bracket + 1
+					continue
+
+				# ── 判断是否是合法的BBCode标签 ──
 				var tag_inner: String = tag.substr(1, tag.length() - 2)
-				if tag_inner.length() > 0 and (tag_inner[0] == "/" or tag_inner[0].unicode_at(0) >= 65 and tag_inner[0].unicode_at(0) <= 122):
+				if tag_inner.length() > 0 and (tag_inner[0] == "/" or (tag_inner[0].unicode_at(0) >= 65 and tag_inner[0].unicode_at(0) <= 122)):
 					output_text.append_text(tag)
 					i = close_bracket + 1
 					continue
 
-				# 不是BBCode标签，转义方括号后逐字输出
-				output_text.append_text("[lb]")
-				i += 1
-				continue
+			# 不是BBCode标签，转义方括号后逐字输出
+			output_text.append_text("[lb]")
+			i += 1
+			continue
 
 		# 普通字符
 		var ch: String = text[i]
@@ -179,27 +195,30 @@ func show_progress_bar(file_size: int, speed_override: float = -1.0) -> void:
 	var base_delay: float = clamp(float(file_size) / 5000.0, 0.01, 0.08)
 	base_delay /= speed
 
+	# 安全获取主题色
+	var bar_color: String = T.primary_hex if T != null else "#33FF33"
+
 	if output_text.get_parsed_text().length() > 0:
 		output_text.append_text("\n")
-	output_text.append_text("[color=" + T.primary_hex + "]加载中 [[/color]")
+
+	output_text.append_text("[color=" + bar_color + "]加载中 [[/color]")
 
 	for i in range(bar_width):
 		if instant:
 			var remaining: int = bar_width - i
-			output_text.append_text("[color=" + T.primary_hex + "]" + "█".repeat(remaining) + "[/color]")
+			output_text.append_text("[color=" + bar_color + "]" + "█".repeat(remaining) + "[/color]")
 			break
-		output_text.append_text("[color=" + T.primary_hex + "]█[/color]")
+		output_text.append_text("[color=" + bar_color + "]█[/color]")
 		_do_scroll()
 		var jitter: float = randf_range(0.7, 1.5)
 		await get_tree().create_timer(base_delay * jitter).timeout
 
-	output_text.append_text("[color=" + T.primary_hex + "]] 完成[/color]\n")
+	output_text.append_text("[color=" + bar_color + "]] 完成[/color]\n")
 	_do_scroll()
 
 # ============================================================
 # 滚动控制
 # ============================================================
-# typewriter.gd - 替换整个滚动控制部分
 func _do_scroll() -> void:
 	_needs_scroll = true
 	_scroll_delay = 2  # 延迟2帧，确保布局完成
@@ -217,7 +236,6 @@ func process_scroll() -> void:
 		var rt_vscroll := output_text.get_v_scroll_bar()
 		if rt_vscroll:
 			rt_vscroll.value = rt_vscroll.max_value
-
 
 # ============================================================
 # 重置

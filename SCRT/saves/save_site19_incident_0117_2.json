@@ -1,11 +1,10 @@
 {
 	"current_path": "/",
-	"player_clearance": 0,
-	"read_files": [
-		"/welcome.txt",
-		"/notice.txt"
-	],
+	"player_clearance": 2,
+	"read_files": [],
 	"story_id": "site19_incident_0117_2",
 	"unlocked_file_passwords": [],
-	"unlocked_passwords": []
+	"unlocked_passwords": [
+		"0117alpha"
+	]
 }

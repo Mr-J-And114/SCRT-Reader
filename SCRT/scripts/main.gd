@@ -309,6 +309,7 @@ func _input(event: InputEvent) -> void:
 
 # ══════════════════════════════════════════
 #  Tab 自动补全
+#  ★ 修复：hint_text 末尾加 \n，防止后续输出粘在同一行
 # ══════════════════════════════════════════
 func _handle_tab_complete() -> void:
 	var current_text: String = input_field.text
@@ -330,13 +331,26 @@ func _handle_tab_complete() -> void:
 				display_items.append(parts[-1])
 			else:
 				display_items.append(c)
-		var hint_text: String = "\n[color=" + T.muted_hex + "]可选项: " + " | ".join(display_items) + "[/color]"
+		# ★ 修复：末尾加 \n 确保换行
+		var hint_text: String = "\n[color=" + T.muted_hex + "]可选项: " + " | ".join(display_items) + "[/color]\n"
 		output_text.append_text(hint_text)
 		_request_scroll()
+
 		var common: String = _find_common_prefix(completions)
 		if common.length() > current_text.length():
 			input_field.text = common
 			input_field.caret_column = input_field.text.length()
+
+
+# ══════════════════════════════════════════
+#  复制提示
+#  ★ 修复：前面加 \n，确保不粘在前一行末尾
+# ══════════════════════════════════════════
+func _show_copy_toast() -> void:
+	output_text.append_text("\n[color=" + T.muted_hex + "][已复制到剪贴板][/color]\n")
+	_request_scroll()
+
+
 
 func _find_common_prefix(strings: Array[String]) -> String:
 	if strings.is_empty():
@@ -387,12 +401,6 @@ func _process(_delta: float) -> void:
 		if _scroll_pending_frames == 0:
 			_do_scroll_to_bottom()
 
-# ══════════════════════════════════════════
-#  复制提示
-# ══════════════════════════════════════════
-func _show_copy_toast() -> void:
-	output_text.append_text("[color=" + T.muted_hex + "][已复制到剪贴板][/color]\n")
-	_request_scroll()
 
 # ══════════════════════════════════════════
 #  超链接处理
@@ -404,6 +412,14 @@ func _on_meta_clicked(meta: Variant) -> void:
 		output_text.append_text("\n> " + cmd + "\n")
 		_run_command(cmd)
 		return
+
+	# 涂黑遮蔽文本点击显示
+	if meta_str.begins_with("spoiler://"):
+		var decoded_text: String = meta_str.substr(10).uri_decode()
+		output_text.append_text("\n[color=" + T.muted_hex + "][已揭示] " + decoded_text + "[/color]\n")
+		_request_scroll()
+		return
+
 	if meta_str.begins_with("file://"):
 		var file_path: String = meta_str.substr(7)
 		output_text.append_text("\n> open " + file_path + "\n")

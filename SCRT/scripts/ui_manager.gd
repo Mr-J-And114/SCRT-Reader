@@ -53,6 +53,7 @@ static func setup_background(parent: Control, game_root_dir: String) -> TextureR
 		mat.set_shader_parameter("glow_radius", 0.4)
 		mat.set_shader_parameter("brightness", 0.7)
 		if t != null:
+			# ★ 修复语法错误：_0.15 → * 0.15
 			mat.set_shader_parameter("tint_color", Color(t.primary.r * 0.15, t.primary.g * 0.15, t.primary.b * 0.15, 0.15))
 		else:
 			mat.set_shader_parameter("tint_color", Color(0.1, 0.3, 0.1, 0.15))
@@ -83,7 +84,6 @@ static func setup_status_frame(status_frame: PanelContainer) -> void:
 	var t := ThemeManager.current
 	var style := StyleBoxFlat.new()
 	style.bg_color = t.bg_panel if t != null else Color(0.0, 0.04, 0.0, 0.9)
-	# 只有底部有边框线
 	var border_color: Color = t.border if t != null else Color(0.2, 0.6, 0.2, 0.4)
 	style.border_color = border_color
 	style.border_width_bottom = 1
@@ -137,7 +137,6 @@ static func setup_input_frame(input_frame: PanelContainer) -> void:
 	var t := ThemeManager.current
 	var style := StyleBoxFlat.new()
 	style.bg_color = t.bg_panel if t != null else Color(0.0, 0.04, 0.0, 0.9)
-	# 只有顶部有边框线
 	var border_color: Color = t.border if t != null else Color(0.2, 0.6, 0.2, 0.4)
 	style.border_color = border_color
 	style.border_width_top = 1
@@ -165,15 +164,10 @@ static func setup_input_field(input_field: LineEdit) -> void:
 	style.content_margin_bottom = 2
 	input_field.add_theme_stylebox_override("normal", style)
 	input_field.add_theme_stylebox_override("focus", style.duplicate())
-
 	if t != null:
-		# 文字颜色
 		input_field.add_theme_color_override("font_color", t.input_text)
-		# 光标颜色与主题主色一致
 		input_field.add_theme_color_override("caret_color", t.primary)
-		# 选中文本的背景色（半透明主色）
 		input_field.add_theme_color_override("selection_color", Color(t.primary.r, t.primary.g, t.primary.b, 0.3))
-		# 占位符文字颜色（比主色暗淡）
 		var placeholder_color := Color(t.primary.r, t.primary.g, t.primary.b, 0.35)
 		input_field.add_theme_color_override("font_placeholder_color", placeholder_color)
 
@@ -182,7 +176,6 @@ static func setup_input_field(input_field: LineEdit) -> void:
 # ============================================================
 static func setup_output_text(output_text: RichTextLabel) -> void:
 	var t := ThemeManager.current
-	# （不清空内容，只设置样式）
 	output_text.bbcode_enabled = true
 	output_text.selection_enabled = true
 	output_text.meta_underlined = true
@@ -196,7 +189,6 @@ static func setup_output_text(output_text: RichTextLabel) -> void:
 # ScrollContainer 设置
 # ============================================================
 static func setup_scroll_container(scroll_container: ScrollContainer) -> void:
-	# 不要设为 IGNORE，否则无法选中文字
 	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
 
 # ============================================================
@@ -207,10 +199,8 @@ static func setup_scrollbar_style(scroll_container: ScrollContainer) -> void:
 	var v_scrollbar: VScrollBar = scroll_container.get_v_scroll_bar()
 	if v_scrollbar == null:
 		return
-
 	var base_color: Color = t.primary if t != null else Color(0.6, 1.0, 0.6, 1.0)
 
-	# 滚动条背景（几乎透明）
 	var bg := StyleBoxFlat.new()
 	bg.bg_color = Color(0.1, 0.1, 0.1, 0.3)
 	bg.corner_radius_top_left = 2
@@ -219,7 +209,6 @@ static func setup_scrollbar_style(scroll_container: ScrollContainer) -> void:
 	bg.corner_radius_bottom_right = 2
 	v_scrollbar.add_theme_stylebox_override("scroll", bg)
 
-	# 滚动条滑块（正常）
 	var grabber := StyleBoxFlat.new()
 	grabber.bg_color = Color(base_color.r, base_color.g, base_color.b, 0.4)
 	grabber.corner_radius_top_left = 2
@@ -228,7 +217,6 @@ static func setup_scrollbar_style(scroll_container: ScrollContainer) -> void:
 	grabber.corner_radius_bottom_right = 2
 	v_scrollbar.add_theme_stylebox_override("grabber", grabber)
 
-	# 滚动条滑块（悬停）
 	var grabber_highlight := StyleBoxFlat.new()
 	grabber_highlight.bg_color = Color(base_color.r, base_color.g, base_color.b, 0.6)
 	grabber_highlight.corner_radius_top_left = 2
@@ -237,7 +225,6 @@ static func setup_scrollbar_style(scroll_container: ScrollContainer) -> void:
 	grabber_highlight.corner_radius_bottom_right = 2
 	v_scrollbar.add_theme_stylebox_override("grabber_highlight", grabber_highlight)
 
-	# 滚动条滑块（按下）
 	var grabber_pressed := StyleBoxFlat.new()
 	grabber_pressed.bg_color = Color(base_color.r, base_color.g, base_color.b, 0.8)
 	grabber_pressed.corner_radius_top_left = 2
@@ -263,20 +250,19 @@ static func setup_custom_cursor(_parent: Control) -> void:
 	var cursor_image := _generate_crt_cursor()
 	var cursor_texture := ImageTexture.create_from_image(cursor_image)
 	Input.set_custom_mouse_cursor(cursor_texture, Input.CURSOR_ARROW, Vector2(0, 0))
-	
+
 	var ibeam_image := _generate_crt_ibeam()
 	var ibeam_texture := ImageTexture.create_from_image(ibeam_image)
-	Input.set_custom_mouse_cursor(ibeam_texture, Input.CURSOR_IBEAM, Vector2(7, 11))  # 热点调整到中心
-	
+	Input.set_custom_mouse_cursor(ibeam_texture, Input.CURSOR_IBEAM, Vector2(7, 11))
+
 	var hand_image := _generate_crt_hand()
 	var hand_texture := ImageTexture.create_from_image(hand_image)
 	Input.set_custom_mouse_cursor(hand_texture, Input.CURSOR_POINTING_HAND, Vector2(6, 2))
+
 	print("[UI] CRT风格鼠标光标已应用")
 
-
-
 # ============================================================
-# 生成 CRT 风格箭头光标 (16x20)
+# 生成 CRT 风格箭头光标 (20x24)
 # ============================================================
 static func _generate_crt_cursor() -> Image:
 	var t := ThemeManager.current
@@ -287,7 +273,7 @@ static func _generate_crt_cursor() -> Image:
 	var h: int = 24
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	# 加粗箭头像素图案（更粗更锐利）
+
 	var pattern: Array = [
 		[3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 		[3,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -321,7 +307,7 @@ static func _generate_crt_cursor() -> Image:
 					1: img.set_pixel(x, y, fg)
 					2: img.set_pixel(x, y, outline)
 					3: img.set_pixel(x, y, glow)
-	# 额外加粗：对每个fg像素向右扩展1像素
+
 	var bold_img := img.duplicate()
 	for y2 in range(h):
 		for x2 in range(w - 1):
@@ -329,10 +315,8 @@ static func _generate_crt_cursor() -> Image:
 				bold_img.set_pixel(x2 + 1, y2, fg)
 	return bold_img
 
-
-
 # ============================================================
-# 生成 CRT 风格 I-beam 文字光标 (16x20)
+# 生成 CRT 风格 I-beam 文字光标 (16x22)
 # ============================================================
 static func _generate_crt_ibeam() -> Image:
 	var t := ThemeManager.current
@@ -343,14 +327,12 @@ static func _generate_crt_ibeam() -> Image:
 	var h: int = 22
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	# 带衬线的加粗 I-beam 像素图案
-	# 0=透明, 1=前景, 2=轮廓, 3=发光
+
 	var pattern: Array = [
-		[0,0,0,2,2,2,2,2,2,2,2,2,0,0,0,0],  # 顶部衬线轮廓
-		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],  # 顶部衬线
-		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],  # 顶部衬线加厚
-		[0,0,0,2,2,2,1,1,2,2,2,0,0,0,0,0],  # 过渡
-		[0,0,0,0,0,2,1,1,2,0,0,0,0,0,0,0],  # 竖线
+		[0,0,0,2,2,2,2,2,2,2,2,2,0,0,0,0],
+		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],
+		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],
+		[0,0,0,2,2,2,1,1,2,2,2,0,0,0,0,0],
 		[0,0,0,0,0,2,1,1,2,0,0,0,0,0,0,0],
 		[0,0,0,0,0,2,1,1,2,0,0,0,0,0,0,0],
 		[0,0,0,0,0,2,1,1,2,0,0,0,0,0,0,0],
@@ -364,10 +346,11 @@ static func _generate_crt_ibeam() -> Image:
 		[0,0,0,0,0,2,1,1,2,0,0,0,0,0,0,0],
 		[0,0,0,0,0,2,1,1,2,0,0,0,0,0,0,0],
 		[0,0,0,0,0,2,1,1,2,0,0,0,0,0,0,0],
-		[0,0,0,2,2,2,1,1,2,2,2,0,0,0,0,0],  # 过渡
-		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],  # 底部衬线
-		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],  # 底部衬线加厚
-		[0,0,0,2,2,2,2,2,2,2,2,2,0,0,0,0],  # 底部衬线轮廓
+		[0,0,0,0,0,2,1,1,2,0,0,0,0,0,0,0],
+		[0,0,0,2,2,2,1,1,2,2,2,0,0,0,0,0],
+		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],
+		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],
+		[0,0,0,2,2,2,2,2,2,2,2,2,0,0,0,0],
 	]
 	for y in range(h):
 		for x in range(w):
@@ -377,7 +360,6 @@ static func _generate_crt_ibeam() -> Image:
 					2: img.set_pixel(x, y, outline)
 					3: img.set_pixel(x, y, glow)
 	return img
-
 
 # ============================================================
 # 生成 CRT 风格手指光标 (16x20)
@@ -391,6 +373,7 @@ static func _generate_crt_hand() -> Image:
 	var h: int = 20
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
+
 	var pattern: Array = [
 		[0,0,0,0,0,3,2,3,0,0,0,0,0,0,0,0],
 		[0,0,0,0,3,2,1,2,3,0,0,0,0,0,0,0],
@@ -417,12 +400,9 @@ static func _generate_crt_hand() -> Image:
 		for x in range(w):
 			if y < pattern.size() and x < pattern[y].size():
 				match pattern[y][x]:
-					1:
-						img.set_pixel(x, y, fg)
-					2:
-						img.set_pixel(x, y, outline)
-					3:
-						img.set_pixel(x, y, glow)
+					1: img.set_pixel(x, y, fg)
+					2: img.set_pixel(x, y, outline)
+					3: img.set_pixel(x, y, glow)
 	return img
 
 # ============================================================

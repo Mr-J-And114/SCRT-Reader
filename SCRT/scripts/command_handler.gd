@@ -1,5 +1,7 @@
+# ============================================================
 # command_handler.gd
 # 职责：命令解析、分发、历史记录管理
+# ============================================================
 class_name CommandHandler
 extends RefCounted
 
@@ -46,12 +48,10 @@ func _register_commands() -> void:
 	_commands["restart"] = { "method": "_cmd_reboot", "min_args": 0, "help": "重启终端（别名）" }
 	_commands["vdisc"] = { "method": "_cmd_vdisc", "min_args": 0, "help": "查看虚拟磁盘列表" }
 	_commands["clearsave"] = { "method": "_cmd_clearsave", "min_args": 0, "help": "清除存档 (clearsave / clearsave all)" }
-
 	# ══════════════════════════════════════
 	# 桌面模式专用命令
 	# ══════════════════════════════════════
 	_commands["load"] = { "method": "_cmd_load", "min_args": 1, "help": "加载磁盘 (load <编号>)", "desktop_only": true }
-
 	# ══════════════════════════════════════
 	# 磁盘模式专用命令
 	# ══════════════════════════════════════
@@ -125,7 +125,6 @@ func get_completions(partial: String) -> Array[String]:
 		return results
 
 	if parts.size() == 1 and not ends_with_space:
-		# 补全命令名
 		var prefix: String = parts[0].to_lower()
 		for cmd_key in _commands:
 			if cmd_key.begins_with(prefix):
@@ -135,9 +134,7 @@ func get_completions(partial: String) -> Array[String]:
 				if cmd_info.get("disc_only", false) and main._desktop_mode:
 					continue
 				results.append(cmd_key)
-
 	elif parts.size() == 1 and ends_with_space:
-		# 输入了命令+空格，列出所有可选子参数
 		var cmd: String = parts[0].to_lower()
 		if cmd in ["cd", "open", "cat"]:
 			var children: Array = fs.get_children_at_path(main.current_path)
@@ -152,17 +149,13 @@ func get_completions(partial: String) -> Array[String]:
 				elif cmd in ["open", "cat"] and node.type == "file":
 					results.append(cmd + " " + child_str)
 		elif cmd == "theme":
-			# ★ 这里是修复点：theme + 空格时列出所有主题名
 			var themes: Array[String] = ThemeManager.get_available_themes()
 			for theme_name in themes:
 				results.append(cmd + " " + theme_name)
-
 	elif parts.size() >= 2:
-		# 补全子参数（部分输入）
 		var cmd: String = parts[0].to_lower()
 		var partial_name: String = parts[-1]
 		if cmd == "theme":
-			# ★ theme 放在最前面，避免被 cd/open/cat 的兜底逻辑截获
 			var themes: Array[String] = ThemeManager.get_available_themes()
 			for theme_name in themes:
 				if theme_name.to_lower().begins_with(partial_name.to_lower()):
@@ -184,7 +177,6 @@ func get_completions(partial: String) -> Array[String]:
 						results.append(cmd + " " + item_str)
 
 	return results
-
 
 ## ══════════════════════════════════════════
 ## 历史命令导航
@@ -212,7 +204,6 @@ func _add_to_history(cmd: String) -> void:
 
 ## ══════════════════════════════════════════
 ## 具体命令实现
-## 所有方法统一签名: func _cmd_xxx(args: Array) -> void
 ## ══════════════════════════════════════════
 
 func _cmd_clear(_args: Array = []) -> void:
@@ -224,36 +215,27 @@ func _cmd_exit(_args: Array = []) -> void:
 	await main.get_tree().create_timer(1.0).timeout
 	main.get_tree().quit()
 
-
 func _cmd_reboot(_args: Array = []) -> void:
 	main.append_output("[color=" + T.muted_hex + "]正在重启终端...[/color]\n", false)
 	while tw.is_typing:
 		await main.get_tree().process_frame
 	await main.get_tree().create_timer(0.5).timeout
-
 	command_history.clear()
 	history_index = -1
 	disc_mgr.reset_all()
-
 	main.output_text.append_text("[color=" + T.muted_hex + "]...[/color]\n")
 	await main.get_tree().create_timer(0.3).timeout
 	main.output_text.append_text("[color=" + T.muted_hex + "]终端系统重新初始化中...[/color]\n")
 	await main.get_tree().create_timer(0.5).timeout
-
 	main.output_text.text = ""
 	disc_mgr.show_desktop_welcome()
 	main.input_field.grab_focus()
-
-	# ★ 重启后刷新所有 Shader，确保主题完全生效
 	ThemeManager._refresh_all_ui(main)
-
-
 
 func _cmd_help(_args: Array = []) -> void:
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
 	var lines: Array[String] = []
-
 	if main._desktop_mode:
 		lines.append("[color=" + p + "]═══════════════ 桌面命令 ═══════════════[/color]")
 		lines.append("  [color=" + p + "]load <编号>[/color]   加载指定虚拟磁盘")
@@ -287,7 +269,6 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
 		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
 	lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 自动补全[/color]")
-
 	main.append_output("\n".join(lines) + "\n", false)
 
 func _cmd_ls(_args: Array = []) -> void:
@@ -386,12 +367,10 @@ func _cmd_open(args: Array = []) -> void:
 
 	var filename: String = str(args[0])
 	var file_path: String
-
 	if filename.begins_with("/"):
 		file_path = filename
 	else:
 		file_path = fs.join_path(main.current_path, filename)
-
 	file_path = fs.normalize_path(file_path)
 
 	var node = fs.get_node_at_path(file_path)
@@ -427,7 +406,6 @@ func _cmd_open(args: Array = []) -> void:
 		main._file_password_mode = true
 		main._file_password_target = file_path
 		main._file_password_filename = filename
-		# 进入文件密码模式，placeholder 由焦点事件管理
 		if main.input_field.has_focus():
 			main.input_field.placeholder_text = ""
 		return
@@ -444,7 +422,6 @@ func _cmd_open(args: Array = []) -> void:
 	# 清屏显示文件内容
 	main.output_text.text = ""
 	tw.clear_queue()
-
 	var header: String = "[color=" + T.primary_hex + "]══════════ " + filename + " ══════════[/color]"
 	main.output_text.append_text(header + "\n\n")
 
@@ -468,7 +445,6 @@ func _cmd_open(args: Array = []) -> void:
 	# 等待打字机完成后显示结束标记
 	while tw.is_typing:
 		await main.get_tree().process_frame
-
 	main.append_output("\n[color=" + T.primary_hex + "]══════════ 文件结束 ══════════[/color]\n", false)
 	main.append_output("[color=" + T.muted_hex + "]输入任意命令返回终端。[/color]\n", false)
 
@@ -476,7 +452,6 @@ func _cmd_status(_args: Array = []) -> void:
 	var p: String = T.primary_hex
 	var w: String = T.warning_hex
 	var m: String = T.muted_hex
-
 	var lines: Array[String] = []
 	lines.append("[color=" + p + "]═══════════ 用户状态 ═══════════[/color]")
 	lines.append("  用户名:     [color=" + p + "]" + user_mgr.get_display_name() + "[/color]")
@@ -502,7 +477,7 @@ func _cmd_scan(_args: Array = []) -> void:
 		await main.get_tree().process_frame
 	await tw.show_progress_bar(400)
 	await main.get_tree().create_timer(0.3).timeout
-	disc_mgr.scan_stories(false)  # 非静默，显示扫描结果
+	disc_mgr.scan_stories(false)
 	main._update_status_bar()
 
 func _cmd_load(args: Array = []) -> void:
@@ -516,19 +491,16 @@ func _cmd_vdisc(_args: Array = []) -> void:
 
 func _cmd_unlock(args: Array = []) -> void:
 	if args.is_empty():
-		# 进入密码输入模式
 		var box: String = fs.build_box_sectioned([
 			["SECURITY AUTHENTICATION", "安全认证系统"],
 			["请输入访问密码:", "(输入 cancel 取消)"]
 		], T.warning_hex)
 		main.append_output(box + "\n", false)
 		main._password_mode = true
-		# 进入密码模式，placeholder 由焦点事件管理
 		if main.input_field.has_focus():
 			main.input_field.placeholder_text = ""
 		return
 
-	# 有参数时直接验证密码
 	var password: String = str(args[0])
 	_verify_password(password)
 
@@ -559,19 +531,22 @@ func _verify_password(password: String) -> void:
 		main.save_mgr.auto_save(main.story_id, fs.player_clearance, main.read_files,
 			main.unlocked_passwords, fs.unlocked_file_passwords, main.current_path)
 
+		# ★ 使用 ASCII 箭头 -> 避免宽度计算问题
 		var box: String = fs.build_box_sectioned([
 			["ACCESS GRANTED", "权限认证通过"],
 			["权限等级: " + str(old_level) + " -> " + str(fs.player_clearance)]
 		], T.success_hex)
-		main.append_output(box + "\n", true)
 
+		# ★ 合并 box + message 为一次输出，避免顺序错乱
+		var full_output: String = "\n" + box + "\n"
 		if pwd_info.has("message"):
-			main.append_output("[color=" + T.muted_hex + "]" + str(pwd_info["message"]) + "[/color]\n", false)
+			full_output += "\n[color=" + T.muted_hex + "]" + str(pwd_info["message"]) + "[/color]\n"
 
+		main.append_output(full_output, true)
 		main._update_status_bar()
 	else:
 		var box: String = fs.build_box(["ACCESS DENIED", "密码验证失败"] as Array[String], T.error_hex)
-		main.append_output(box + "\n", false)
+		main.append_output("\n" + box + "\n", true)
 
 ## 验证文件密码（供 main.gd 的文件密码模式调用）
 func verify_file_password(input_password: String) -> void:
@@ -589,17 +564,15 @@ func verify_file_password(input_password: String) -> void:
 			main.unlocked_passwords, fs.unlocked_file_passwords, main.current_path)
 
 		var box: String = fs.build_box(["PASSWORD ACCEPTED", "文件密码验证通过"] as Array[String], T.success_hex)
-		main.append_output(box + "\n", false)
+		main.append_output(box + "\n", true)
 
 		while tw.is_typing:
 			await main.get_tree().process_frame
 		await main.get_tree().create_timer(0.5).timeout
-
-		# 密码验证通过后自动打开文件
 		await _cmd_open([main._file_password_filename])
 	else:
 		var box: String = fs.build_box(["PASSWORD REJECTED", "文件密码错误"] as Array[String], T.error_hex)
-		main.append_output(box + "\n", false)
+		main.append_output(box + "\n", true)
 
 func _cmd_save(_args: Array = []) -> void:
 	main.save_mgr.auto_save(main.story_id, fs.player_clearance, main.read_files,
