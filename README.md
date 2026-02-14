@@ -1,3 +1,6 @@
+<img width="1154" height="680" alt="image" src="https://github.com/user-attachments/assets/4bbf6245-3355-4815-8c7b-4a28571d2c5f" />
+
+
 # SCRT-Reader 用户指南
 
 **版本：V0.2.7**
