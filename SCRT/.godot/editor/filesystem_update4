@@ -1,1 +1,9 @@
 res://scenes/main.tscn
+res://scripts/document_viewer.gd
+res://scripts/profile_builder.gd
+res://shaders/crt_effect.gdshader
+res://scripts/main.gd
+res://scripts/ui_manager.gd
+res://shaders/background_vignette.gdshader
+res://scripts/crtml_parser.gd
+res://scripts/typewriter.gd

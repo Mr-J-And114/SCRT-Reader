@@ -36,11 +36,11 @@ func join_path(base: String, child: String) -> String:
 func get_parent_path(path: String) -> String:
 	if path == "/":
 		return "/"
-	var clean_path: String = path.rstrip("/")
-	var last_slash: int = clean_path.rfind("/")
+	var clean: String = path.rstrip("/")
+	var last_slash: int = clean.rfind("/")
 	if last_slash <= 0:
 		return "/"
-	return clean_path.substr(0, last_slash)
+	return clean.substr(0, last_slash)
 
 func normalize_path(path: String) -> String:
 	if not path.begins_with("/"):
@@ -69,7 +69,6 @@ func get_node_at_path(path: String) -> FSNode:
 	if file_system.has(path):
 		var entry: Dictionary = file_system[path]
 		var content: String = entry.get("content", "")
-		# 统一换行符，防止\r\n导致双倍行距
 		content = content.replace("\r\n", "\n").replace("\r", "\n")
 		return FSNode.new(entry.get("type", "file"), content)
 	return null
@@ -100,11 +99,11 @@ func get_required_clearance(path: String) -> int:
 		var perm_value: int = int(float(story_permissions[perm_path]))
 		var normalized_perm: String = normalize_path(perm_path)
 		if path == normalized_perm:
-			highest = max(highest, perm_value)
+			highest = maxi(highest, perm_value)
 			continue
 		var dir_prefix: String = normalized_perm + "/"
 		if path.begins_with(dir_prefix):
-			highest = max(highest, perm_value)
+			highest = maxi(highest, perm_value)
 	return highest
 
 func has_clearance(path: String) -> bool:
@@ -129,9 +128,7 @@ func is_file_password_unlocked(file_path: String) -> bool:
 # ============================================================
 
 ## 判断一个 Unicode 码点在等宽字体中是否占2列宽度
-## ★ 关键修复：Box Drawing、Block Elements、几何形状、箭头等符号
-##   在 SarasaMonoSC 等宽字体中是 半角（1列），不是宽字符
-## 只有 CJK 汉字、CJK 标点、全角 ASCII、日文假名、韩文等才是宽字符
+## SarasaMonoSC 中 Box Drawing / Block Elements 等为半角（1列）
 static func _is_wide_char(code: int) -> bool:
 	# CJK 统一汉字基本区
 	if code >= 0x4E00 and code <= 0x9FFF:
@@ -184,21 +181,8 @@ static func _is_wide_char(code: int) -> bool:
 	# Emoji 相关（辅助平面）
 	if code >= 0x1F000 and code <= 0x1FAFF:
 		return true
-	
-	# ══════════════════════════════════════════════════════
-	# ★ 以下这些在 SarasaMonoSC 等宽字体中都是【半角/1列】
-	#   不能标记为宽字符，否则 build_box 宽度计算会出错
-	# ══════════════════════════════════════════════════════
-	# Box Drawing (U+2500-U+257F): ═║╔╗╚╝╠╣╦╩╬─│ 等 → 半角
-	# Block Elements (U+2580-U+259F): █▓▒░ 等 → 半角
-	# 几何形状 (U+25A0-U+25FF): ■□● 等 → 半角
-	# 箭头 (U+2190-U+21FF): ←→↑↓ 等 → 半角
-	# 杂项符号 (U+2600-U+26FF) → 半角
-	# Dingbats (U+2700-U+27BF) → 半角
-	# 带圈字母数字 (U+2460-U+24FF) → 半角
-	
+	# Box Drawing, Block Elements, 几何形状, 箭头等 → 半角，不处理
 	return false
-
 
 ## 计算字符串的显示宽度（中文/宽字符=2，英文/窄字符=1）
 ## 自动跳过 BBCode 标签，只计算可见文本宽度
@@ -208,49 +192,47 @@ func display_width(text: String) -> int:
 	var length: int = text.length()
 
 	while i < length:
-		# 跳过 BBCode 标签 [color=...]...[/color] 等
 		if text[i] == "[":
 			var close_bracket: int = text.find("]", i)
 			if close_bracket != -1:
-				# 检查是否像 BBCode 标签
 				var tag_content: String = text.substr(i + 1, close_bracket - i - 1)
-				if tag_content.length() > 0 and (
-					tag_content[0] == "/" or
-					tag_content.begins_with("color") or
-					tag_content.begins_with("b") or
-					tag_content.begins_with("i") or
-					tag_content.begins_with("u") or
-					tag_content.begins_with("s") or
-					tag_content.begins_with("url") or
-					tag_content.begins_with("font") or
-					tag_content.begins_with("img") or
-					tag_content.begins_with("cell") or
-					tag_content.begins_with("table") or
-					tag_content.begins_with("center") or
-					tag_content.begins_with("right") or
-					tag_content.begins_with("wave") or
-					tag_content.begins_with("shake") or
-					tag_content.begins_with("rainbow") or
-					tag_content.begins_with("tornado") or
-					tag_content.begins_with("fade") or
-					tag_content.begins_with("pulse")
-				):
+				# 更严格的 BBCode 标签检测
+				if _is_bbcode_tag(tag_content):
 					i = close_bracket + 1
 					continue
-
 		var code: int = text[i].unicode_at(0)
 		if _is_wide_char(code):
 			width += 2
 		else:
 			width += 1
 		i += 1
-
 	return width
 
+## 检查方括号内的内容是否是 BBCode 标签
+func _is_bbcode_tag(tag_content: String) -> bool:
+	if tag_content.is_empty():
+		return false
+	# 闭合标签 [/xxx]
+	if tag_content[0] == "/":
+		return true
+	# 已知的 BBCode 标签前缀
+	var known_tags: Array[String] = [
+		"color", "bgcolor", "fgcolor",
+		"b", "i", "u", "s",
+		"url", "font", "font_size",
+		"img", "cell", "table",
+		"center", "right", "left", "fill",
+		"indent", "ol", "ul", "li",
+		"p", "code",
+		"wave", "shake", "rainbow", "tornado", "fade", "pulse",
+		"hint",
+	]
+	for tag in known_tags:
+		if tag_content == tag or tag_content.begins_with(tag + "=") or tag_content.begins_with(tag + " "):
+			return true
+	return false
 
-## 生成自适应宽度的文本框
-## ★ 修复后版本：由于 Box Drawing 字符（═║╔╗╚╝）现在正确地被识别为
-##   半角（1列），所有计算都使用统一的 display_width，逻辑自然自洽
+## 生成自适应宽度的居中文本框
 func build_box(lines_data: Array[String], color: String) -> String:
 	var max_width: int = 0
 	for line in lines_data:
@@ -258,20 +240,15 @@ func build_box(lines_data: Array[String], color: String) -> String:
 		if w > max_width:
 			max_width = w
 
-	# 内部宽度 = 最宽行 + 左右各2空格padding
+	# 内部宽度 = 最宽行 + 左右各2空格 padding
 	var inner_width: int = max_width + 4
 
-	# 现在 ║ 的 display_width = 1（半角），═ 也是 1
-	# 内容行总宽 = ║(1) + inner_width个空格(inner_width) + ║(1) = inner_width + 2
-	# 上边框总宽 = ╔(1) + N个═(N) + ╗(1) = N + 2
-	# 要对齐：N + 2 = inner_width + 2  →  N = inner_width
 	var border_h: String = "═".repeat(inner_width)
-
 	var result: String = ""
+
 	result += "[color=" + color + "]╔" + border_h + "╗[/color]\n"
 
-	for i in range(lines_data.size()):
-		var line: String = lines_data[i]
+	for line in lines_data:
 		var line_width: int = display_width(line)
 		var pad_total: int = inner_width - line_width
 		if pad_total < 0:
@@ -279,11 +256,10 @@ func build_box(lines_data: Array[String], color: String) -> String:
 		@warning_ignore("integer_division")
 		var pad_left: int = pad_total / 2
 		var pad_right: int = pad_total - pad_left
-		result += "[color=" + color + "]║" + " ".repeat(pad_left) + line + " ".repeat(pad_right) + "║[/color]\n"
+		result += "[color=" + color + "]║[/color]" + " ".repeat(pad_left) + line + " ".repeat(pad_right) + "[color=" + color + "]║[/color]\n"
 
 	result += "[color=" + color + "]╚" + border_h + "╝[/color]"
 	return result
-
 
 ## 生成带中间分隔线的自适应方框
 func build_box_sectioned(sections: Array, color: String) -> String:
@@ -296,8 +272,8 @@ func build_box_sectioned(sections: Array, color: String) -> String:
 
 	var inner_width: int = max_width + 4
 	var border_h: String = "═".repeat(inner_width)
-
 	var result: String = ""
+
 	result += "[color=" + color + "]╔" + border_h + "╗[/color]\n"
 
 	for s_idx in range(sections.size()):
@@ -311,13 +287,12 @@ func build_box_sectioned(sections: Array, color: String) -> String:
 			@warning_ignore("integer_division")
 			var pad_left: int = pad_total / 2
 			var pad_right: int = pad_total - pad_left
-			result += "[color=" + color + "]║" + " ".repeat(pad_left) + line_str + " ".repeat(pad_right) + "║[/color]\n"
+			result += "[color=" + color + "]║[/color]" + " ".repeat(pad_left) + line_str + " ".repeat(pad_right) + "[color=" + color + "]║[/color]\n"
 		if s_idx < sections.size() - 1:
 			result += "[color=" + color + "]╠" + border_h + "╣[/color]\n"
 
 	result += "[color=" + color + "]╚" + border_h + "╝[/color]"
 	return result
-
 
 # ============================================================
 # 内置诊断文件系统（彩蛋 / 无磁盘时的回退）
@@ -334,7 +309,6 @@ func init_test_file_system() -> void:
 			"content": "你找到了隐藏的诊断分区。\n\n[DATA EXPUNGED]\n\n如果你正在阅读这条消息，\n说明你的好奇心已经引起了我们的注意。\n\n不用担心，这不一定是坏事。\n\n- O5-██"
 		}
 	}
-
 
 # ============================================================
 # 数据重置

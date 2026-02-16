@@ -1,29 +1,38 @@
 # ============================================================
-# command_handler.gd
-# 职责：命令解析、分发、历史记录管理
+# command_handler.gd - 命令解析与执行
 # ============================================================
 class_name CommandHandler
 extends RefCounted
 
-signal command_executed(cmd_name: String, args: Array)
-
-var main: Node = null
-var fs = null
+# ══════════════════════════════════════════
+#  模块引用
+# ══════════════════════════════════════════
+var main = null
+var fs: FileSystem = null
 var T = null
 var tw = null
 var disc_mgr = null
 var user_mgr = null
 var crtml = null
 
-# 命令历史
+# ══════════════════════════════════════════
+#  命令历史
+# ══════════════════════════════════════════
 var command_history: Array[String] = []
 var history_index: int = -1
 const MAX_HISTORY: int = 50
 
-# 命令注册表
-var _commands: Dictionary = {}
+# ══════════════════════════════════════════
+#  命令注册表
+# ══════════════════════════════════════════
+var desktop_commands: Dictionary = {}
+var disc_commands: Dictionary = {}
+var global_commands: Dictionary = {}
 
-func setup(p_main: Node, p_fs, p_theme, p_tw, p_disc_mgr, p_user_mgr, p_crtml) -> void:
+# ══════════════════════════════════════════
+#  初始化
+# ══════════════════════════════════════════
+func setup(p_main, p_fs, p_theme, p_tw, p_disc_mgr, p_user_mgr, p_crtml) -> void:
 	main = p_main
 	fs = p_fs
 	T = p_theme
@@ -34,242 +43,475 @@ func setup(p_main: Node, p_fs, p_theme, p_tw, p_disc_mgr, p_user_mgr, p_crtml) -
 	_register_commands()
 
 func _register_commands() -> void:
-	# ══════════════════════════════════════
-	# 通用命令（所有模式可用）
-	# ══════════════════════════════════════
-	_commands["help"] = { "method": "_cmd_help", "min_args": 0, "help": "显示帮助信息" }
-	_commands["clear"] = { "method": "_cmd_clear", "min_args": 0, "help": "清空屏幕" }
-	_commands["cls"] = { "method": "_cmd_clear", "min_args": 0, "help": "清空屏幕（别名）" }
-	_commands["exit"] = { "method": "_cmd_exit", "min_args": 0, "help": "退出终端" }
-	_commands["quit"] = { "method": "_cmd_exit", "min_args": 0, "help": "退出终端（别名）" }
-	_commands["scan"] = { "method": "_cmd_scan", "min_args": 0, "help": "重新扫描磁盘" }
-	_commands["theme"] = { "method": "_cmd_theme", "min_args": 0, "help": "切换主题" }
-	_commands["reboot"] = { "method": "_cmd_reboot", "min_args": 0, "help": "重启终端" }
-	_commands["restart"] = { "method": "_cmd_reboot", "min_args": 0, "help": "重启终端（别名）" }
-	_commands["vdisc"] = { "method": "_cmd_vdisc", "min_args": 0, "help": "查看虚拟磁盘列表" }
-	_commands["clearsave"] = { "method": "_cmd_clearsave", "min_args": 0, "help": "清除存档 (clearsave / clearsave all)" }
-	# ══════════════════════════════════════
-	# 桌面模式专用命令
-	# ══════════════════════════════════════
-	_commands["load"] = { "method": "_cmd_load", "min_args": 1, "help": "加载磁盘 (load <编号>)", "desktop_only": true }
-	# ══════════════════════════════════════
-	# 磁盘模式专用命令
-	# ══════════════════════════════════════
-	_commands["ls"] = { "method": "_cmd_ls", "min_args": 0, "help": "列出目录内容", "disc_only": true }
-	_commands["dir"] = { "method": "_cmd_ls", "min_args": 0, "help": "列出目录内容（别名）", "disc_only": true }
-	_commands["cd"] = { "method": "_cmd_cd", "min_args": 1, "help": "切换目录 (cd <路径>)", "disc_only": true }
-	_commands["back"] = { "method": "_cmd_back", "min_args": 0, "help": "返回上一级目录", "disc_only": true }
-	_commands["open"] = { "method": "_cmd_open", "min_args": 1, "help": "打开文件 (open <文件名>)", "disc_only": true }
-	_commands["cat"] = { "method": "_cmd_open", "min_args": 1, "help": "打开文件（别名）", "disc_only": true }
-	_commands["status"] = { "method": "_cmd_status", "min_args": 0, "help": "查看用户状态", "disc_only": true }
-	_commands["whoami"] = { "method": "_cmd_whoami", "min_args": 0, "help": "查看当前用户", "disc_only": true }
-	_commands["mail"] = { "method": "_cmd_mail", "min_args": 0, "help": "查看收件箱", "disc_only": true }
-	_commands["unlock"] = { "method": "_cmd_unlock", "min_args": 0, "help": "密码认证 (unlock [密码])", "disc_only": true }
-	_commands["eject"] = { "method": "_cmd_eject", "min_args": 0, "help": "卸载磁盘，返回桌面", "disc_only": true }
-	_commands["save"] = { "method": "_cmd_save", "min_args": 0, "help": "保存进度", "disc_only": true }
+	# ── 全局命令（桌面+磁盘都可用）──
+	global_commands = {
+		"help": _cmd_help,
+		"clear": _cmd_clear,
+		"cls": _cmd_clear,
+		"whoami": _cmd_whoami,
+		"status": _cmd_status,
+		"mail": _cmd_mail,
+		"theme": _cmd_theme,
+		"reboot": _cmd_reboot,
+		"exit": _cmd_exit,
+		"quit": _cmd_exit,
+		"profile": _cmd_profile,
+		"logout": _cmd_logout,
+		"passwd": _cmd_passwd,
+		"birthday": _cmd_birthday,
+		"users": _cmd_users,
+	}
 
-## ══════════════════════════════════════════
-## 解析并执行命令
-## ══════════════════════════════════════════
-func execute(raw_input: String) -> void:
-	var trimmed: String = raw_input.strip_edges()
-	if trimmed.is_empty():
+	# ── 桌面模式专用命令 ──
+	desktop_commands = {
+		"scan": _cmd_scan,
+		"load": _cmd_load,
+		"vdisc": _cmd_vdisc,
+		"deluser": _cmd_deluser,
+	}
+
+	# ── 磁盘模式专用命令 ──
+	disc_commands = {
+		"ls": _cmd_ls,
+		"dir": _cmd_ls,
+		"cd": _cmd_cd,
+		"back": _cmd_back,
+		"open": _cmd_open,
+		"read": _cmd_open,
+		"cat": _cmd_open,
+		"unlock": _cmd_unlock,
+		"eject": _cmd_eject,
+		"save": _cmd_save,
+		"clearsave": _cmd_clearsave,
+	}
+
+# ══════════════════════════════════════════
+#  命令执行入口
+# ══════════════════════════════════════════
+func execute(raw: String) -> void:
+	var parts: PackedStringArray = raw.strip_edges().split(" ", false)
+	if parts.is_empty():
 		return
 
-	_add_to_history(trimmed)
-
-	var parts: PackedStringArray = trimmed.split(" ", false)
-	var cmd_name: String = parts[0].to_lower()
+	var cmd: String = parts[0].to_lower()
 	var args: Array = []
 	for i in range(1, parts.size()):
 		args.append(parts[i])
 
-	# 查找命令
-	if not _commands.has(cmd_name):
-		main.append_output("[color=" + T.error_hex + "][ERROR] 未知命令: " + cmd_name + "。输入 help 查看可用命令。[/color]\n", false)
-		return
+	# 记录历史
+	_add_to_history(raw)
 
-	var cmd_info: Dictionary = _commands[cmd_name]
-
-	# 模式检查
-	if cmd_info.get("desktop_only", false) and not main._desktop_mode:
-		main.append_output("[color=" + T.error_hex + "][ERROR] 此命令仅在桌面模式下可用。[/color]\n", false)
-		return
-	if cmd_info.get("disc_only", false) and main._desktop_mode:
-		main.append_output("[color=" + T.error_hex + "][ERROR] 请先加载磁盘。[/color]\n", false)
-		return
-
-	# 参数数量检查
-	if args.size() < cmd_info["min_args"]:
-		main.append_output("[color=" + T.error_hex + "][ERROR] 参数不足。[/color]\n", false)
-		return
-
-	# 通过方法名字符串调用
-	var method_name: String = cmd_info["method"]
-	if has_method(method_name):
-		await call(method_name, args)
+	# 查找并执行命令
+	var handler = _find_handler(cmd)
+	if handler != null:
+		await handler.call(args)
 	else:
-		main.append_output("[color=" + T.error_hex + "][ERROR] 内部错误：方法 " + method_name + " 不存在。[/color]\n", false)
+		_cmd_unknown(cmd)
 
-	command_executed.emit(cmd_name, args)
+func _find_handler(cmd: String):
+	# 全局命令优先
+	if global_commands.has(cmd):
+		return global_commands[cmd]
+	# 根据当前模式查找
+	if main._desktop_mode:
+		if desktop_commands.has(cmd):
+			return desktop_commands[cmd]
+	else:
+		if disc_commands.has(cmd):
+			return disc_commands[cmd]
+	return null
 
-## ══════════════════════════════════════════
-## Tab 自动补全
-## ══════════════════════════════════════════
-func get_completions(partial: String) -> Array[String]:
-	var results: Array[String] = []
-	var parts: PackedStringArray = partial.split(" ", false)
-	var ends_with_space: bool = partial.ends_with(" ")
+func _cmd_unknown(cmd: String) -> void:
+	main.append_output("[color=" + T.error_hex + "]未知命令: " + cmd + "[/color]\n", false)
+	main.append_output("[color=" + T.muted_hex + "]输入 help 查看可用命令列表。[/color]\n", false)
 
-	if parts.size() == 0:
-		return results
+# ══════════════════════════════════════════
+#  命令历史
+# ══════════════════════════════════════════
+func _add_to_history(cmd: String) -> void:
+	if cmd.strip_edges().is_empty():
+		return
+	if command_history.size() > 0 and command_history[-1] == cmd:
+		return
+	command_history.append(cmd)
+	if command_history.size() > MAX_HISTORY:
+		command_history.remove_at(0)
+	history_index = command_history.size()
 
-	if parts.size() == 1 and not ends_with_space:
-		var prefix: String = parts[0].to_lower()
-		for cmd_key in _commands:
-			if cmd_key.begins_with(prefix):
-				var cmd_info: Dictionary = _commands[cmd_key]
-				if cmd_info.get("desktop_only", false) and not main._desktop_mode:
-					continue
-				if cmd_info.get("disc_only", false) and main._desktop_mode:
-					continue
-				results.append(cmd_key)
-	elif parts.size() == 1 and ends_with_space:
-		var cmd: String = parts[0].to_lower()
-		if cmd in ["cd", "open", "cat"]:
-			var children: Array = fs.get_children_at_path(main.current_path)
-			for child in children:
-				var child_str: String = str(child)
-				var child_path: String = fs.join_path(main.current_path, child_str)
-				var node = fs.get_node_at_path(child_path)
-				if node == null:
-					continue
-				if cmd == "cd" and node.type == "folder":
-					results.append(cmd + " " + child_str)
-				elif cmd in ["open", "cat"] and node.type == "file":
-					results.append(cmd + " " + child_str)
-		elif cmd == "theme":
-			var themes: Array[String] = ThemeManager.get_available_themes()
-			for theme_name in themes:
-				results.append(cmd + " " + theme_name)
-	elif parts.size() >= 2:
-		var cmd: String = parts[0].to_lower()
-		var partial_name: String = parts[-1]
-		if cmd == "theme":
-			var themes: Array[String] = ThemeManager.get_available_themes()
-			for theme_name in themes:
-				if theme_name.to_lower().begins_with(partial_name.to_lower()):
-					results.append(cmd + " " + theme_name)
-		elif cmd in ["cd", "open", "cat"]:
-			var items: Array = fs.get_children_at_path(main.current_path)
-			for item in items:
-				var item_str: String = str(item)
-				if item_str.to_lower().begins_with(partial_name.to_lower()):
-					var item_path: String = fs.join_path(main.current_path, item_str)
-					var node = fs.get_node_at_path(item_path)
-					if node == null:
-						continue
-					if cmd == "cd" and node.type == "folder":
-						results.append(cmd + " " + item_str)
-					elif cmd in ["open", "cat"] and node.type == "file":
-						results.append(cmd + " " + item_str)
-					elif cmd not in ["cd"]:
-						results.append(cmd + " " + item_str)
-
-	return results
-
-## ══════════════════════════════════════════
-## 历史命令导航
-## ══════════════════════════════════════════
 func history_up() -> String:
+	if command_history.is_empty():
+		return ""
+	if history_index > 0:
+		history_index -= 1
+	return command_history[history_index]
+
+func history_down() -> String:
 	if command_history.is_empty():
 		return ""
 	if history_index < command_history.size() - 1:
 		history_index += 1
-	return command_history[-(history_index + 1)]
+		return command_history[history_index]
+	else:
+		history_index = command_history.size()
+		return ""
 
-func history_down() -> String:
-	if history_index > 0:
-		history_index -= 1
-		return command_history[-(history_index + 1)]
-	history_index = -1
-	return ""
+# ══════════════════════════════════════════
+#  Tab 自动补全
+# ══════════════════════════════════════════
+func get_completions(current_text: String) -> Array[String]:
+	var parts: PackedStringArray = current_text.split(" ", false)
+	if parts.is_empty():
+		return [] as Array[String]
 
-func _add_to_history(cmd: String) -> void:
-	if command_history.is_empty() or command_history[-1] != cmd:
-		command_history.append(cmd)
-		if command_history.size() > MAX_HISTORY:
-			command_history.pop_front()
-	history_index = -1
+	var results: Array[String] = []
 
-## ══════════════════════════════════════════
-## 具体命令实现
-## ══════════════════════════════════════════
+	if parts.size() == 1:
+		# 补全命令名
+		var prefix: String = parts[0].to_lower()
+		var all_cmds: Array[String] = []
+		for k in global_commands.keys():
+			all_cmds.append(k)
+		if main._desktop_mode:
+			for k in desktop_commands.keys():
+				all_cmds.append(k)
+		else:
+			for k in disc_commands.keys():
+				all_cmds.append(k)
+		for cmd_name in all_cmds:
+			if cmd_name.begins_with(prefix) and cmd_name != prefix:
+				results.append(cmd_name)
+	elif parts.size() == 2:
+		# 补全参数
+		var cmd: String = parts[0].to_lower()
+		var arg_prefix: String = parts[1]
 
-func _cmd_clear(_args: Array = []) -> void:
-	main.output_text.text = ""
-	tw.clear_queue()
+		if cmd in ["cd", "open", "read", "cat"]:
+			var items: Array[String] = fs.get_children_at_path(main.current_path)
+			for item in items:
+				if item.to_lower().begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + item)
 
-func _cmd_exit(_args: Array = []) -> void:
-	main.append_output("[color=" + T.muted_hex + "]正在断开连接...[/color]\n", false)
-	await main.get_tree().create_timer(1.0).timeout
-	main.get_tree().quit()
+		elif cmd == "load":
+			for i in range(disc_mgr.available_stories.size()):
+				var idx_str: String = str(i + 1)
+				if idx_str.begins_with(arg_prefix):
+					results.append(cmd + " " + idx_str)
 
-func _cmd_reboot(_args: Array = []) -> void:
-	main.append_output("[color=" + T.muted_hex + "]正在重启终端...[/color]\n", false)
-	while tw.is_typing:
-		await main.get_tree().process_frame
-	await main.get_tree().create_timer(0.5).timeout
-	command_history.clear()
-	history_index = -1
-	disc_mgr.reset_all()
-	main.output_text.append_text("[color=" + T.muted_hex + "]...[/color]\n")
-	await main.get_tree().create_timer(0.3).timeout
-	main.output_text.append_text("[color=" + T.muted_hex + "]终端系统重新初始化中...[/color]\n")
-	await main.get_tree().create_timer(0.5).timeout
-	main.output_text.text = ""
-	disc_mgr.show_desktop_welcome()
-	main.input_field.grab_focus()
-	ThemeManager._refresh_all_ui(main)
+		elif cmd == "theme":
+			# 使用 ThemeManager 实际注册的主题名
+			var themes: Array[String] = ThemeManager.get_available_themes()
+			for t_name in themes:
+				if t_name.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + t_name)
+
+		elif cmd == "profile":
+			for page in ["1", "2"]:
+				if page.begins_with(arg_prefix):
+					results.append(cmd + " " + page)
+
+		elif cmd == "deluser":
+			var all_users: Array[String] = user_mgr.get_all_users()
+			for u in all_users:
+				if u.to_lower().begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + u)
+
+	return results
+
+# ══════════════════════════════════════════════════════════════
+#  全局命令
+# ══════════════════════════════════════════════════════════════
 
 func _cmd_help(_args: Array = []) -> void:
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
 	var lines: Array[String] = []
+
 	if main._desktop_mode:
-		lines.append("[color=" + p + "]═══════════════ 桌面命令 ═══════════════[/color]")
-		lines.append("  [color=" + p + "]load <编号>[/color]   加载指定虚拟磁盘")
-		lines.append("  [color=" + p + "]scan[/color]          重新扫描vdisc目录")
-		lines.append("  [color=" + p + "]vdisc[/color]         查看磁盘列表详情")
-		lines.append("  [color=" + p + "]theme[/color]         查看/切换主题")
-		lines.append("  [color=" + p + "]clear/cls[/color]     清空屏幕")
-		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
-		lines.append("  [color=" + p + "]clearsave[/color]     清除存档")
-		lines.append("  [color=" + p + "]exit[/color]          退出终端")
-		lines.append("[color=" + p + "]═══════════════════════════════════════[/color]")
-	else:
-		lines.append("[color=" + p + "]═══════════════════ 可用命令 ═══════════════════[/color]")
-		lines.append("  [color=" + p + "]help[/color]          显示本帮助信息")
-		lines.append("  [color=" + p + "]ls[/color]            列出当前目录下的文件和文件夹")
-		lines.append("  [color=" + p + "]cd <路径>[/color]     切换到指定目录")
-		lines.append("  [color=" + p + "]back[/color]          返回上一级目录")
-		lines.append("  [color=" + p + "]open <文件>[/color]   打开并显示文件内容")
-		lines.append("  [color=" + p + "]clear[/color]         清空屏幕")
-		lines.append("  [color=" + p + "]status[/color]        查看当前用户状态")
-		lines.append("  [color=" + p + "]mail[/color]          查看收件箱")
-		lines.append("  [color=" + p + "]whoami[/color]        查看当前用户信息")
-		lines.append("  [color=" + p + "]vdisc[/color]         查看虚拟磁盘列表和信息")
-		lines.append("  [color=" + p + "]scan[/color]          重新扫描虚拟磁盘")
-		lines.append("  [color=" + p + "]theme[/color]         查看/切换主题")
-		lines.append("  [color=" + p + "]unlock[/color]        进入密码认证(或 unlock <密码>)")
-		lines.append("  [color=" + p + "]eject[/color]         卸载磁盘，返回桌面")
-		lines.append("  [color=" + p + "]save[/color]          保存进度")
-		lines.append("  [color=" + p + "]clearsave[/color]     清除存档 (clearsave / clearsave all)")
+		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
+		lines.append("[color=" + p + "] SCP TERMINAL — 桌面模式命令列表[/color]")
+		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 磁盘操作 ──[/color]")
+		lines.append("  [color=" + p + "]scan[/color]          扫描可用虚拟磁盘")
+		lines.append("  [color=" + p + "]load <编号>[/color]   加载指定磁盘")
+		lines.append("  [color=" + p + "]vdisc[/color]         查看磁盘信息")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 用户管理 ──[/color]")
+		lines.append("  [color=" + p + "]profile [1|2][/color] 查看个人档案 (第1/2页)")
+		lines.append("  [color=" + p + "]whoami[/color]        显示当前用户信息")
+		lines.append("  [color=" + p + "]users[/color]         列出所有用户")
+		lines.append("  [color=" + p + "]passwd[/color]        修改密码")
+		lines.append("  [color=" + p + "]birthday[/color]      设置出生日期 (YYYY-MM-DD)")
+		lines.append("  [color=" + p + "]logout[/color]        注销当前账户")
+		lines.append("  [color=" + p + "]deluser <用户名>[/color] 删除指定用户")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 系统 ──[/color]")
+		lines.append("  [color=" + p + "]status[/color]        查看系统状态")
+		lines.append("  [color=" + p + "]mail[/color]          查看邮件")
+		lines.append("  [color=" + p + "]theme <名称>[/color]  切换主题配色")
+		lines.append("  [color=" + p + "]clear[/color]         清屏")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
 		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
-	lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 自动补全[/color]")
+		lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 补全[/color]")
+	else:
+		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
+		lines.append("[color=" + p + "] SCP TERMINAL — 磁盘模式命令列表[/color]")
+		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 文件操作 ──[/color]")
+		lines.append("  [color=" + p + "]ls[/color]            列出当前目录文件")
+		lines.append("  [color=" + p + "]cd <路径>[/color]     切换目录")
+		lines.append("  [color=" + p + "]back[/color]          返回上级目录")
+		lines.append("  [color=" + p + "]open <文件名>[/color] 打开文件")
+		lines.append("  [color=" + p + "]unlock[/color]        尝试密码认证提升权限")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 磁盘管理 ──[/color]")
+		lines.append("  [color=" + p + "]eject[/color]         弹出当前磁盘")
+		lines.append("  [color=" + p + "]save[/color]          手动保存进度")
+		lines.append("  [color=" + p + "]clearsave[/color]     清除当前磁盘存档 (all=全部)")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 用户信息 ──[/color]")
+		lines.append("  [color=" + p + "]profile [1|2][/color] 查看个人档案")
+		lines.append("  [color=" + p + "]whoami[/color]        显示当前用户信息")
+		lines.append("  [color=" + p + "]passwd[/color]        修改密码")
+		lines.append("  [color=" + p + "]logout[/color]        注销当前账户")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 系统 ──[/color]")
+		lines.append("  [color=" + p + "]status[/color]        查看系统状态")
+		lines.append("  [color=" + p + "]mail[/color]          查看邮件")
+		lines.append("  [color=" + p + "]theme <名称>[/color]  切换主题配色")
+		lines.append("  [color=" + p + "]clear[/color]         清屏")
+		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
+		lines.append("  [color=" + p + "]exit[/color]          退出终端")
+		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
+		lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 补全[/color]")
+
 	main.append_output("\n".join(lines) + "\n", false)
+
+func _cmd_clear(_args: Array = []) -> void:
+	main.output_text.text = ""
+	tw.clear_queue()
+
+func _cmd_whoami(_args: Array = []) -> void:
+	main.append_output(user_mgr.get_whoami_text() + "\n", false)
+
+func _cmd_status(_args: Array = []) -> void:
+	var p: String = T.primary_hex
+	var w: String = T.warning_hex
+	var m: String = T.muted_hex
+	var lines: Array[String] = []
+	lines.append("[color=" + p + "]═══════════ 系统状态 ═══════════[/color]")
+	lines.append("  操作员:     [color=" + p + "]" + user_mgr.get_display_name() + "[/color]")
+	if not main._desktop_mode:
+		lines.append("  权限等级:   [color=" + w + "]" + str(fs.player_clearance) + "[/color]")
+		lines.append("  当前路径:   [color=" + p + "]" + main.current_path + "[/color]")
+		lines.append("  已读文件:   [color=" + p + "]" + str(main.read_files.size()) + "[/color]")
+		lines.append("  已获取密码: [color=" + p + "]" + str(main.unlocked_passwords.size()) + "[/color]")
+		lines.append("  已解锁文件: [color=" + p + "]" + str(fs.unlocked_file_passwords.size()) + "[/color]")
+		if not main.story_id.is_empty():
+			lines.append("  磁盘ID:     [color=" + m + "]" + main.story_id + "[/color]")
+	else:
+		lines.append("  模式:       [color=" + p + "]桌面模式[/color]")
+		lines.append("  可用磁盘:   [color=" + p + "]" + str(disc_mgr.available_stories.size()) + "[/color]")
+	var cmd_count: int = 0
+	if user_mgr.current_user is Dictionary:
+		cmd_count = int(user_mgr.current_user.get("command_count", 0))
+	lines.append("  命令计数:   [color=" + m + "]" + str(cmd_count) + "[/color]")
+	lines.append("[color=" + p + "]════════════════════════════════[/color]")
+	main.append_output("\n".join(lines) + "\n", false)
+
+func _cmd_mail(_args: Array = []) -> void:
+	main.append_output("[color=" + T.muted_hex + "]收件箱为空。\n(邮件系统将在后续版本中实现)[/color]\n", false)
+
+# ── 修复：使用 ThemeManager 实际存在的 API ──
+func _cmd_theme(args: Array = []) -> void:
+	if args.is_empty():
+		# 无参数：调用 ThemeManager 自带的列表显示方法
+		ThemeManager.show_themes(main)
+		return
+
+	var theme_name: String = str(args[0]).to_lower()
+	# 调用 ThemeManager.request_theme_change()，它内部会：
+	# 1. 检查主题是否存在
+	# 2. 检查是否与当前主题相同
+	# 3. 设置 _pending_theme_name
+	# 4. 设置 main._theme_confirm_mode = true
+	ThemeManager.request_theme_change(theme_name, main)
+
+func _cmd_reboot(_args: Array = []) -> void:
+	main.append_output("[color=" + T.muted_hex + "]正在重启终端...[/color]\n", false)
+	# 保存用户数据
+	if user_mgr.is_logged_in:
+		user_mgr._save_current_profile()
+	await main.get_tree().create_timer(0.5).timeout
+	main.output_text.text = ""
+	tw.clear_queue()
+	command_history.clear()
+	history_index = -1
+	disc_mgr.reset_all()
+	await main.get_tree().create_timer(0.3).timeout
+	# 重新进入登录流程
+	main._start_login_flow()
+
+func _cmd_exit(_args: Array = []) -> void:
+	main.append_output("[color=" + T.muted_hex + "]正在关闭终端...[/color]\n", false)
+	if user_mgr.is_logged_in:
+		user_mgr.logout()
+	await main.get_tree().create_timer(0.5).timeout
+	main.get_tree().quit()
+
+# ══════════════════════════════════════════════════════════════
+#  用户系统命令
+# ══════════════════════════════════════════════════════════════
+func _cmd_profile(args: Array = []) -> void:
+	if not user_mgr.is_logged_in:
+		main.append_output("[color=" + T.error_hex + "]请先登录。[/color]\n", false)
+		return
+
+	if main.profile_builder != null and main.doc_viewer != null:
+		var page_num: int = 0
+		if args.size() > 0:
+			var page_str: String = str(args[0])
+			if page_str == "1":
+				page_num = 1
+			elif page_str == "2":
+				page_num = 2
+		main.profile_builder.open_profile(page_num)
+	else:
+		var page: int = 1
+		if args.size() > 0 and str(args[0]) == "2":
+			page = 2
+		if page == 1:
+			main.append_output(user_mgr.get_profile_page1(), false)
+		else:
+			main.append_output(user_mgr.get_profile_page2(), false)
+
+
+
+
+func _cmd_logout(_args: Array = []) -> void:
+	if not user_mgr.is_logged_in:
+		main.append_output("[color=" + T.error_hex + "]当前未登录。[/color]\n", false)
+		return
+
+	# 如果在磁盘模式，先自动保存并弹出
+	if not main._desktop_mode:
+		disc_mgr._auto_save()
+		main._desktop_mode = true
+		main.current_path = "/"
+		main.story_id = ""
+
+	await main.perform_logout()
+
+func _cmd_passwd(_args: Array = []) -> void:
+	if not user_mgr.is_logged_in:
+		main.append_output("[color=" + T.error_hex + "]当前未登录。[/color]\n", false)
+		return
+	main.start_passwd_flow()
+
+func _cmd_birthday(args: Array = []) -> void:
+	if not user_mgr.is_logged_in:
+		main.append_output("[color=" + T.error_hex + "]当前未登录。[/color]\n", false)
+		return
+
+	if args.is_empty():
+		var current_birthday: String = str(user_mgr.current_user.get("birthday", ""))
+		if current_birthday.is_empty():
+			main.append_output("[color=" + T.muted_hex + "]出生日期未设置。[/color]\n", false)
+		else:
+			main.append_output("[color=" + T.primary_hex + "]出生日期: " + current_birthday + "[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]用法: birthday YYYY-MM-DD[/color]\n", false)
+		return
+
+	var date_str: String = str(args[0])
+	var result: Dictionary = user_mgr.set_birthday(date_str)
+	if result["success"]:
+		main.append_output("[color=" + T.success_hex + "]" + str(result["message"]) + "[/color]\n", false)
+	else:
+		main.append_output("[color=" + T.error_hex + "]" + str(result["message"]) + "[/color]\n", false)
+
+func _cmd_users(_args: Array = []) -> void:
+	var all_users: Array[String] = user_mgr.get_all_users()
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var s: String = T.success_hex
+
+	if all_users.is_empty():
+		main.append_output("[color=" + m + "]无已注册用户。[/color]\n", false)
+		return
+
+	var lines: Array[String] = []
+	lines.append("[color=" + p + "]═══════════ 已注册操作员 ═══════════[/color]")
+	lines.append("")
+
+	for username in all_users:
+		var marker: String = ""
+		if user_mgr.is_logged_in and user_mgr.get_username() == username:
+			marker = " [color=" + s + "]◄ 当前[/color]"
+
+		var profile_path: String = user_mgr._get_profile_path(username)
+		var role_str: String = "标准操作员"
+		if FileAccess.file_exists(profile_path):
+			var file := FileAccess.open(profile_path, FileAccess.READ)
+			if file:
+				var json := JSON.new()
+				if json.parse(file.get_as_text()) == OK and json.data is Dictionary:
+					var role: String = str(json.data.get("role", "user"))
+					match role:
+						"admin": role_str = "系统管理员"
+						"user": role_str = "标准操作员"
+						_: role_str = role
+				file.close()
+
+		lines.append("  [color=" + p + "]" + username + "[/color]  [color=" + m + "](" + role_str + ")[/color]" + marker)
+
+	lines.append("")
+	lines.append("[color=" + p + "]════════════════════════════════════[/color]")
+	lines.append("[color=" + m + "]共 " + str(all_users.size()) + " 个账户[/color]")
+	main.append_output("\n".join(lines) + "\n", false)
+
+func _cmd_deluser(args: Array = []) -> void:
+	if args.is_empty():
+		main.append_output("[color=" + T.error_hex + "]用法: deluser <用户名>[/color]\n", false)
+		return
+
+	var target: String = str(args[0])
+
+	# 权限检查
+	if user_mgr.is_logged_in:
+		var is_admin: bool = user_mgr.get_role() == "admin"
+		var is_self: bool = user_mgr.get_username() == target
+		if not is_admin and not is_self:
+			main.append_output("[color=" + T.error_hex + "]权限不足。只有管理员可以删除其他用户。[/color]\n", false)
+			return
+
+	if target == UserManager.ADMIN_USERNAME:
+		main.append_output("[color=" + T.error_hex + "]管理员账户不可删除。[/color]\n", false)
+		return
+
+	if not user_mgr.user_exists(target):
+		main.append_output("[color=" + T.error_hex + "]用户 \"" + target + "\" 不存在。[/color]\n", false)
+		return
+
+	main.start_delete_user_flow(target)
+
+# ══════════════════════════════════════════════════════════════
+#  桌面模式命令
+# ══════════════════════════════════════════════════════════════
+
+func _cmd_scan(_args: Array = []) -> void:
+	await disc_mgr.scan_stories()  # ← 必须 await
+
+func _cmd_load(args: Array = []) -> void:
+	await disc_mgr.load_story(args)  # ← 必须 await
+
+func _cmd_vdisc(_args: Array = []) -> void:
+	disc_mgr.show_story_info()
+
+# ══════════════════════════════════════════════════════════════
+#  磁盘模式命令
+# ══════════════════════════════════════════════════════════════
 
 func _cmd_ls(_args: Array = []) -> void:
 	var items: Array = fs.get_children_at_path(main.current_path)
@@ -343,7 +585,7 @@ func _cmd_cd(args: Array = []) -> void:
 			["需要等级: " + str(required) + "  当前等级: " + str(fs.player_clearance)],
 			["输入 unlock 尝试密码认证"]
 		], T.error_hex)
-		main.append_output(box + "\n", true)
+		main.append_output(box + "\n", false)
 		return
 
 	main.current_path = new_path
@@ -367,236 +609,181 @@ func _cmd_open(args: Array = []) -> void:
 
 	var filename: String = str(args[0])
 	var file_path: String
+
 	if filename.begins_with("/"):
 		file_path = filename
 	else:
 		file_path = fs.join_path(main.current_path, filename)
+
 	file_path = fs.normalize_path(file_path)
 
 	var node = fs.get_node_at_path(file_path)
 	if node == null:
 		main.append_output("[color=" + T.error_hex + "][ERROR] 文件不存在: " + filename + "[/color]\n", false)
 		return
-	if node.type != "file":
-		main.append_output("[color=" + T.error_hex + "][ERROR] " + filename + " 是一个目录，请使用 cd 命令进入。[/color]\n", false)
+	if node.type == "folder":
+		main.append_output("[color=" + T.error_hex + "][ERROR] " + filename + " 是一个目录，请使用 cd 命令。[/color]\n", false)
 		return
 
 	# 权限检查
 	var required: int = fs.get_required_clearance(file_path)
 	if not fs.has_clearance(file_path):
 		var box: String = fs.build_box_sectioned([
-			["ACCESS DENIED", "权限不足"],
-			["需要等级: " + str(required) + "  当前等级: " + str(fs.player_clearance)],
-			["输入 unlock 尝试密码认证"]
+			["ACCESS DENIED"],
+			["需要等级: " + str(required) + "  当前等级: " + str(fs.player_clearance)]
 		], T.error_hex)
-		main.append_output(box + "\n", true)
+		main.append_output(box + "\n", false)
 		return
 
 	# 文件密码检查
 	var fp_key: String = fs.get_file_password_key(file_path)
 	if not fp_key.is_empty() and not fs.is_file_password_unlocked(file_path):
-		var fp_info: Dictionary = fs.story_file_passwords[fp_key]
-		var hint_text: String = str(fp_info.get("hint", ""))
-		var box_lines: Array = [["FILE PASSWORD REQUIRED", "此文件需要输入密码"]]
-		if not hint_text.is_empty():
-			box_lines.append(["提示: " + hint_text])
-		box_lines.append(["请输入密码:", "(输入 cancel 取消)"])
-		var box: String = fs.build_box_sectioned(box_lines, T.warning_hex)
-		main.append_output(box + "\n", false)
+		main.append_output("[color=" + T.warning_hex + "]此文件需要密码才能访问。[/color]\n", false)
+		main.append_output("[color=" + T.primary_hex + "]请输入文件密码 (输入 cancel 取消): [/color]", false)
 		main._file_password_mode = true
 		main._file_password_target = file_path
 		main._file_password_filename = filename
-		if main.input_field.has_focus():
-			main.input_field.placeholder_text = ""
 		return
 
-	# 等待打字机完成当前任务
-	while tw.is_typing:
-		await main.get_tree().process_frame
+	# 打开文件
+	await _display_file(file_path, filename, node.content)
 
-	# 进度条
-	var content_size: int = node.content.length()
-	await tw.show_progress_bar(content_size)
-	await main.get_tree().create_timer(0.5).timeout
+func _display_file(file_path: String, filename: String, content: String) -> void:
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
 
-	# 清屏显示文件内容
-	main.output_text.text = ""
-	tw.clear_queue()
-	var header: String = "[color=" + T.primary_hex + "]══════════ " + filename + " ══════════[/color]"
-	main.output_text.append_text(header + "\n\n")
+	main.append_output("\n[color=" + p + "]══════════ " + filename + " ══════════[/color]\n\n", false)
 
-	# 记录已读文件
+	# CRT-ML 解析
+	var parsed_content: String = content
+	if crtml != null:
+		parsed_content = crtml.parse(content)
+
+	# 替换 {username} 变量
+	if user_mgr.is_logged_in:
+		parsed_content = parsed_content.replace("{username}", user_mgr.get_username())
+
+	main.append_output(parsed_content + "\n", true)
+
+	# 记录已读
 	if not main.read_files.has(file_path):
 		main.read_files.append(file_path)
-		main.save_mgr.auto_save(main.story_id, fs.player_clearance, main.read_files,
-			main.unlocked_passwords, fs.unlocked_file_passwords, main.current_path)
 
-	# 获取并处理文件内容
-	var clean_content: String = node.content.strip_edges()
-	clean_content = clean_content.replace("\r\n", "\n").replace("\r", "\n")
+	# 统计文件阅读数
+	if user_mgr.is_logged_in:
+		user_mgr.increment_files_read()
 
-	# 使用 CRTML 解析器处理特殊标记
-	if crtml != null:
-		clean_content = crtml.parse(clean_content)
+	# 自动保存
+	disc_mgr._auto_save()
 
-	# 使用打字机效果显示文件内容
-	main.append_output(clean_content + "\n", true)
-
-	# 等待打字机完成后显示结束标记
+	# 等待打字机完成
 	while tw.is_typing:
 		await main.get_tree().process_frame
-	main.append_output("\n[color=" + T.primary_hex + "]══════════ 文件结束 ══════════[/color]\n", false)
-	main.append_output("[color=" + T.muted_hex + "]输入任意命令返回终端。[/color]\n", false)
 
-func _cmd_status(_args: Array = []) -> void:
-	var p: String = T.primary_hex
-	var w: String = T.warning_hex
-	var m: String = T.muted_hex
-	var lines: Array[String] = []
-	lines.append("[color=" + p + "]═══════════ 用户状态 ═══════════[/color]")
-	lines.append("  用户名:     [color=" + p + "]" + user_mgr.get_display_name() + "[/color]")
-	lines.append("  权限等级:   [color=" + w + "]" + str(fs.player_clearance) + "[/color]")
-	lines.append("  当前路径:   [color=" + p + "]" + main.current_path + "[/color]")
-	lines.append("  已读文件:   [color=" + p + "]" + str(main.read_files.size()) + "[/color]")
-	lines.append("  已获取密码: [color=" + p + "]" + str(main.unlocked_passwords.size()) + "[/color]")
-	lines.append("  已解锁文件: [color=" + p + "]" + str(fs.unlocked_file_passwords.size()) + "[/color]")
-	if not main.story_id.is_empty():
-		lines.append("  磁盘ID:     [color=" + m + "]" + main.story_id + "[/color]")
-	lines.append("[color=" + p + "]════════════════════════════════[/color]")
-	main.append_output("\n".join(lines) + "\n", true)
+	main.append_output("\n[color=" + p + "]══════════ 文件结束 ══════════[/color]\n", false)
+	main.append_output("[color=" + m + "]输入任意命令返回终端。[/color]\n", false)
 
-func _cmd_whoami(_args: Array = []) -> void:
-	main.append_output(user_mgr.get_whoami_text() + "\n", false)
+func _cmd_unlock(args: Array = []) -> void:
+	if args.is_empty():
+		main.append_output("[color=" + T.primary_hex + "]请输入认证密码 (输入 cancel 取消): [/color]", false)
+		main._password_mode = true
+		main._password_target_path = main.current_path
+		return
 
-func _cmd_mail(_args: Array = []) -> void:
-	main.append_output("[color=" + T.muted_hex + "]收件箱为空。\n(邮件系统将在后续版本中实现)[/color]\n", false)
+	# 直接尝试密码
+	_verify_password(str(args[0]))
 
-func _cmd_scan(_args: Array = []) -> void:
-	main.append_output("[color=" + T.muted_hex + "]正在扫描 vdisc/ 目录...[/color]\n", true)
-	while tw.is_typing:
-		await main.get_tree().process_frame
-	await tw.show_progress_bar(400)
-	await main.get_tree().create_timer(0.3).timeout
-	disc_mgr.scan_stories(false)
-	main._update_status_bar()
+func _verify_password(password: String) -> void:
+	# 兼容两种 manifest 结构
+	var passwords: Dictionary = {}
 
-func _cmd_load(args: Array = []) -> void:
-	await disc_mgr.load_story(args)
+	# 新版结构：manifest.story.passwords
+	var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
+	if story_dict.has("passwords"):
+		passwords = story_dict.get("passwords", {}) as Dictionary
+	# 旧版结构：manifest.passwords
+	elif main.story_manifest.has("passwords"):
+		passwords = main.story_manifest.get("passwords", {}) as Dictionary
+
+	for level_str in passwords.keys():
+		var pwd_value: String = str(passwords[level_str])
+		if password == pwd_value:
+			var level: int = int(float(level_str))
+			if fs.player_clearance < level:
+				fs.player_clearance = level
+				if not main.unlocked_passwords.has(password):
+					main.unlocked_passwords.append(password)
+
+				var box: String = fs.build_box(
+					["ACCESS GRANTED", "权限等级已提升至: " + str(level)] as Array[String],
+					T.success_hex
+				)
+				main.append_output(box + "\n", false)
+				disc_mgr._auto_save()
+				main._update_status_bar()
+				return
+			else:
+				main.append_output("[color=" + T.warning_hex + "]当前等级已达到或超过该密码对应的等级。[/color]\n", false)
+				return
+
+	main.append_output("[color=" + T.error_hex + "]密码无效。[/color]\n", false)
+
+func verify_file_password(password: String) -> void:
+	var file_path: String = main._file_password_target
+	var filename: String = main._file_password_filename
+
+	if file_path.is_empty():
+		return
+
+	var fp_key: String = fs.get_file_password_key(file_path)
+	if fp_key.is_empty():
+		main._file_password_target = ""
+		main._file_password_filename = ""
+		return
+
+	var expected_password: String = str(fs.story_file_passwords.get(fp_key, {}).get("password", ""))
+
+	if password == expected_password:
+		fs.unlocked_file_passwords.append(file_path)
+		main.append_output("[color=" + T.success_hex + "]文件密码正确，已解锁。[/color]\n", false)
+		disc_mgr._auto_save()
+
+		var node = fs.get_node_at_path(file_path)
+		if node:
+			await _display_file(file_path, filename, node.content)
+	else:
+		main.append_output("[color=" + T.error_hex + "]文件密码错误。[/color]\n", false)
+
+	main._file_password_target = ""
+	main._file_password_filename = ""
 
 func _cmd_eject(_args: Array = []) -> void:
 	await disc_mgr.eject_story()
 
-func _cmd_vdisc(_args: Array = []) -> void:
-	disc_mgr.show_story_info()
-
-func _cmd_unlock(args: Array = []) -> void:
-	if args.is_empty():
-		var box: String = fs.build_box_sectioned([
-			["SECURITY AUTHENTICATION", "安全认证系统"],
-			["请输入访问密码:", "(输入 cancel 取消)"]
-		], T.warning_hex)
-		main.append_output(box + "\n", false)
-		main._password_mode = true
-		if main.input_field.has_focus():
-			main.input_field.placeholder_text = ""
-		return
-
-	var password: String = str(args[0])
-	_verify_password(password)
-
-## 验证密码（供 unlock 命令和密码输入模式共用）
-func _verify_password(password: String) -> void:
-	if not disc_mgr.story_manifest.has("passwords"):
-		main.append_output("[color=" + T.error_hex + "][ERROR] 当前剧本未配置密码系统。[/color]\n", false)
-		return
-
-	var passwords: Dictionary = disc_mgr.story_manifest["passwords"]
-
-	if passwords.has(password):
-		var pwd_info: Dictionary = passwords[password]
-		var grant_level: int = int(float(pwd_info.get("grants_clearance", 0)))
-
-		if main.unlocked_passwords.has(password):
-			main.append_output("[color=" + T.muted_hex + "]该密码已使用过。当前权限等级: " + str(fs.player_clearance) + "[/color]\n", false)
-			return
-
-		if grant_level <= fs.player_clearance:
-			main.append_output("[color=" + T.muted_hex + "]该密码对应的权限等级不高于当前等级。当前: " + str(fs.player_clearance) + "[/color]\n", false)
-			return
-
-		main.unlocked_passwords.append(password)
-		var old_level: int = fs.player_clearance
-		fs.player_clearance = grant_level
-
-		main.save_mgr.auto_save(main.story_id, fs.player_clearance, main.read_files,
-			main.unlocked_passwords, fs.unlocked_file_passwords, main.current_path)
-
-		# ★ 使用 ASCII 箭头 -> 避免宽度计算问题
-		var box: String = fs.build_box_sectioned([
-			["ACCESS GRANTED", "权限认证通过"],
-			["权限等级: " + str(old_level) + " -> " + str(fs.player_clearance)]
-		], T.success_hex)
-
-		# ★ 合并 box + message 为一次输出，避免顺序错乱
-		var full_output: String = "\n" + box + "\n"
-		if pwd_info.has("message"):
-			full_output += "\n[color=" + T.muted_hex + "]" + str(pwd_info["message"]) + "[/color]\n"
-
-		main.append_output(full_output, true)
-		main._update_status_bar()
-	else:
-		var box: String = fs.build_box(["ACCESS DENIED", "密码验证失败"] as Array[String], T.error_hex)
-		main.append_output("\n" + box + "\n", true)
-
-## 验证文件密码（供 main.gd 的文件密码模式调用）
-func verify_file_password(input_password: String) -> void:
-	var fp_key: String = fs.get_file_password_key(main._file_password_target)
-	if fp_key.is_empty():
-		main.append_output("[color=" + T.error_hex + "][ERROR] 内部错误：未找到文件密码配置。[/color]\n", false)
-		return
-
-	var fp_info: Dictionary = fs.story_file_passwords[fp_key]
-	var correct_password: String = str(fp_info.get("password", ""))
-
-	if input_password == correct_password:
-		fs.unlocked_file_passwords.append(main._file_password_target)
-		main.save_mgr.auto_save(main.story_id, fs.player_clearance, main.read_files,
-			main.unlocked_passwords, fs.unlocked_file_passwords, main.current_path)
-
-		var box: String = fs.build_box(["PASSWORD ACCEPTED", "文件密码验证通过"] as Array[String], T.success_hex)
-		main.append_output(box + "\n", true)
-
-		while tw.is_typing:
-			await main.get_tree().process_frame
-		await main.get_tree().create_timer(0.5).timeout
-		await _cmd_open([main._file_password_filename])
-	else:
-		var box: String = fs.build_box(["PASSWORD REJECTED", "文件密码错误"] as Array[String], T.error_hex)
-		main.append_output(box + "\n", true)
-
 func _cmd_save(_args: Array = []) -> void:
-	main.save_mgr.auto_save(main.story_id, fs.player_clearance, main.read_files,
-		main.unlocked_passwords, fs.unlocked_file_passwords, main.current_path)
+	if main.story_id.is_empty():
+		main.append_output("[color=" + T.error_hex + "]当前未加载磁盘。[/color]\n", false)
+		return
+	disc_mgr._auto_save()
 	main.append_output("[color=" + T.success_hex + "]进度已保存。[/color]\n", false)
 
 func _cmd_clearsave(args: Array = []) -> void:
-	if args.size() > 0 and str(args[0]).to_lower() == "all":
-		var count: int = main.save_mgr.delete_all_saves()
-		main.append_output("[color=" + T.primary_hex + "]已清除全部存档（共 " + str(count) + " 个）。[/color]\n", true)
-	elif main.story_id != "":
-		var success: bool = main.save_mgr.delete_save(main.story_id)
-		if success:
-			main.append_output("[color=" + T.primary_hex + "]已清除当前磁盘存档。[/color]\n", true)
-			main.read_files.clear()
-			main.unlocked_passwords.clear()
-			fs.unlocked_file_passwords.clear()
-		else:
-			main.append_output("[color=" + T.error_hex + "]清除存档失败或存档不存在。[/color]\n", false)
-	else:
-		main.append_output("[color=" + T.muted_hex + "]用法:\n  clearsave      清除当前磁盘存档\n  clearsave all  清除全部存档[/color]\n", false)
+	var m: String = T.muted_hex
+	var e: String = T.error_hex
 
-func _cmd_theme(args: Array = []) -> void:
-	if args.is_empty():
-		ThemeManager.show_themes(main)
-	else:
-		ThemeManager.request_theme_change(str(args[0]), main)
+	if args.size() > 0 and str(args[0]).to_lower() == "all":
+		var count: int = main.save_mgr.delete_all_saves()  # ← 修复
+		main.append_output("[color=" + e + "]已清除 " + str(count) + " 个存档。[/color]\n", false)
+		return
+
+	if main.story_id.is_empty():
+		main.append_output("[color=" + e + "]当前未加载磁盘。[/color]\n", false)
+		main.append_output("[color=" + m + "]用法: clearsave [all][/color]\n", false)
+		return
+
+	main.save_mgr.delete_save(main.story_id)  # ← 修复
+	main.append_output("[color=" + e + "]当前磁盘存档已清除。[/color]\n", false)
+
+
+
+	

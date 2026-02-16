@@ -5,6 +5,9 @@
 class_name UIManager
 extends RefCounted
 
+# ★ Bold 字体路径常量（使用 SemiBold 替代伪粗体，防止发光过亮）
+const BOLD_FONT_PATH := "res://fonts/SarasaMonoSC-SemiBold.ttf"
+
 # ============================================================
 # 背景初始化
 # ============================================================
@@ -13,6 +16,7 @@ static func setup_background(parent: Control, game_root_dir: String) -> TextureR
 	background.name = "Background"
 	parent.add_child(background)
 	parent.move_child(background, 0)
+
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -46,6 +50,7 @@ static func setup_background(parent: Control, game_root_dir: String) -> TextureR
 		var shader: Shader = load(shader_path)
 		var mat := ShaderMaterial.new()
 		mat.shader = shader
+
 		var t := ThemeManager.current
 		mat.set_shader_parameter("vignette_strength", 0.8)
 		mat.set_shader_parameter("vignette_radius", 0.9)
@@ -53,7 +58,6 @@ static func setup_background(parent: Control, game_root_dir: String) -> TextureR
 		mat.set_shader_parameter("glow_radius", 0.4)
 		mat.set_shader_parameter("brightness", 0.7)
 		if t != null:
-			# ★ 修复语法错误：_0.15 → * 0.15
 			mat.set_shader_parameter("tint_color", Color(t.primary.r * 0.15, t.primary.g * 0.15, t.primary.b * 0.15, 0.15))
 		else:
 			mat.set_shader_parameter("tint_color", Color(0.1, 0.3, 0.1, 0.15))
@@ -71,6 +75,7 @@ static func setup_main_content(parent: Control, main_content: Control) -> void:
 	if main_content == null:
 		return
 	parent.move_child(main_content, parent.get_child_count() - 1)
+
 	if main_content is Control:
 		var transparent_style := StyleBoxFlat.new()
 		transparent_style.bg_color = Color(0, 0, 0, 0)
@@ -173,6 +178,7 @@ static func setup_input_field(input_field: LineEdit) -> void:
 
 # ============================================================
 # 输出文本框初始化
+# ★ 关键：设置真正的 Bold 字体，避免 Godot 伪粗体导致的发光过亮
 # ============================================================
 static func setup_output_text(output_text: RichTextLabel) -> void:
 	var t := ThemeManager.current
@@ -183,7 +189,43 @@ static func setup_output_text(output_text: RichTextLabel) -> void:
 	output_text.focus_mode = Control.FOCUS_CLICK
 	if t != null:
 		output_text.add_theme_color_override("default_color", t.secondary)
+		# ★ 确保粗体文字颜色与普通文字一致，不会被字体变化影响
+		output_text.add_theme_color_override("font_color", t.secondary)
 		output_text.add_theme_color_override("selection_color", Color(t.primary.r, t.primary.g, t.primary.b, 0.3))
+		# ★ 表格有边框视觉效果
+		output_text.add_theme_constant_override("table_h_separation", 12)
+		output_text.add_theme_constant_override("table_v_separation", 4)
+
+	# ★ 加载 SemiBold 字体替代伪粗体
+	# Godot 默认的 [b] 标签使用"伪粗体"（同一字形偏移叠绘），
+	# 会导致笔画边缘模糊、亮度翻倍，经过 CRT shader 后严重过曝。
+	# 使用真正的 SemiBold 字体文件可从根本上解决此问题。
+	CrtmlParser.apply_fonts(output_text)
+	# ★ 表格单元格间距
+	output_text.add_theme_constant_override("table_h_separation", 16)
+	output_text.add_theme_constant_override("table_v_separation", 4)
+
+# ============================================================
+# 为 RichTextLabel 应用真正的 Bold 字体
+# 可供 output_text 和 document_viewer 的页面 RTL 共用
+# ============================================================
+static func _apply_bold_font(rtl: RichTextLabel) -> void:
+	if ResourceLoader.exists(BOLD_FONT_PATH):
+		var bold_font: Font = load(BOLD_FONT_PATH)
+		if bold_font:
+			rtl.add_theme_font_override("bold_font", bold_font)
+			# bold_italics 也使用同一个 SemiBold 字体
+			rtl.add_theme_font_override("bold_italics_font", bold_font)
+	else:
+		# 如果找不到 SemiBold，尝试 Bold
+		var fallback_path := "res://fonts/SarasaMonoSC-Bold.ttf"
+		if ResourceLoader.exists(fallback_path):
+			var bold_font: Font = load(fallback_path)
+			if bold_font:
+				rtl.add_theme_font_override("bold_font", bold_font)
+				rtl.add_theme_font_override("bold_italics_font", bold_font)
+		else:
+			print("[UI] 警告: 未找到 Bold 字体文件，将使用 Godot 伪粗体，会导致恩情发光")
 
 # ============================================================
 # ScrollContainer 设置
@@ -273,7 +315,6 @@ static func _generate_crt_cursor() -> Image:
 	var h: int = 24
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-
 	var pattern: Array = [
 		[3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 		[3,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -307,7 +348,6 @@ static func _generate_crt_cursor() -> Image:
 					1: img.set_pixel(x, y, fg)
 					2: img.set_pixel(x, y, outline)
 					3: img.set_pixel(x, y, glow)
-
 	var bold_img := img.duplicate()
 	for y2 in range(h):
 		for x2 in range(w - 1):
@@ -327,7 +367,6 @@ static func _generate_crt_ibeam() -> Image:
 	var h: int = 22
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-
 	var pattern: Array = [
 		[0,0,0,2,2,2,2,2,2,2,2,2,0,0,0,0],
 		[0,0,3,1,1,1,1,1,1,1,1,1,3,0,0,0],
@@ -373,7 +412,6 @@ static func _generate_crt_hand() -> Image:
 	var h: int = 20
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-
 	var pattern: Array = [
 		[0,0,0,0,0,3,2,3,0,0,0,0,0,0,0,0],
 		[0,0,0,0,3,2,1,2,3,0,0,0,0,0,0,0],

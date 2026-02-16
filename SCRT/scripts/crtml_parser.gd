@@ -3,28 +3,69 @@
 # 职责：解析 CRT-ML 自定义标记语言，转换为 BBCode
 # 支持：标题、粗体、斜体、删除线、分割线、涂黑遮蔽、SCP标记、
 #       颜色、速度控制、延迟、清屏、抖动、超链接、居中、引用、
-#       代码、表格、黑幕方块、分页标记
+#       代码、表格、黑幕方块、分页标记、原始文本块、强制不可跳过
 # ============================================================
 class_name CrtmlParser
 extends RefCounted
 
 var T = null  # ThemeManager.ThemeColors
+var fs = null  # FileSystem 引用，用于 display_width
+
+# ★ 原始文本块保护用
+var _raw_blocks: Array[String] = []
+
+# ★ 字体路径常量
+const FONT_DIR: String = "res://fonts/"
+const FONT_REGULAR: String = FONT_DIR + "SarasaMonoSC-Regular.ttf"
+const FONT_BOLD: String = FONT_DIR + "SarasaMonoSC-SemiBold.ttf"
+const FONT_ITALIC: String = FONT_DIR + "SarasaMonoSC-Italic.ttf"
+const FONT_BOLD_ITALIC: String = FONT_DIR + "SarasaMonoSC-SemiBoldItalic.ttf"
+
+# ★ 分页标记常量（供外部 document_viewer / typewriter 识别）
+const PAGE_BREAK_TAG: String = "\u0001PAGEBREAK\u0002"
 
 # ============================================================
 # 初始化
 # ============================================================
-func setup(p_theme) -> void:
+func setup(p_theme, p_fs = null) -> void:
 	T = p_theme
+	fs = p_fs
+
+# ============================================================
+# ★ 静态工具：为 RichTextLabel 应用完整字体族覆盖
+# 在 ui_manager.gd 和 document_viewer.gd 中调用
+# ============================================================
+static func apply_fonts(rtl: RichTextLabel) -> void:
+	if ResourceLoader.exists(FONT_REGULAR):
+		var f: Font = load(FONT_REGULAR)
+		if f:
+			rtl.add_theme_font_override("normal_font", f)
+	if ResourceLoader.exists(FONT_BOLD):
+		var f: Font = load(FONT_BOLD)
+		if f:
+			rtl.add_theme_font_override("bold_font", f)
+	# ★ 关键修复：指定真正的斜体字体，避免 Godot 回退到伪粗斜体
+	if ResourceLoader.exists(FONT_ITALIC):
+		var f: Font = load(FONT_ITALIC)
+		if f:
+			rtl.add_theme_font_override("italics_font", f)
+	if ResourceLoader.exists(FONT_BOLD_ITALIC):
+		var f: Font = load(FONT_BOLD_ITALIC)
+		if f:
+			rtl.add_theme_font_override("bold_italics_font", f)
 
 # ============================================================
 # 主解析函数：将 CRT-ML 转换为 BBCode
-# 按优先级顺序处理各种标记
 # ============================================================
 func parse(raw_text: String) -> String:
 	if raw_text.is_empty():
 		return ""
 
-	var lines: PackedStringArray = raw_text.split("\n")
+	# 第0步：保护 @@...@@ 原始文本块
+	_raw_blocks.clear()
+	var protected_text: String = _protect_raw_blocks(raw_text)
+
+	var lines: PackedStringArray = protected_text.split("\n")
 	var result_lines: Array[String] = []
 	var in_table: bool = false
 	var table_rows: Array[Array] = []
@@ -37,7 +78,6 @@ func parse(raw_text: String) -> String:
 		# ── 空行 ──
 		if stripped.is_empty():
 			if in_table:
-				# 表格结束
 				result_lines.append(_render_table(table_rows))
 				table_rows.clear()
 				in_table = false
@@ -45,8 +85,12 @@ func parse(raw_text: String) -> String:
 			i += 1
 			continue
 
-		# ── 分页标记 ──
+		# ── 分页标记（★ 必须在分割线检测之前！）──
 		if stripped == "---PAGE---":
+			if in_table:
+				result_lines.append(_render_table(table_rows))
+				table_rows.clear()
+				in_table = false
 			result_lines.append(_make_page_break())
 			i += 1
 			continue
@@ -63,7 +107,6 @@ func parse(raw_text: String) -> String:
 
 		# ── 表格行 ──
 		if stripped.begins_with("|") and stripped.ends_with("|"):
-			# 检查是否是分隔行（如 |---|---|）
 			if _is_table_separator(stripped):
 				i += 1
 				continue
@@ -74,7 +117,7 @@ func parse(raw_text: String) -> String:
 			i += 1
 			continue
 
-		# 如果之前在表格中，但当前行不是表格行，结束表格
+		# 结束表格
 		if in_table:
 			result_lines.append(_render_table(table_rows))
 			table_rows.clear()
@@ -106,50 +149,73 @@ func parse(raw_text: String) -> String:
 			i += 1
 			continue
 
-		# ── 普通行：处理行内标记 ──
+		# ── 普通行 ──
 		var processed_line: String = _process_inline(line)
 		result_lines.append(processed_line)
 		i += 1
 
-	# 循环结束后，如果还有未渲染的表格
 	if in_table and not table_rows.is_empty():
 		result_lines.append(_render_table(table_rows))
 
-	return "\n".join(result_lines)
+	var final_text: String = "\n".join(result_lines)
+	final_text = _restore_raw_blocks(final_text)
+	return final_text
+
+# ============================================================
+# 原始文本块保护：@@内容@@ → 占位符
+# ============================================================
+func _protect_raw_blocks(text: String) -> String:
+	var result: String = ""
+	var i: int = 0
+	while i < text.length():
+		if i + 1 < text.length() and text[i] == "@" and text[i + 1] == "@":
+			var end_pos: int = text.find("@@", i + 2)
+			if end_pos != -1:
+				var inner: String = text.substr(i + 2, end_pos - i - 2)
+				var idx: int = _raw_blocks.size()
+				_raw_blocks.append(inner)
+				result += "\u0001RAW:" + str(idx) + "\u0002"
+				i = end_pos + 2
+				continue
+		result += text[i]
+		i += 1
+	return result
+
+func _restore_raw_blocks(text: String) -> String:
+	var m: String = _get_muted_hex()
+	for idx in range(_raw_blocks.size()):
+		var placeholder: String = "\u0001RAW:" + str(idx) + "\u0002"
+		var escaped: String = _raw_blocks[idx]
+		escaped = escaped.replace("[", "[lb]")
+		text = text.replace(placeholder, "[color=" + m + "]" + escaped + "[/color]")
+	_raw_blocks.clear()
+	return text
 
 # ============================================================
 # 行内标记处理（按优先级顺序）
 # ============================================================
 func _process_inline(text: String) -> String:
 	var result: String = text
-
-	# 1. CRT-ML 效果标记 {tag} → 转换为 Typewriter 可识别的标签
+	# 1. CRT-ML 效果标记 {tag}
 	result = _parse_effect_tags(result)
-
-	# 2. 超链接 [文本](url)
-	result = _parse_links(result)
-
-	# 3. SCP 特殊标记
+	# 2. SCP 特殊标记（移到链接之前，避免 [REDACTED] 被链接解析干扰）
 	result = _parse_scp_markers(result)
-
+	# 3. 超链接 [文本](url)
+	result = _parse_links(result)
 	# 4. 涂黑遮蔽 ||文本||
 	result = _parse_spoiler(result)
-
-	# 5. 黑幕方块 ████ 自动着色
+	# 5. ★ 纯黑标记 {blackout}████{/blackout}（纯黑不发光，保留备用）
+	result = _parse_blackout(result)
+	# 6. ★ 黑幕方块 ████（CRT 发光效果）
 	result = _parse_black_blocks(result)
-
-	# 6. 粗体 **文本**（必须在斜体之前）
+	# 7. 粗体 **文本**
 	result = _parse_bold(result)
-
-	# 7. 斜体 *文本*
+	# 8. 斜体 *文本*
 	result = _parse_italic(result)
-
-	# 8. 删除线 ~~文本~~
+	# 9. 删除线 ~~文本~~
 	result = _parse_strikethrough(result)
-
-	# 9. 行内代码 `代码`
+	# 10. 行内代码 `代码`
 	result = _parse_inline_code(result)
-
 	return result
 
 # ============================================================
@@ -158,19 +224,15 @@ func _process_inline(text: String) -> String:
 func _make_heading(text: String, level: int) -> String:
 	var p: String = _get_primary_hex()
 	var processed_text: String = _process_inline(text)
-
 	match level:
 		1:
-			# 一级标题：上下双线 + 大字
 			var line_char: String = "═"
 			var border: String = "[color=" + p + "]" + line_char.repeat(40) + "[/color]"
 			return border + "\n[color=" + p + "][b]  " + processed_text + "[/b][/color]\n" + border
 		2:
-			# 二级标题：下划线 + 粗体
 			var border: String = "[color=" + p + "]" + "─".repeat(30) + "[/color]"
 			return "[color=" + p + "][b]" + processed_text + "[/b][/color]\n" + border
 		3:
-			# 三级标题：粗体 + 主色
 			return "[color=" + p + "][b]" + processed_text + "[/b][/color]"
 		_:
 			return "[color=" + p + "]" + processed_text + "[/color]"
@@ -179,8 +241,10 @@ func _make_heading(text: String, level: int) -> String:
 # 分割线检测与生成
 # ============================================================
 func _is_separator(line: String) -> bool:
-	# 至少3个连续的 - 或 = 或 ─ 或 ═
 	if line.length() < 3:
+		return false
+	# ★ 排除分页标记
+	if line == "---PAGE---":
 		return false
 	var first_char: String = line[0]
 	if first_char not in ["-", "=", "─", "═", "━"]:
@@ -195,12 +259,13 @@ func _make_separator() -> String:
 	return "[color=" + p + "]" + "─".repeat(50) + "[/color]"
 
 # ============================================================
-# 分页标记
+# ★ 分页标记（使用特殊占位符，供 document_viewer 分页）
 # ============================================================
 func _make_page_break() -> String:
 	var m: String = _get_muted_hex()
 	var p: String = _get_primary_hex()
-	return "\n[color=" + p + "]" + "═".repeat(20) + "[/color] [color=" + m + "][ 下一页 ][/color] [color=" + p + "]" + "═".repeat(20) + "[/color]\n"
+	var visual: String = "\n[color=" + p + "]" + "═".repeat(20) + "[/color] [color=" + m + "][ PAGE BREAK ][/color] [color=" + p + "]" + "═".repeat(20) + "[/color]\n"
+	return PAGE_BREAK_TAG + visual
 
 # ============================================================
 # 引用块
@@ -218,7 +283,6 @@ func _parse_bold(text: String) -> String:
 	var i: int = 0
 	while i < text.length():
 		if i + 1 < text.length() and text[i] == "*" and text[i + 1] == "*":
-			# 找到 ** 开始，寻找结束的 **
 			var end_pos: int = text.find("**", i + 2)
 			if end_pos != -1:
 				var inner: String = text.substr(i + 2, end_pos - i - 2)
@@ -230,19 +294,17 @@ func _parse_bold(text: String) -> String:
 	return result
 
 # ============================================================
-# 斜体 *文本*（单个星号，注意不要和粗体冲突）
+# 斜体 *文本*（单个星号，不和粗体冲突）
 # ============================================================
 func _parse_italic(text: String) -> String:
 	var result: String = ""
 	var i: int = 0
 	while i < text.length():
 		if text[i] == "*":
-			# 确保不是 ** （粗体已经处理过了，[b] 标签中不含 *）
 			if i + 1 < text.length() and text[i + 1] == "*":
 				result += text[i]
 				i += 1
 				continue
-			# 单个 *，寻找匹配的结束 *
 			var end_pos: int = _find_single_star(text, i + 1)
 			if end_pos != -1:
 				var inner: String = text.substr(i + 1, end_pos - i - 1)
@@ -257,7 +319,6 @@ func _find_single_star(text: String, from: int) -> int:
 	var j: int = from
 	while j < text.length():
 		if text[j] == "*":
-			# 确保不是 **
 			if j + 1 < text.length() and text[j + 1] == "*":
 				j += 2
 				continue
@@ -266,17 +327,19 @@ func _find_single_star(text: String, from: int) -> int:
 	return -1
 
 # ============================================================
-# 删除线 ~~文本~~
+# ★ 删除线 ~~文本~~（加粗增加可见度）
 # ============================================================
 func _parse_strikethrough(text: String) -> String:
 	var result: String = ""
 	var i: int = 0
+	var dim: String = _get_dim_hex()
 	while i < text.length():
 		if i + 1 < text.length() and text[i] == "~" and text[i + 1] == "~":
 			var end_pos: int = text.find("~~", i + 2)
 			if end_pos != -1:
 				var inner: String = text.substr(i + 2, end_pos - i - 2)
-				result += "[s]" + inner + "[/s]"
+				# ★ dim 色 + 粗体删除线，让线条更清晰可见
+				result += "[color=" + dim + "][s][b]" + inner + "[/b][/s][/color]"
 				i = end_pos + 2
 				continue
 		result += text[i]
@@ -294,8 +357,8 @@ func _parse_inline_code(text: String) -> String:
 			var end_pos: int = text.find("`", i + 1)
 			if end_pos != -1:
 				var inner: String = text.substr(i + 1, end_pos - i - 1)
-				var m: String = _get_muted_hex()
-				result += "[code][color=" + m + "]" + inner + "[/color][/code]"
+				var m_hex: String = _get_muted_hex()
+				result += "[code][color=" + m_hex + "]" + inner + "[/color][/code]"
 				i = end_pos + 1
 				continue
 		result += text[i]
@@ -303,9 +366,7 @@ func _parse_inline_code(text: String) -> String:
 	return result
 
 # ============================================================
-# 涂黑遮蔽 ||文本||
-# 实现方式：默认显示为黑色方块，通过 [url] 标签包裹
-# 点击后可通过 meta_clicked 信号显示原文
+# 涂黑遮蔽 ||文本||（点击可显示）
 # ============================================================
 func _parse_spoiler(text: String) -> String:
 	var result: String = ""
@@ -315,7 +376,6 @@ func _parse_spoiler(text: String) -> String:
 			var end_pos: int = text.find("||", i + 2)
 			if end_pos != -1:
 				var inner: String = text.substr(i + 2, end_pos - i - 2)
-				# 生成等长的遮蔽方块，用 url 标签包裹以支持点击显示
 				var block_len: int = inner.length()
 				var blocks: String = "█".repeat(block_len)
 				result += "[color=#111111][url=spoiler://" + inner.uri_encode() + "]" + blocks + "[/url][/color]"
@@ -327,48 +387,44 @@ func _parse_spoiler(text: String) -> String:
 
 # ============================================================
 # SCP 特殊标记
-# [REDACTED] → 红色高亮
-# [DATA EXPUNGED] → 红色高亮
-# [CLASSIFIED] → 红色高亮
-# [ACCESS DENIED] → 红色高亮
 # ============================================================
 func _parse_scp_markers(text: String) -> String:
 	var e: String = _get_error_hex()
 	var w: String = _get_warning_hex()
 	var result: String = text
 
-	# [REDACTED] 系列
-	result = result.replace("[REDACTED]", "[color=" + e + "][b]█ REDACTED █[/b][/color]")
-	result = result.replace("[redacted]", "[color=" + e + "][b]█ REDACTED █[/b][/color]")
+	# ★ 使用 [lb] [rb] 转义确保方括号在 BBCode 中正确渲染
+	# [REDACTED] → [color=error][b][ REDACTED ][/b][/color]
+	# 其中外层的方括号用 [lb] [rb] 转义
+	result = result.replace("[REDACTED]", "[color=" + e + "][b][lb] REDACTED [rb][/b][/color]")
+	result = result.replace("[redacted]", "[color=" + e + "][b][lb] REDACTED [rb][/b][/color]")
 
-	# [DATA EXPUNGED] 系列
-	result = result.replace("[DATA EXPUNGED]", "[color=" + e + "][b]█ DATA EXPUNGED █[/b][/color]")
-	result = result.replace("[data expunged]", "[color=" + e + "][b]█ DATA EXPUNGED █[/b][/color]")
+	result = result.replace("[DATA EXPUNGED]", "[color=" + e + "][b][lb] DATA EXPUNGED [rb][/b][/color]")
+	result = result.replace("[data expunged]", "[color=" + e + "][b][lb] DATA EXPUNGED [rb][/b][/color]")
 
-	# [CLASSIFIED]
-	result = result.replace("[CLASSIFIED]", "[color=" + w + "][b]◆ CLASSIFIED ◆[/b][/color]")
-	result = result.replace("[classified]", "[color=" + w + "][b]◆ CLASSIFIED ◆[/b][/color]")
+	result = result.replace("[CLASSIFIED]", "[color=" + w + "][b][lb] CLASSIFIED [rb][/b][/color]")
+	result = result.replace("[classified]", "[color=" + w + "][b][lb] CLASSIFIED [rb][/b][/color]")
 
-	# [ACCESS DENIED]
-	result = result.replace("[ACCESS DENIED]", "[color=" + e + "][b]⛔ ACCESS DENIED ⛔[/b][/color]")
+	result = result.replace("[ACCESS DENIED]", "[color=" + e + "][b][lb]X[rb] ACCESS DENIED [lb]X[rb][/b][/color]")
 
-	# [LEVEL X CLEARANCE REQUIRED]
 	for level in range(0, 6):
 		var marker: String = "[LEVEL " + str(level) + " CLEARANCE REQUIRED]"
-		var replacement: String = "[color=" + w + "][b]⚠ LEVEL " + str(level) + " CLEARANCE REQUIRED ⚠[/b][/color]"
+		var replacement: String = "[color=" + w + "][b]/!\\ LEVEL " + str(level) + " CLEARANCE REQUIRED /!\\[/b][/color]"
 		result = result.replace(marker, replacement)
 
 	return result
 
+
 # ============================================================
-# 黑幕方块 ████ 自动着色（用暗色显示，融入背景）
+# ★ 黑幕方块 ████ — CRT 发光效果（正常文字渲染）
+# 在 CRT 显示器上 █ 是正常发光的文字块
 # ============================================================
 func _parse_black_blocks(text: String) -> String:
-	# 将连续的 █ 字符用深色包裹
 	var result: String = ""
 	var i: int = 0
 	var in_blocks: bool = false
 	var block_buffer: String = ""
+	var dim: String = _get_dim_hex()
 
 	while i < text.length():
 		if text[i] == "█":
@@ -378,29 +434,34 @@ func _parse_black_blocks(text: String) -> String:
 			block_buffer += "█"
 		else:
 			if in_blocks:
-				result += "[color=#222222]" + block_buffer + "[/color]"
+				# ★ dim 主题色发光方块
+				result += "[color=" + dim + "]" + block_buffer + "[/color]"
 				block_buffer = ""
 				in_blocks = false
 			result += text[i]
 		i += 1
 
 	if in_blocks:
-		result += "[color=#222222]" + block_buffer + "[/color]"
+		result += "[color=" + dim + "]" + block_buffer + "[/color]"
 
 	return result
 
 # ============================================================
+# ★ 纯黑标记 {blackout}内容{/blackout} — 真正纯黑不发光
+# ============================================================
+func _parse_blackout(text: String) -> String:
+	var result: String = text
+	result = result.replace("{blackout}", "[color=#050505]")
+	result = result.replace("{/blackout}", "[/color]")
+	return result
+
+# ============================================================
 # 超链接
-# [显示文本](cmd://命令)  → 执行命令
-# [显示文本](file://路径) → 打开文件
-# [显示文本](url://网址)  → 外部链接（暂不实现跳转，仅显示）
 # ============================================================
 func _parse_links(text: String) -> String:
 	var result: String = ""
 	var i: int = 0
-
 	while i < text.length():
-		# 寻找 [ 开始
 		if text[i] == "[":
 			var bracket_end: int = text.find("]", i + 1)
 			if bracket_end != -1 and bracket_end + 1 < text.length() and text[bracket_end + 1] == "(":
@@ -408,71 +469,117 @@ func _parse_links(text: String) -> String:
 				if paren_end != -1:
 					var display_text: String = text.substr(i + 1, bracket_end - i - 1)
 					var link_url: String = text.substr(bracket_end + 2, paren_end - bracket_end - 2)
-
-					# 检查是否是 SCP 标记（以 [ 开头但不是链接语法）
-					# 如果 display_text 包含已知的 SCP 标记关键词，跳过
 					if not link_url.is_empty():
 						var p: String = _get_primary_hex()
 						var info: String = _get_info_hex()
 						if link_url.begins_with("cmd://") or link_url.begins_with("file://"):
-							result += "[color=" + p + "][url=" + link_url + "]▸ " + display_text + "[/url][/color]"
+							result += "[color=" + p + "][url=" + link_url + "] > " + display_text + "[/url][/color]"
 						else:
 							result += "[color=" + info + "][url=" + link_url + "]" + display_text + "[/url][/color]"
 						i = paren_end + 1
 						continue
-
 		result += text[i]
 		i += 1
-
 	return result
 
 # ============================================================
 # 效果标记 {tag} 系列
-# 这些标记会被转换为 Typewriter 能识别的 BBCode 标签
+# ★ speed/pause/delay/clear/noskip 转为不可见占位符
 # ============================================================
+
+const _TW_PREFIX: String = "\u0001"
+const _TW_SUFFIX: String = "\u0002"
+
+static func make_tw_tag(tag_name: String, value: String = "") -> String:
+	if value.is_empty():
+		return _TW_PREFIX + "TW:" + tag_name + _TW_SUFFIX
+	return _TW_PREFIX + "TW:" + tag_name + "=" + value + _TW_SUFFIX
+
+static func has_tw_tags(text: String) -> bool:
+	return text.contains(_TW_PREFIX + "TW:")
+
+static func strip_tw_tags(text: String) -> String:
+	var result: String = ""
+	var i: int = 0
+	while i < text.length():
+		if text[i] == _TW_PREFIX:
+			var end_pos: int = text.find(_TW_SUFFIX, i)
+			if end_pos != -1:
+				i = end_pos + 1
+				continue
+		result += text[i]
+		i += 1
+	return result
+
+static func find_next_tw_tag(text: String, from: int = 0) -> Dictionary:
+	var start: int = text.find(_TW_PREFIX + "TW:", from)
+	if start == -1:
+		return {}
+	var end: int = text.find(_TW_SUFFIX, start)
+	if end == -1:
+		return {}
+	var inner: String = text.substr(start + 4, end - start - 4)
+	var tag_name: String = inner
+	var tag_value: String = ""
+	var eq_pos: int = inner.find("=")
+	if eq_pos != -1:
+		tag_name = inner.substr(0, eq_pos)
+		tag_value = inner.substr(eq_pos + 1)
+	return {
+		"tag": tag_name,
+		"value": tag_value,
+		"start": start,
+		"end": end + 1
+	}
+
 func _parse_effect_tags(text: String) -> String:
 	var result: String = text
 
-	# {speed=X} → [speed=X]（Typewriter 已支持）
+	# speed
 	var speed_regex := RegEx.new()
 	speed_regex.compile("\\{speed=(\\d+\\.?\\d*)\\}")
-	result = speed_regex.sub(result, "[speed=$1]", true)
-	result = result.replace("{/speed}", "[/speed]")
+	var speed_matches: Array[RegExMatch] = speed_regex.search_all(result)
+	for j in range(speed_matches.size() - 1, -1, -1):
+		var sm: RegExMatch = speed_matches[j]
+		var speed_val: String = sm.get_string(1)
+		result = result.substr(0, sm.get_start()) + make_tw_tag("speed", speed_val) + result.substr(sm.get_end())
+	result = result.replace("{/speed}", make_tw_tag("speed_end"))
 
-	# {delay=X} → [pause=X]（Typewriter 已支持 pause）
+	# delay
 	var delay_regex := RegEx.new()
 	delay_regex.compile("\\{delay=(\\d+)\\}")
-	result = delay_regex.sub(result, "[pause=$1]", true)
+	var delay_matches: Array[RegExMatch] = delay_regex.search_all(result)
+	for j in range(delay_matches.size() - 1, -1, -1):
+		var dm: RegExMatch = delay_matches[j]
+		var delay_val: String = dm.get_string(1)
+		result = result.substr(0, dm.get_start()) + make_tw_tag("pause", delay_val) + result.substr(dm.get_end())
 
-	# {pause=X} → [pause=X]（直接映射）
+	# pause
 	var pause_regex := RegEx.new()
 	pause_regex.compile("\\{pause=(\\d+)\\}")
-	result = pause_regex.sub(result, "[pause=$1]", true)
+	var pause_matches: Array[RegExMatch] = pause_regex.search_all(result)
+	for j in range(pause_matches.size() - 1, -1, -1):
+		var pm: RegExMatch = pause_matches[j]
+		var pause_val: String = pm.get_string(1)
+		result = result.substr(0, pm.get_start()) + make_tw_tag("pause", pause_val) + result.substr(pm.get_end())
 
-	# {clear} → [clear]（Typewriter 需要支持）
-	result = result.replace("{clear}", "[clear]")
+	result = result.replace("{clear}", make_tw_tag("clear"))
 
-	# {shake}文本{/shake} → [shake rate=X level=X]文本[/shake]
+	# ★ 强制不可跳过 {noskip} / {/noskip}
+	result = result.replace("{noskip}", make_tw_tag("noskip"))
+	result = result.replace("{/noskip}", make_tw_tag("noskip_end"))
+
+	# RichTextLabel 原生 BBCode 效果
 	result = result.replace("{shake}", "[shake rate=20.0 level=5]")
 	result = result.replace("{/shake}", "[/shake]")
-
-	# {wave}文本{/wave} → [wave amp=X freq=X]文本[/wave]
 	result = result.replace("{wave}", "[wave amp=30.0 freq=5.0 connected=1]")
 	result = result.replace("{/wave}", "[/wave]")
-
-	# {rainbow}文本{/rainbow} → [rainbow]文本[/rainbow]
 	result = result.replace("{rainbow}", "[rainbow freq=1.0 sat=0.8 val=0.8]")
 	result = result.replace("{/rainbow}", "[/rainbow]")
-
-	# {fade}文本{/fade} → [fade]文本[/fade]
 	result = result.replace("{fade}", "[fade start=0 length=10]")
 	result = result.replace("{/fade}", "[/fade]")
-
-	# {center}文本{/center} → [center]文本[/center]
 	result = result.replace("{center}", "[center]")
 	result = result.replace("{/center}", "[/center]")
-
-	# {right}文本{/right} → [right]文本[/right]
 	result = result.replace("{right}", "[right]")
 	result = result.replace("{/right}", "[/right]")
 
@@ -480,47 +587,35 @@ func _parse_effect_tags(text: String) -> String:
 	var color_regex := RegEx.new()
 	color_regex.compile("\\{color:([^}]+)\\}")
 	var color_matches: Array[RegExMatch] = color_regex.search_all(result)
-	# 从后往前替换，避免位置偏移
 	for j in range(color_matches.size() - 1, -1, -1):
-		var m: RegExMatch = color_matches[j]
-		var color_value: String = m.get_string(1)
-		var full_match: String = m.get_string(0)
+		var cm: RegExMatch = color_matches[j]
+		var color_value: String = cm.get_string(1)
 		var color_hex: String = _resolve_color_name(color_value)
-		result = result.replace(full_match, "[color=" + color_hex + "]")
+		result = result.substr(0, cm.get_start()) + "[color=" + color_hex + "]" + result.substr(cm.get_end())
 	result = result.replace("{/color}", "[/color]")
 
-	# {b}文本{/b} → [b]文本[/b]
+	# {b} {i} {u} {s}
 	result = result.replace("{b}", "[b]")
 	result = result.replace("{/b}", "[/b]")
-
-	# {i}文本{/i} → [i]文本[/i]
 	result = result.replace("{i}", "[i]")
 	result = result.replace("{/i}", "[/i]")
-
-	# {u}文本{/u} → [u]文本[/u]
 	result = result.replace("{u}", "[u]")
 	result = result.replace("{/u}", "[/u]")
-
-	# {s}文本{/s} → [s]文本[/s]
 	result = result.replace("{s}", "[s]")
 	result = result.replace("{/s}", "[/s]")
-
-	# {img=路径} → 图片标记（预留，阶段三实装）
-	# {audio=路径} → 音频标记（预留，阶段三实装）
-	# {video=路径} → 视频标记（预留，阶段三实装）
 
 	return result
 
 # ============================================================
-# 表格解析
+# ★ 表格解析 — 使用 Godot 原生 [table] BBCode，完全自动
 # ============================================================
 func _is_table_separator(line: String) -> bool:
-	# 检查是否是 |---|---| 格式的分隔行
 	var inner: String = line.substr(1, line.length() - 2)
 	var cells: PackedStringArray = inner.split("|")
 	for cell in cells:
 		var stripped: String = cell.strip_edges()
-		# 分隔行的单元格应该只包含 - 和 :
+		if stripped.is_empty():
+			continue
 		var is_sep: bool = true
 		for ch in stripped:
 			if ch != "-" and ch != ":":
@@ -531,7 +626,6 @@ func _is_table_separator(line: String) -> bool:
 	return true
 
 func _parse_table_row(line: String) -> Array[String]:
-	# 去掉首尾 |，按 | 分割
 	var inner: String = line.substr(1, line.length() - 2)
 	var cells: PackedStringArray = inner.split("|")
 	var result: Array[String] = []
@@ -544,103 +638,67 @@ func _render_table(rows: Array[Array]) -> String:
 		return ""
 
 	var p: String = _get_primary_hex()
-	var m: String = _get_muted_hex()
 
-	# 计算每列最大宽度
+	# 计算最大列数
 	var col_count: int = 0
 	for row in rows:
 		if row.size() > col_count:
 			col_count = row.size()
 
-	var col_widths: Array[int] = []
-	for c in range(col_count):
-		col_widths.append(0)
-
-	for row in rows:
-		for c in range(row.size()):
-			var cell_text: String = str(row[c])
-			# 粗略计算可见字符宽度（不含 BBCode）
-			var visible_len: int = _strip_bbcode(cell_text).length()
-			if visible_len > col_widths[c]:
-				col_widths[c] = visible_len
-
-	# 确保最小宽度
-	for c in range(col_widths.size()):
-		if col_widths[c] < 4:
-			col_widths[c] = 4
-
-	# 构建表格输出
-	var lines: Array[String] = []
-
-	# 顶部边框
-	var top_border: String = "┌"
-	for c in range(col_count):
-		top_border += "─".repeat(col_widths[c] + 2)
-		if c < col_count - 1:
-			top_border += "┬"
-	top_border += "┐"
-	lines.append("[color=" + p + "]" + top_border + "[/color]")
+	# ★ 使用 Godot 原生 [table=N] BBCode
+	var result: String = "\n[table=" + str(col_count) + "]"
 
 	for r in range(rows.size()):
 		var row: Array = rows[r]
-		var row_str: String = "[color=" + p + "]│[/color]"
 		for c in range(col_count):
 			var cell_text: String = ""
 			if c < row.size():
 				cell_text = str(row[c])
-			var visible_len: int = _strip_bbcode(cell_text).length()
-			var padding: int = col_widths[c] - visible_len
+
 			var processed_cell: String = _process_inline(cell_text)
 
 			if r == 0:
-				# 表头加粗
-				row_str += " [b]" + processed_cell + "[/b]" + " ".repeat(maxi(padding, 0)) + " "
+				# 表头：主色加粗
+				result += "[cell][color=" + p + "][b] " + processed_cell + " [/b][/color][/cell]"
 			else:
-				row_str += " " + processed_cell + " ".repeat(maxi(padding, 0)) + " "
+				result += "[cell] " + processed_cell + " [/cell]"
 
-			row_str += "[color=" + p + "]│[/color]"
-		lines.append(row_str)
-
-		# 表头后加分隔线
-		if r == 0:
-			var mid_border: String = "├"
-			for c2 in range(col_count):
-				mid_border += "─".repeat(col_widths[c2] + 2)
-				if c2 < col_count - 1:
-					mid_border += "┼"
-			mid_border += "┤"
-			lines.append("[color=" + p + "]" + mid_border + "[/color]")
-
-	# 底部边框
-	var bottom_border: String = "└"
-	for c in range(col_count):
-		bottom_border += "─".repeat(col_widths[c] + 2)
-		if c < col_count - 1:
-			bottom_border += "┴"
-	bottom_border += "┘"
-	lines.append("[color=" + p + "]" + bottom_border + "[/color]")
-
-	return "\n".join(lines)
+	result += "[/table]\n"
+	return result
 
 # ============================================================
-# 辅助：剥离 BBCode 标签，获取纯文本长度
+# 辅助函数
 # ============================================================
 func _strip_bbcode(text: String) -> String:
 	var regex := RegEx.new()
 	regex.compile("\\[/?[^\\]]*\\]")
 	return regex.sub(text, "", true)
 
-# ============================================================
-# 辅助：颜色名称到 hex 转换
-# ============================================================
+func _display_width(text: String) -> int:
+	if fs != null and fs.has_method("display_width"):
+		return fs.display_width(text)
+	var w: int = 0
+	for ch_idx in range(text.length()):
+		var code: int = text.unicode_at(ch_idx)
+		if code > 0x7F:
+			if (code >= 0x2E80 and code <= 0x9FFF) or \
+			   (code >= 0xF900 and code <= 0xFAFF) or \
+			   (code >= 0xFE30 and code <= 0xFE4F) or \
+			   (code >= 0xFF01 and code <= 0xFF60) or \
+			   (code >= 0xFFE0 and code <= 0xFFE6) or \
+			   (code >= 0x20000 and code <= 0x2FA1F):
+				w += 2
+			else:
+				w += 1
+		else:
+			w += 1
+	return w
+
 func _resolve_color_name(name_or_hex: String) -> String:
 	var lower: String = name_or_hex.to_lower().strip_edges()
-
-	# 如果已经是 hex 格式，直接返回
 	if lower.begins_with("#"):
 		return name_or_hex
 
-	# 主题色引用
 	match lower:
 		"primary": return _get_primary_hex()
 		"secondary": return _get_secondary_hex()
@@ -651,7 +709,6 @@ func _resolve_color_name(name_or_hex: String) -> String:
 		"muted": return _get_muted_hex()
 		"dim": return _get_dim_hex()
 
-	# 常用颜色名
 	match lower:
 		"red": return "#FF4444"
 		"green": return "#44FF44"
@@ -667,7 +724,6 @@ func _resolve_color_name(name_or_hex: String) -> String:
 		"gold": return "#FFD700"
 		"silver": return "#C0C0C0"
 
-	# 无法识别，返回白色
 	return "#FFFFFF"
 
 # ============================================================
