@@ -52,6 +52,8 @@ func _register_commands() -> void:
 		"status": _cmd_status,
 		"mail": _cmd_mail,
 		"theme": _cmd_theme,
+		"volume": _cmd_volume,
+		"vol": _cmd_volume,
 		"reboot": _cmd_reboot,
 		"exit": _cmd_exit,
 		"quit": _cmd_exit,
@@ -112,6 +114,7 @@ func _find_handler(cmd: String):
 	# 全局命令优先
 	if global_commands.has(cmd):
 		return global_commands[cmd]
+
 	# 根据当前模式查找
 	if main._desktop_mode:
 		if desktop_commands.has(cmd):
@@ -119,6 +122,7 @@ func _find_handler(cmd: String):
 	else:
 		if disc_commands.has(cmd):
 			return disc_commands[cmd]
+
 	return null
 
 func _cmd_unknown(cmd: String) -> void:
@@ -156,6 +160,38 @@ func history_down() -> String:
 		return ""
 
 # ══════════════════════════════════════════
+#  工具函数：判断文件是否为音频描述文件
+# ══════════════════════════════════════════
+func _is_audio_desc_file(item_name: String, dir_path: String) -> bool:
+	if item_name.get_extension().to_lower() != "txt":
+		return false
+	var base_name: String = item_name.get_basename()
+	var audio_exts: Array[String] = ["mp3", "ogg", "wav"]
+	for aext in audio_exts:
+		var audio_name: String = base_name + "." + aext
+		var audio_path: String = fs.join_path(dir_path, audio_name)
+		if fs.get_node_at_path(audio_path) != null:
+			return true
+	return false
+
+## 判断文件是否为图片描述文件（与音频描述文件同理）
+func _is_image_desc_file(item_name: String, dir_path: String) -> bool:
+	if item_name.get_extension().to_lower() != "txt":
+		return false
+	var base_name: String = item_name.get_basename()
+	var image_exts: Array[String] = ["png", "jpg", "jpeg", "bmp", "webp", "tga"]
+	for iext in image_exts:
+		var image_name: String = base_name + "." + iext
+		var image_path: String = fs.join_path(dir_path, image_name)
+		if fs.get_node_at_path(image_path) != null:
+			return true
+	return false
+
+## ★ 统一判断：文件是否为任意媒体类型的描述文件
+func _is_media_desc_file(item_name: String, dir_path: String) -> bool:
+	return _is_audio_desc_file(item_name, dir_path) or _is_image_desc_file(item_name, dir_path)
+
+# ══════════════════════════════════════════
 #  Tab 自动补全
 # ══════════════════════════════════════════
 func get_completions(current_text: String) -> Array[String]:
@@ -180,6 +216,7 @@ func get_completions(current_text: String) -> Array[String]:
 		for cmd_name in all_cmds:
 			if cmd_name.begins_with(prefix) and cmd_name != prefix:
 				results.append(cmd_name)
+
 	elif parts.size() == 2:
 		# 补全参数
 		var cmd: String = parts[0].to_lower()
@@ -188,27 +225,33 @@ func get_completions(current_text: String) -> Array[String]:
 		if cmd in ["cd", "open", "read", "cat"]:
 			var items: Array[String] = fs.get_children_at_path(main.current_path)
 			for item in items:
+				# ★ 过滤隐藏目录和所有媒体描述文件（音频+图片）
+				var item_path: String = fs.join_path(main.current_path, item)
+				if fs.is_hidden_path(item_path):
+					continue
+				if _is_media_desc_file(item, main.current_path):
+					continue
 				if item.to_lower().begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + item)
-
 		elif cmd == "load":
 			for i in range(disc_mgr.available_stories.size()):
 				var idx_str: String = str(i + 1)
 				if idx_str.begins_with(arg_prefix):
 					results.append(cmd + " " + idx_str)
-
 		elif cmd == "theme":
-			# 使用 ThemeManager 实际注册的主题名
 			var themes: Array[String] = ThemeManager.get_available_themes()
 			for t_name in themes:
 				if t_name.begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + t_name)
-
+		elif cmd == "volume" or cmd == "vol":
+			var channels: Array[String] = ["master", "ambient", "sfx", "media"]
+			for ch in channels:
+				if ch.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + ch)
 		elif cmd == "profile":
 			for page in ["1", "2"]:
 				if page.begins_with(arg_prefix):
 					results.append(cmd + " " + page)
-
 		elif cmd == "deluser":
 			var all_users: Array[String] = user_mgr.get_all_users()
 			for u in all_users:
@@ -220,10 +263,10 @@ func get_completions(current_text: String) -> Array[String]:
 # ══════════════════════════════════════════════════════════════
 #  全局命令
 # ══════════════════════════════════════════════════════════════
-
 func _cmd_help(_args: Array = []) -> void:
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
+
 	var lines: Array[String] = []
 
 	if main._desktop_mode:
@@ -249,6 +292,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]status[/color]        查看系统状态")
 		lines.append("  [color=" + p + "]mail[/color]          查看邮件")
 		lines.append("  [color=" + p + "]theme <名称>[/color]  切换主题配色")
+		lines.append("  [color=" + p + "]volume[/color]        查看/设置音量")
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
@@ -281,6 +325,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]status[/color]        查看系统状态")
 		lines.append("  [color=" + p + "]mail[/color]          查看邮件")
 		lines.append("  [color=" + p + "]theme <名称>[/color]  切换主题配色")
+		lines.append("  [color=" + p + "]volume[/color]        查看/设置音量")
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
@@ -300,9 +345,11 @@ func _cmd_status(_args: Array = []) -> void:
 	var p: String = T.primary_hex
 	var w: String = T.warning_hex
 	var m: String = T.muted_hex
+
 	var lines: Array[String] = []
 	lines.append("[color=" + p + "]═══════════ 系统状态 ═══════════[/color]")
 	lines.append("  操作员:     [color=" + p + "]" + user_mgr.get_display_name() + "[/color]")
+
 	if not main._desktop_mode:
 		lines.append("  权限等级:   [color=" + w + "]" + str(fs.player_clearance) + "[/color]")
 		lines.append("  当前路径:   [color=" + p + "]" + main.current_path + "[/color]")
@@ -314,34 +361,84 @@ func _cmd_status(_args: Array = []) -> void:
 	else:
 		lines.append("  模式:       [color=" + p + "]桌面模式[/color]")
 		lines.append("  可用磁盘:   [color=" + p + "]" + str(disc_mgr.available_stories.size()) + "[/color]")
+
 	var cmd_count: int = 0
 	if user_mgr.current_user is Dictionary:
 		cmd_count = int(user_mgr.current_user.get("command_count", 0))
 	lines.append("  命令计数:   [color=" + m + "]" + str(cmd_count) + "[/color]")
 	lines.append("[color=" + p + "]════════════════════════════════[/color]")
+
 	main.append_output("\n".join(lines) + "\n", false)
 
 func _cmd_mail(_args: Array = []) -> void:
 	main.append_output("[color=" + T.muted_hex + "]收件箱为空。\n(邮件系统将在后续版本中实现)[/color]\n", false)
 
-# ── 修复：使用 ThemeManager 实际存在的 API ──
-func _cmd_theme(args: Array = []) -> void:
+func _cmd_volume(args: Array = []) -> void:
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var s: String = T.success_hex
+	var e: String = T.error_hex
+	var am = main.audio_manager
+
 	if args.is_empty():
-		# 无参数：调用 ThemeManager 自带的列表显示方法
-		ThemeManager.show_themes(main)
+		var lines: Array[String] = []
+		lines.append("[color=" + p + "]═══════════ 音量设置 ═══════════[/color]")
+		lines.append("")
+		lines.append("  [color=" + m + "]主音量:[/color] [color=" + p + "]" + str(snapped(db_to_linear(am.master_volume_db) * 100, 1)) + "%[/color]")
+		lines.append("  [color=" + m + "]环境音:[/color] [color=" + p + "]" + str(snapped(db_to_linear(am.ambient_volume_db) * 100, 1)) + "%[/color]")
+		lines.append("  [color=" + m + "]音效:[/color]   [color=" + p + "]" + str(snapped(db_to_linear(am.sfx_volume_db) * 100, 1)) + "%[/color]")
+		lines.append("  [color=" + m + "]媒体:[/color]   [color=" + p + "]" + str(snapped(db_to_linear(am.media_volume_db) * 100, 1)) + "%[/color]")
+		lines.append("")
+		lines.append("  [color=" + m + "]环境音状态:[/color]  [color=" + p + "]" + ("播放中" if am.is_ambient_playing() else "无") + "[/color]")
+		lines.append("")
+		lines.append("[color=" + p + "]════════════════════════════════[/color]")
+		lines.append("[color=" + m + "]用法: volume <通道> <数值>[/color]")
+		lines.append("[color=" + m + "]通道: master / ambient / sfx / media[/color]")
+		lines.append("[color=" + m + "]数值: 0-100 (百分比)[/color]")
+		lines.append("[color=" + m + "]示例: volume ambient 50[/color]")
+		main.append_output("\n".join(lines) + "\n", false)
 		return
 
+	if args.size() < 2:
+		main.append_output("[color=" + e + "]用法: volume <通道> <数值>[/color]\n", false)
+		main.append_output("[color=" + m + "]通道: master / ambient / sfx / media[/color]\n", false)
+		return
+
+	var channel: String = str(args[0]).to_lower()
+	var value_str: String = str(args[1])
+
+	if not value_str.is_valid_float():
+		main.append_output("[color=" + e + "]请输入有效数值 (0-100)。[/color]\n", false)
+		return
+
+	var value: float = clampf(value_str.to_float(), 0.0, 100.0) / 100.0
+
+	match channel:
+		"master", "main", "all":
+			am.set_master_volume(value)
+			main.append_output("[color=" + s + "]主音量已设置为 " + str(snapped(value * 100, 1)) + "%[/color]\n", false)
+		"ambient", "amb", "bg":
+			am.set_ambient_volume(value)
+			main.append_output("[color=" + s + "]环境音音量已设置为 " + str(snapped(value * 100, 1)) + "%[/color]\n", false)
+		"sfx", "sound", "fx":
+			am.set_sfx_volume(value)
+			main.append_output("[color=" + s + "]音效音量已设置为 " + str(snapped(value * 100, 1)) + "%[/color]\n", false)
+		"media", "music":
+			am.set_media_volume(value)
+			main.append_output("[color=" + s + "]媒体音量已设置为 " + str(snapped(value * 100, 1)) + "%[/color]\n", false)
+		_:
+			main.append_output("[color=" + e + "]未知通道: " + channel + "[/color]\n", false)
+			main.append_output("[color=" + m + "]可用通道: master / ambient / sfx / media[/color]\n", false)
+
+func _cmd_theme(args: Array = []) -> void:
+	if args.is_empty():
+		ThemeManager.show_themes(main)
+		return
 	var theme_name: String = str(args[0]).to_lower()
-	# 调用 ThemeManager.request_theme_change()，它内部会：
-	# 1. 检查主题是否存在
-	# 2. 检查是否与当前主题相同
-	# 3. 设置 _pending_theme_name
-	# 4. 设置 main._theme_confirm_mode = true
 	ThemeManager.request_theme_change(theme_name, main)
 
 func _cmd_reboot(_args: Array = []) -> void:
 	main.append_output("[color=" + T.muted_hex + "]正在重启终端...[/color]\n", false)
-	# 保存用户数据
 	if user_mgr.is_logged_in:
 		user_mgr._save_current_profile()
 	await main.get_tree().create_timer(0.5).timeout
@@ -351,7 +448,6 @@ func _cmd_reboot(_args: Array = []) -> void:
 	history_index = -1
 	disc_mgr.reset_all()
 	await main.get_tree().create_timer(0.3).timeout
-	# 重新进入登录流程
 	main._start_login_flow()
 
 func _cmd_exit(_args: Array = []) -> void:
@@ -387,21 +483,15 @@ func _cmd_profile(args: Array = []) -> void:
 		else:
 			main.append_output(user_mgr.get_profile_page2(), false)
 
-
-
-
 func _cmd_logout(_args: Array = []) -> void:
 	if not user_mgr.is_logged_in:
 		main.append_output("[color=" + T.error_hex + "]当前未登录。[/color]\n", false)
 		return
-
-	# 如果在磁盘模式，先自动保存并弹出
 	if not main._desktop_mode:
 		disc_mgr._auto_save()
 		main._desktop_mode = true
 		main.current_path = "/"
 		main.story_id = ""
-
 	await main.perform_logout()
 
 func _cmd_passwd(_args: Array = []) -> void:
@@ -414,7 +504,6 @@ func _cmd_birthday(args: Array = []) -> void:
 	if not user_mgr.is_logged_in:
 		main.append_output("[color=" + T.error_hex + "]当前未登录。[/color]\n", false)
 		return
-
 	if args.is_empty():
 		var current_birthday: String = str(user_mgr.current_user.get("birthday", ""))
 		if current_birthday.is_empty():
@@ -423,7 +512,6 @@ func _cmd_birthday(args: Array = []) -> void:
 			main.append_output("[color=" + T.primary_hex + "]出生日期: " + current_birthday + "[/color]\n", false)
 		main.append_output("[color=" + T.muted_hex + "]用法: birthday YYYY-MM-DD[/color]\n", false)
 		return
-
 	var date_str: String = str(args[0])
 	var result: Dictionary = user_mgr.set_birthday(date_str)
 	if result["success"]:
@@ -449,7 +537,6 @@ func _cmd_users(_args: Array = []) -> void:
 		var marker: String = ""
 		if user_mgr.is_logged_in and user_mgr.get_username() == username:
 			marker = " [color=" + s + "]◄ 当前[/color]"
-
 		var profile_path: String = user_mgr._get_profile_path(username)
 		var role_str: String = "标准操作员"
 		if FileAccess.file_exists(profile_path):
@@ -463,7 +550,6 @@ func _cmd_users(_args: Array = []) -> void:
 						"user": role_str = "标准操作员"
 						_: role_str = role
 				file.close()
-
 		lines.append("  [color=" + p + "]" + username + "[/color]  [color=" + m + "](" + role_str + ")[/color]" + marker)
 
 	lines.append("")
@@ -475,36 +561,29 @@ func _cmd_deluser(args: Array = []) -> void:
 	if args.is_empty():
 		main.append_output("[color=" + T.error_hex + "]用法: deluser <用户名>[/color]\n", false)
 		return
-
 	var target: String = str(args[0])
-
-	# 权限检查
 	if user_mgr.is_logged_in:
 		var is_admin: bool = user_mgr.get_role() == "admin"
 		var is_self: bool = user_mgr.get_username() == target
 		if not is_admin and not is_self:
 			main.append_output("[color=" + T.error_hex + "]权限不足。只有管理员可以删除其他用户。[/color]\n", false)
 			return
-
 	if target == UserManager.ADMIN_USERNAME:
 		main.append_output("[color=" + T.error_hex + "]管理员账户不可删除。[/color]\n", false)
 		return
-
 	if not user_mgr.user_exists(target):
 		main.append_output("[color=" + T.error_hex + "]用户 \"" + target + "\" 不存在。[/color]\n", false)
 		return
-
 	main.start_delete_user_flow(target)
 
 # ══════════════════════════════════════════════════════════════
 #  桌面模式命令
 # ══════════════════════════════════════════════════════════════
-
 func _cmd_scan(_args: Array = []) -> void:
-	await disc_mgr.scan_stories()  # ← 必须 await
+	await disc_mgr.scan_stories()
 
 func _cmd_load(args: Array = []) -> void:
-	await disc_mgr.load_story(args)  # ← 必须 await
+	await disc_mgr.load_story(args)
 
 func _cmd_vdisc(_args: Array = []) -> void:
 	disc_mgr.show_story_info()
@@ -512,7 +591,6 @@ func _cmd_vdisc(_args: Array = []) -> void:
 # ══════════════════════════════════════════════════════════════
 #  磁盘模式命令
 # ══════════════════════════════════════════════════════════════
-
 func _cmd_ls(_args: Array = []) -> void:
 	var items: Array = fs.get_children_at_path(main.current_path)
 	if items.is_empty():
@@ -528,6 +606,14 @@ func _cmd_ls(_args: Array = []) -> void:
 		var item_path: String = fs.join_path(main.current_path, item_str)
 		var node = fs.get_node_at_path(item_path)
 		if node == null:
+			continue
+
+		# 跳过隐藏目录
+		if fs.is_hidden_path(item_path):
+			continue
+
+		# ★ 跳过所有媒体描述文件（音频+图片）
+		if _is_media_desc_file(item_str, main.current_path):
 			continue
 
 		var item_required: int = fs.get_required_clearance(item_path)
@@ -570,10 +656,16 @@ func _cmd_cd(args: Array = []) -> void:
 
 	new_path = fs.normalize_path(new_path)
 
+	# 阻止进入隐藏目录
+	if fs.is_hidden_path(new_path):
+		main.append_output("[color=" + T.error_hex + "][ERROR] 目录不存在: " + target + "[/color]\n", false)
+		return
+
 	var node = fs.get_node_at_path(new_path)
 	if node == null:
 		main.append_output("[color=" + T.error_hex + "][ERROR] 目录不存在: " + target + "[/color]\n", false)
 		return
+
 	if node.type != "folder":
 		main.append_output("[color=" + T.error_hex + "][ERROR] " + target + " 不是一个目录。[/color]\n", false)
 		return
@@ -591,16 +683,17 @@ func _cmd_cd(args: Array = []) -> void:
 	main.current_path = new_path
 	main._update_status_bar()
 	main.append_output("已切换到: " + main.current_path + "\n", false)
+	main.update_ambient_sound()
 
 func _cmd_back(_args: Array = []) -> void:
 	if main.current_path == "/":
 		main.append_output("[color=" + T.muted_hex + "]已在根目录。[/color]\n", false)
 		return
-
 	var parent_path: String = fs.get_parent_path(main.current_path)
 	main.current_path = parent_path
 	main._update_status_bar()
 	main.append_output("已返回: " + main.current_path + "\n", false)
+	main.update_ambient_sound()
 
 func _cmd_open(args: Array = []) -> void:
 	if args.is_empty():
@@ -621,8 +714,21 @@ func _cmd_open(args: Array = []) -> void:
 	if node == null:
 		main.append_output("[color=" + T.error_hex + "][ERROR] 文件不存在: " + filename + "[/color]\n", false)
 		return
+
 	if node.type == "folder":
 		main.append_output("[color=" + T.error_hex + "][ERROR] " + filename + " 是一个目录，请使用 cd 命令。[/color]\n", false)
+		return
+
+	# 阻止打开隐藏目录中的文件
+	if fs.is_hidden_path(file_path):
+		main.append_output("[color=" + T.error_hex + "][ERROR] 文件不存在: " + filename + "[/color]\n", false)
+		return
+
+	# ★ 阻止直接打开所有媒体描述文件（音频+图片）
+	var dir_path: String = fs.get_parent_path(file_path)
+	var base_filename: String = file_path.get_file()
+	if _is_media_desc_file(base_filename, dir_path):
+		main.append_output("[color=" + T.error_hex + "][ERROR] 文件不存在: " + filename + "[/color]\n", false)
 		return
 
 	# 权限检查
@@ -645,7 +751,34 @@ func _cmd_open(args: Array = []) -> void:
 		main._file_password_filename = filename
 		return
 
-	# 打开文件
+	# 检查是否是音频文件
+	var ext: String = filename.get_extension().to_lower()
+	var audio_extensions: Array[String] = ["ogg", "wav", "mp3"]
+	if ext in audio_extensions:
+		var audio_data: PackedByteArray = fs.get_binary_data(file_path)
+		if audio_data.is_empty():
+			main.append_output("[color=" + T.error_hex + "]无法读取音频数据。[/color]\n", false)
+			return
+		var stream: AudioStream = main.audio_manager.load_audio_from_bytes(file_path, audio_data)
+		if stream == null:
+			main.append_output("[color=" + T.error_hex + "]无法解析音频文件。[/color]\n", false)
+			return
+		main.append_output("[color=" + T.muted_hex + "]正在打开音频播放器...[/color]\n", false)
+		main.open_oscilloscope_with_file(file_path, filename, stream)
+		return
+
+	# 检查是否是图片文件
+	var image_extensions: Array[String] = ["png", "jpg", "jpeg", "bmp", "webp", "tga"]
+	if ext in image_extensions:
+		var image_data: PackedByteArray = fs.get_binary_data(file_path)
+		if image_data.is_empty():
+			main.append_output("[color=" + T.error_hex + "]无法读取图片数据。[/color]\n", false)
+			return
+		main.append_output("[color=" + T.muted_hex + "]正在打开图片查看器...[/color]\n", false)
+		main.open_image_viewer_with_file(file_path, filename, image_data)
+		return
+
+	# 打开文本文件
 	await _display_file(file_path, filename, node.content)
 
 func _display_file(file_path: String, filename: String, content: String) -> void:
@@ -689,19 +822,13 @@ func _cmd_unlock(args: Array = []) -> void:
 		main._password_mode = true
 		main._password_target_path = main.current_path
 		return
-
-	# 直接尝试密码
 	_verify_password(str(args[0]))
 
 func _verify_password(password: String) -> void:
-	# 兼容两种 manifest 结构
 	var passwords: Dictionary = {}
-
-	# 新版结构：manifest.story.passwords
 	var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
 	if story_dict.has("passwords"):
 		passwords = story_dict.get("passwords", {}) as Dictionary
-	# 旧版结构：manifest.passwords
 	elif main.story_manifest.has("passwords"):
 		passwords = main.story_manifest.get("passwords", {}) as Dictionary
 
@@ -713,7 +840,6 @@ func _verify_password(password: String) -> void:
 				fs.player_clearance = level
 				if not main.unlocked_passwords.has(password):
 					main.unlocked_passwords.append(password)
-
 				var box: String = fs.build_box(
 					["ACCESS GRANTED", "权限等级已提升至: " + str(level)] as Array[String],
 					T.success_hex
@@ -742,12 +868,10 @@ func verify_file_password(password: String) -> void:
 		return
 
 	var expected_password: String = str(fs.story_file_passwords.get(fp_key, {}).get("password", ""))
-
 	if password == expected_password:
 		fs.unlocked_file_passwords.append(file_path)
 		main.append_output("[color=" + T.success_hex + "]文件密码正确，已解锁。[/color]\n", false)
 		disc_mgr._auto_save()
-
 		var node = fs.get_node_at_path(file_path)
 		if node:
 			await _display_file(file_path, filename, node.content)
@@ -770,20 +894,13 @@ func _cmd_save(_args: Array = []) -> void:
 func _cmd_clearsave(args: Array = []) -> void:
 	var m: String = T.muted_hex
 	var e: String = T.error_hex
-
 	if args.size() > 0 and str(args[0]).to_lower() == "all":
-		var count: int = main.save_mgr.delete_all_saves()  # ← 修复
+		var count: int = main.save_mgr.delete_all_saves()
 		main.append_output("[color=" + e + "]已清除 " + str(count) + " 个存档。[/color]\n", false)
 		return
-
 	if main.story_id.is_empty():
 		main.append_output("[color=" + e + "]当前未加载磁盘。[/color]\n", false)
 		main.append_output("[color=" + m + "]用法: clearsave [all][/color]\n", false)
 		return
-
-	main.save_mgr.delete_save(main.story_id)  # ← 修复
+	main.save_mgr.delete_save(main.story_id)
 	main.append_output("[color=" + e + "]当前磁盘存档已清除。[/color]\n", false)
-
-
-
-	

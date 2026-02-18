@@ -31,6 +31,10 @@ var profile_builder: ProfileBuilder = null
 @onready var prompt_label: Label = $MainContent/InputFrame/InputArea/Prompt
 var background: TextureRect = null
 
+
+@onready var audio_manager: Node = $AudioManager
+
+
 # ══════════════════════════════════════════
 #  状态变量
 # ══════════════════════════════════════════
@@ -73,6 +77,14 @@ var _passwd_new: String = ""
 var _delete_user_mode: bool = false
 var _delete_user_target: String = ""
 
+# 音频示波器
+var oscilloscope: Oscilloscope = null
+var _oscilloscope_mode: bool = false       # 是否处于示波器全屏模式
+
+# 图片查看器
+var image_viewer: ImageViewer = null
+var _image_viewer_mode: bool = false       # 是否处于图片查看器全屏模式
+
 # ══════════════════════════════════════════
 #  初始化
 # ══════════════════════════════════════════
@@ -86,6 +98,16 @@ func _ready() -> void:
 	tw.name = "Typewriter"
 	add_child(tw)
 	tw.setup(output_text, scroll_container)
+	tw.typing_completed.connect(_on_typing_completed)
+	tw.progress_completed.connect(_on_typing_completed)
+
+	# 初始化示波器
+	oscilloscope = Oscilloscope.new()
+	oscilloscope.setup(self, audio_manager)
+
+	# 初始化图片查看器
+	image_viewer = ImageViewer.new()
+	image_viewer.setup(self)
 
 	# 初始化各模块
 	story_loader = StoryLoader.new()
@@ -274,6 +296,10 @@ func _on_input_submitted(_text: String) -> void:
 
 	# ★ 文档查看器模式下不接受终端输入
 	if doc_viewer and doc_viewer.is_active:
+		return
+
+	# ★ 图片查看器模式下不接受终端输入
+	if image_viewer and image_viewer.is_active:
 		return
 
 	if raw.is_empty():
@@ -632,11 +658,25 @@ func _run_command(raw: String) -> void:
 
 func _refocus_input() -> void:
 	input_field.grab_focus()
+	
 
 # ══════════════════════════════════════════
 #  输入事件处理
 # ══════════════════════════════════════════
 func _input(event: InputEvent) -> void:
+
+	# 示波器模式优先处理输入
+	if _oscilloscope_mode and oscilloscope and oscilloscope.is_active:
+		if oscilloscope.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
+
+	# 图片查看器模式优先处理输入
+	if _image_viewer_mode and image_viewer and image_viewer.is_active:
+		if image_viewer.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
+
 	# ★ 文档查看器优先处理输入
 	if doc_viewer and doc_viewer.is_active:
 		if doc_viewer.handle_input(event):
@@ -773,12 +813,95 @@ func _find_common_prefix(strings: Array[String]) -> String:
 # ══════════════════════════════════════════
 #  输出工具
 # ══════════════════════════════════════════
-func append_output(text: String, use_typewriter: bool = false) -> void:
+func append_output(text: String, use_typewriter: bool = false, beep: bool = true) -> void:
 	if use_typewriter:
 		tw.append(text, true)
+		# 打字机模式的 beep 由 typing_completed 信号触发，这里不重复
 	else:
 		output_text.append_text(text)
-		_request_scroll()
+		if beep:
+			audio_manager.play_beep()
+	_request_scroll()
+
+
+
+
+## 打字机完成一段输出后的回调
+func _on_typing_completed() -> void:
+	audio_manager.play_beep()
+
+
+## 图片查看器关闭后的回调
+func _on_image_viewer_closed() -> void:
+	_image_viewer_mode = false
+	input_field.editable = true
+
+## 用图片文件打开图片查看器
+func open_image_viewer_with_file(file_path: String, file_name: String, data: PackedByteArray) -> void:
+	_image_viewer_mode = true
+	input_field.editable = false
+	image_viewer.open_with_file(file_path, file_name, data)
+
+
+## 示波器关闭后的回调
+func _on_oscilloscope_closed() -> void:
+	_oscilloscope_mode = false
+	input_field.editable = true
+
+
+## 用音频文件打开示波器
+func open_oscilloscope_with_file(file_path: String, file_name: String, stream: AudioStream) -> void:
+	_oscilloscope_mode = true
+	input_field.editable = false
+	oscilloscope.open_with_file(file_path, file_name, stream)
+
+
+
+## 检查并更新环境音（在 cd/back 切换目录后调用）
+func update_ambient_sound() -> void:
+	var ambient_info: Dictionary = fs.get_ambient_for_path(current_path)
+	
+	if ambient_info.is_empty():
+		audio_manager.stop_ambient()
+		return
+	
+	var ambient_file: String = ambient_info["file"]
+	var ambient_dir: String = ambient_info["path"]
+	var ambient_volume: float = ambient_info["volume"]
+	
+	# 构建环境音的唯一标识
+	var ambient_id: String = ambient_dir + ":" + ambient_file
+	
+	# 如果和当前播放的相同，不做任何事（跨子目录持续播放）
+	if ambient_id == audio_manager.current_ambient_id:
+		return
+	
+	# 构建音频文件的完整路径
+	var audio_path: String = ambient_file
+	if not audio_path.begins_with("/"):
+		audio_path = fs.join_path(ambient_dir, audio_path)
+	audio_path = fs.normalize_path(audio_path)
+	
+	# 从虚拟文件系统获取二进制数据
+	var audio_data: PackedByteArray = fs.get_binary_data(audio_path)
+	if audio_data.is_empty():
+		push_warning("[Main] 环境音文件不存在或无数据: " + audio_path)
+		return
+	
+	# 将二进制数据转为音频流
+	var stream: AudioStream = audio_manager.load_audio_from_bytes(audio_path, audio_data)
+	if stream == null:
+		push_warning("[Main] 无法解析环境音: " + audio_path)
+		return
+	
+	# 将 0.0~1.0 的线性音量转换为 dB
+	var volume_db: float = -80.0
+	if ambient_volume > 0.0:
+		volume_db = linear_to_db(ambient_volume)
+	
+	audio_manager.play_ambient(ambient_id, stream, volume_db)
+	print("[Main] 环境音已切换: ", ambient_id, " 音量: ", ambient_volume)
+
 
 # ══════════════════════════════════════════
 #  滚动控制

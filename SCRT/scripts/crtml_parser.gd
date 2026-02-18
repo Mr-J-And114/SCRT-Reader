@@ -3,13 +3,14 @@
 # 职责：解析 CRT-ML 自定义标记语言，转换为 BBCode
 # 支持：标题、粗体、斜体、删除线、分割线、涂黑遮蔽、SCP标记、
 #       颜色、速度控制、延迟、清屏、抖动、超链接、居中、引用、
-#       代码、表格、黑幕方块、分页标记、原始文本块、强制不可跳过
+#       代码、表格、黑幕方块、分页标记、原始文本块、强制不可跳过、
+#       多媒体内联标记（图片、音频、视频）
 # ============================================================
 class_name CrtmlParser
 extends RefCounted
 
 var T = null  # ThemeManager.ThemeColors
-var fs = null  # FileSystem 引用，用于 display_width
+var fs = null  # FileSystem 引用，用于 display_width 和文件存在性检查
 
 # ★ 原始文本块保护用
 var _raw_blocks: Array[String] = []
@@ -69,8 +70,8 @@ func parse(raw_text: String) -> String:
 	var result_lines: Array[String] = []
 	var in_table: bool = false
 	var table_rows: Array[Array] = []
-	var i: int = 0
 
+	var i: int = 0
 	while i < lines.size():
 		var line: String = lines[i]
 		var stripped: String = line.strip_edges()
@@ -196,26 +197,40 @@ func _restore_raw_blocks(text: String) -> String:
 # ============================================================
 func _process_inline(text: String) -> String:
 	var result: String = text
+
 	# 1. CRT-ML 效果标记 {tag}
 	result = _parse_effect_tags(result)
+
 	# 2. SCP 特殊标记（移到链接之前，避免 [REDACTED] 被链接解析干扰）
 	result = _parse_scp_markers(result)
-	# 3. 超链接 [文本](url)
+
+	# 3. ★ 多媒体内联标记 ![type](path)（必须在超链接之前，因为 ![ 需要优先匹配）
+	result = _parse_media_tags(result)
+
+	# 4. 超链接 [文本](url)
 	result = _parse_links(result)
-	# 4. 涂黑遮蔽 ||文本||
+
+	# 5. 涂黑遮蔽 ||文本||
 	result = _parse_spoiler(result)
-	# 5. ★ 纯黑标记 {blackout}████{/blackout}（纯黑不发光，保留备用）
+
+	# 6. ★ 纯黑标记 {blackout}████{/blackout}（纯黑不发光，保留备用）
 	result = _parse_blackout(result)
-	# 6. ★ 黑幕方块 ████（CRT 发光效果）
+
+	# 7. ★ 黑幕方块 ████（CRT 发光效果）
 	result = _parse_black_blocks(result)
-	# 7. 粗体 **文本**
+
+	# 8. 粗体 **文本**
 	result = _parse_bold(result)
-	# 8. 斜体 *文本*
+
+	# 9. 斜体 *文本*
 	result = _parse_italic(result)
-	# 9. 删除线 ~~文本~~
+
+	# 10. 删除线 ~~文本~~
 	result = _parse_strikethrough(result)
-	# 10. 行内代码 `代码`
+
+	# 11. 行内代码 `代码`
 	result = _parse_inline_code(result)
+
 	return result
 
 # ============================================================
@@ -394,17 +409,12 @@ func _parse_scp_markers(text: String) -> String:
 	var result: String = text
 
 	# ★ 使用 [lb] [rb] 转义确保方括号在 BBCode 中正确渲染
-	# [REDACTED] → [color=error][b][ REDACTED ][/b][/color]
-	# 其中外层的方括号用 [lb] [rb] 转义
 	result = result.replace("[REDACTED]", "[color=" + e + "][b][lb] REDACTED [rb][/b][/color]")
 	result = result.replace("[redacted]", "[color=" + e + "][b][lb] REDACTED [rb][/b][/color]")
-
 	result = result.replace("[DATA EXPUNGED]", "[color=" + e + "][b][lb] DATA EXPUNGED [rb][/b][/color]")
 	result = result.replace("[data expunged]", "[color=" + e + "][b][lb] DATA EXPUNGED [rb][/b][/color]")
-
 	result = result.replace("[CLASSIFIED]", "[color=" + w + "][b][lb] CLASSIFIED [rb][/b][/color]")
 	result = result.replace("[classified]", "[color=" + w + "][b][lb] CLASSIFIED [rb][/b][/color]")
-
 	result = result.replace("[ACCESS DENIED]", "[color=" + e + "][b][lb]X[rb] ACCESS DENIED [lb]X[rb][/b][/color]")
 
 	for level in range(0, 6):
@@ -413,7 +423,6 @@ func _parse_scp_markers(text: String) -> String:
 		result = result.replace(marker, replacement)
 
 	return result
-
 
 # ============================================================
 # ★ 黑幕方块 ████ — CRT 发光效果（正常文字渲染）
@@ -456,13 +465,84 @@ func _parse_blackout(text: String) -> String:
 	return result
 
 # ============================================================
+# ★ 多媒体内联标记 ![type](path)
+# 语法：![image](path) ![audio](path) ![video](path)
+# 检查文件是否存在于虚拟文件系统中，不存在则显示占位符
+# 存在则生成可点击的 cmd:// 链接，点击后执行 open 命令
+# ============================================================
+func _parse_media_tags(text: String) -> String:
+	var result: String = ""
+	var i: int = 0
+
+	while i < text.length():
+		# 检测 ![ 起始
+		if i + 1 < text.length() and text[i] == "!" and text[i + 1] == "[":
+			var bracket_end: int = text.find("]", i + 2)
+			if bracket_end != -1 and bracket_end + 1 < text.length() and text[bracket_end + 1] == "(":
+				var paren_end: int = text.find(")", bracket_end + 2)
+				if paren_end != -1:
+					var media_type: String = text.substr(i + 2, bracket_end - i - 2).strip_edges().to_lower()
+					var media_path: String = text.substr(bracket_end + 2, paren_end - bracket_end - 2).strip_edges()
+
+					# 验证 media_type 是否合法
+					if media_type in ["image", "audio", "video"] and not media_path.is_empty():
+						result += _build_media_replacement(media_type, media_path)
+						i = paren_end + 1
+						continue
+
+		result += text[i]
+		i += 1
+
+	return result
+
+## 构建多媒体标记的 BBCode 替换文本
+func _build_media_replacement(media_type: String, media_path: String) -> String:
+	var p: String = _get_primary_hex()
+	var m: String = _get_muted_hex()
+	var e: String = _get_error_hex()
+
+	# 检查文件是否存在于虚拟文件系统中
+	var file_exists: bool = false
+	if fs != null:
+		var node = fs.get_node_at_path(media_path)
+		if node != null:
+			file_exists = true
+
+	if not file_exists:
+		# 文件不存在：显示缺失占位符
+		return "[color=" + e + "][lb]MISSING FILE: " + media_path + "[rb][/color]"
+
+	# 根据类型选择图标文字（不使用 emoji）
+	var icon_text: String = ""
+	var type_label: String = ""
+	match media_type:
+		"image":
+			icon_text = "[IMG]"
+			type_label = "IMAGE"
+		"audio":
+			icon_text = "[AUD]"
+			type_label = "AUDIO"
+		"video":
+			icon_text = "[VID]"
+			type_label = "VIDEO"
+
+	# 生成可点击链接，点击后通过 cmd:// 协议执行 open 命令
+	var file_name: String = media_path.get_file()
+	var cmd_url: String = "cmd://open " + media_path
+
+	return "[color=" + m + "]" + icon_text + " [/color][url=" + cmd_url + "][color=" + p + "]" + file_name + "[/color][/url][color=" + m + "] (" + type_label + ")[/color]"
+
+# ============================================================
 # 超链接
 # ============================================================
 func _parse_links(text: String) -> String:
 	var result: String = ""
 	var i: int = 0
+
 	while i < text.length():
 		if text[i] == "[":
+			# ★ 跳过已被多媒体标记消费后残留的 BBCode 标签
+			# BBCode 标签以 [/ 或 [已知标签名 开头，不应被当作超链接
 			var bracket_end: int = text.find("]", i + 1)
 			if bracket_end != -1 and bracket_end + 1 < text.length() and text[bracket_end + 1] == "(":
 				var paren_end: int = text.find(")", bracket_end + 2)
@@ -486,7 +566,6 @@ func _parse_links(text: String) -> String:
 # 效果标记 {tag} 系列
 # ★ speed/pause/delay/clear/noskip 转为不可见占位符
 # ============================================================
-
 const _TW_PREFIX: String = "\u0001"
 const _TW_SUFFIX: String = "\u0002"
 
@@ -647,22 +726,18 @@ func _render_table(rows: Array[Array]) -> String:
 
 	# ★ 使用 Godot 原生 [table=N] BBCode
 	var result: String = "\n[table=" + str(col_count) + "]"
-
 	for r in range(rows.size()):
 		var row: Array = rows[r]
 		for c in range(col_count):
 			var cell_text: String = ""
 			if c < row.size():
 				cell_text = str(row[c])
-
 			var processed_cell: String = _process_inline(cell_text)
-
 			if r == 0:
 				# 表头：主色加粗
 				result += "[cell][color=" + p + "][b] " + processed_cell + " [/b][/color][/cell]"
 			else:
 				result += "[cell] " + processed_cell + " [/cell]"
-
 	result += "[/table]\n"
 	return result
 
@@ -698,7 +773,6 @@ func _resolve_color_name(name_or_hex: String) -> String:
 	var lower: String = name_or_hex.to_lower().strip_edges()
 	if lower.begins_with("#"):
 		return name_or_hex
-
 	match lower:
 		"primary": return _get_primary_hex()
 		"secondary": return _get_secondary_hex()
@@ -708,7 +782,6 @@ func _resolve_color_name(name_or_hex: String) -> String:
 		"info": return _get_info_hex()
 		"muted": return _get_muted_hex()
 		"dim": return _get_dim_hex()
-
 	match lower:
 		"red": return "#FF4444"
 		"green": return "#44FF44"
@@ -723,7 +796,6 @@ func _resolve_color_name(name_or_hex: String) -> String:
 		"pink": return "#FF88AA"
 		"gold": return "#FFD700"
 		"silver": return "#C0C0C0"
-
 	return "#FFFFFF"
 
 # ============================================================

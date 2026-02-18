@@ -8,6 +8,7 @@
 [ext_resource type="Script" uid="uid://cceugfkhn5rwt" path="res://scripts/crt_shader.gd" id="4_jyhfs"]
 [ext_resource type="Texture2D" uid="uid://7wuc5ejee4i" path="res://images/矢量SCP.png" id="4_o6xl0"]
 [ext_resource type="Shader" uid="uid://bwe4hihwr806w" path="res://shaders/background_logo.gdshader" id="4_tipki"]
+[ext_resource type="Script" uid="uid://di4vq7at6yh36" path="res://scripts/audio_manager.gd" id="9_85g3d"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_tefeu"]
 shader = ExtResource("2_tbgi4")
@@ -181,6 +182,9 @@ theme_override_colors/caret_color = Color(0.2, 1, 0.2, 1)
 theme_override_fonts/font = ExtResource("1_o5qli")
 theme_override_styles/normal = SubResource("StyleBoxFlat_o5qli")
 theme_override_styles/focus = SubResource("StyleBoxFlat_0wfyh")
+
+[node name="AudioManager" type="Node" parent="." unique_id=1810405965]
+script = ExtResource("9_85g3d")
 
 [node name="CRTEffect" type="CanvasLayer" parent="." unique_id=2008200683]
 layer = 10

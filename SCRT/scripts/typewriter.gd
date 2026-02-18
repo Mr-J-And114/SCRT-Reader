@@ -38,6 +38,15 @@ var _current_char_speed: float = 0.008   # 当前生效速度（可被 speed 控
 const _TW_CHAR: String = "\u0001"
 const _TW_END: String = "\u0002"
 
+
+# ============================================================
+# 信号
+# ============================================================
+signal typing_completed      # 一段或全部文本打字完成时发出
+signal progress_completed    # 进度条动画完成时发出
+
+
+
 # ============================================================
 # 滚动控制
 # ============================================================
@@ -66,6 +75,7 @@ func append(text: String, extra_newline: bool = true) -> void:
 func _process_queue() -> void:
 	if queue.is_empty():
 		is_typing = false
+		typing_completed.emit()
 		return
 
 	is_typing = true
@@ -301,6 +311,8 @@ func show_progress_bar(file_size: int, speed_override: float = -1.0) -> void:
 
 	output_text.append_text("[color=" + bar_color + "]] 完成[/color]\n")
 	_do_scroll()
+	progress_completed.emit()
+
 
 # ============================================================
 # 滚动控制

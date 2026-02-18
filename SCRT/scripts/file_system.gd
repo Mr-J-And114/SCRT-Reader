@@ -18,11 +18,25 @@ class FSNode:
 # ============================================================
 # 数据引用（由 main.gd 设置）
 # ============================================================
+var hidden_dirs: Array[String] = []        # 对用户隐藏的目录列表
 var file_system: Dictionary = {}
 var story_permissions: Dictionary = {}
 var story_file_passwords: Dictionary = {}
 var player_clearance: int = 0
 var unlocked_file_passwords: Array[String] = []
+var ambient_sounds: Dictionary = {}        # 环境音配置 { "/path": { "file": "xxx", "volume": 0.0~1.0 } }
+
+
+## 检查路径是否在隐藏目录中
+func is_hidden_path(path: String) -> bool:
+	path = normalize_path(path)
+	for hidden_dir in hidden_dirs:
+		var hidden_path: String = normalize_path("/" + hidden_dir)
+		if path == hidden_path or path.begins_with(hidden_path + "/"):
+			return true
+	return false
+
+
 
 # ============================================================
 # 路径工具函数
@@ -294,6 +308,48 @@ func build_box_sectioned(sections: Array, color: String) -> String:
 	result += "[color=" + color + "]╚" + border_h + "╝[/color]"
 	return result
 
+
+# ============================================================
+# 环境音查询
+# ============================================================
+
+## 根据当前路径查找应该播放的环境音
+## 从当前目录开始向上查找，返回最近的环境音配置
+## 返回 { "path": "/目录路径", "file": "音频文件名", "volume": 0.0~1.0 } 或空字典
+func get_ambient_for_path(path: String) -> Dictionary:
+	path = normalize_path(path)
+	
+	var check_path: String = path
+	while true:
+		if ambient_sounds.has(check_path):
+			var cfg: Dictionary = ambient_sounds[check_path]
+			return {
+				"path": check_path,
+				"file": cfg.get("file", ""),
+				"volume": cfg.get("volume", 1.0)
+			}
+		
+		if check_path == "/":
+			break
+		
+		check_path = get_parent_path(check_path)
+	
+	return {}
+
+
+
+## 获取文件的二进制数据（用于音频、图片等非文本文件）
+## 返回 PackedByteArray，如果不存在则返回空数组
+func get_binary_data(path: String) -> PackedByteArray:
+	path = normalize_path(path)
+	if file_system.has(path):
+		var entry: Dictionary = file_system[path]
+		if entry.has("binary"):
+			return entry["binary"] as PackedByteArray
+	return PackedByteArray()
+
+
+
 # ============================================================
 # 内置诊断文件系统（彩蛋 / 无磁盘时的回退）
 # ============================================================
@@ -319,3 +375,4 @@ func clear_all() -> void:
 	story_file_passwords.clear()
 	player_clearance = 0
 	unlocked_file_passwords.clear()
+	ambient_sounds.clear()

@@ -53,6 +53,7 @@ func reset_all() -> void:
 	main.story_id = ""
 	main.story_manifest = {}
 	main.current_story_index = -1
+	main.audio_manager.stop_ambient(0.5)
 
 # ══════════════════════════════════════════
 #  扫描可用故事包
@@ -184,6 +185,17 @@ func load_story(args: Array) -> void:
 	var start_clearance: int = int(story_dict.get("start_clearance", 0))
 	main.story_id = story_id
 
+
+	# 加载隐藏目录配置
+	fs.hidden_dirs.clear()
+	if main.story_manifest.has("hidden_dirs"):
+		var dirs = main.story_manifest["hidden_dirs"]
+		if dirs is Array:
+			for d in dirs:
+				fs.hidden_dirs.append(str(d))
+			print("[DiscManager] 隐藏目录: " + str(fs.hidden_dirs.size()) + " 个")
+
+
 	# 加载权限表
 	fs.story_permissions.clear()
 	if main.story_manifest.has("permissions"):
@@ -196,6 +208,25 @@ func load_story(args: Array) -> void:
 		for fp_path in fps.keys():
 			fs.story_file_passwords[fp_path] = fps[fp_path]
 		print("[DiscManager] 文件密码表: " + str(fs.story_file_passwords.size()) + " 条")
+
+	# 加载环境音配置
+	fs.ambient_sounds.clear()
+	if main.story_manifest.has("ambient"):
+		var ambient_cfg: Dictionary = main.story_manifest["ambient"]
+		for dir_path in ambient_cfg.keys():
+			var normalized: String = fs.normalize_path(str(dir_path))
+			var value = ambient_cfg[dir_path]
+			if value is String:
+				# 简写格式: "/path": "audio_file.ogg"
+				fs.ambient_sounds[normalized] = { "file": value, "volume": 1.0 }
+			elif value is Dictionary:
+				# 完整格式: "/path": { "file": "...", "volume": 0.3 }
+				fs.ambient_sounds[normalized] = {
+					"file": str(value.get("file", "")),
+					"volume": float(value.get("volume", 1.0))
+				}
+		print("[DiscManager] 环境音配置: " + str(fs.ambient_sounds.size()) + " 条")
+
 
 	# 尝试加载存档
 	var save_result = save_mgr.load_save(story_id)
@@ -240,6 +271,7 @@ func load_story(args: Array) -> void:
 
 	# 显示欢迎信息
 	main._show_welcome_message()
+	main.update_ambient_sound()
 
 	# 注入故事包系统评价到用户档案
 	if main.user_mgr.is_logged_in:
@@ -261,6 +293,7 @@ func eject_story() -> void:
 	var title: String = str(story_dict.get("title", "未知"))
 
 	reset_all()
+	main.audio_manager.stop_ambient()
 
 	main.output_text.text = ""
 	tw.clear_queue()

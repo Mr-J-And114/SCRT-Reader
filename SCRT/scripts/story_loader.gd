@@ -120,9 +120,30 @@ func load_story(path: String) -> bool:
 			print("[StoryLoader] 警告: 无法读取 [", godot_path, "]")
 			continue
 
-		var content: String = _decode_text_content(content_bytes)
 
 		var filename: String = display_path.get_file()
+		var ext: String = filename.get_extension().to_lower()
+
+		# 二进制文件类型列表（音频、图片、视频等）
+		var binary_extensions: Array[String] = [
+			"ogg", "wav", "mp3",		  # 音频
+			"png", "jpg", "jpeg", "webp",  # 图片
+			"ogv",						  # 视频
+			"bin", "dat",				   # 其他二进制
+		]
+
+		if ext in binary_extensions:
+			# 二进制文件：保存原始字节数据，不做文本解码
+			file_system[display_path] = {
+				"type": "file",
+				"content": "",
+				"binary": content_bytes
+			}
+			print("[StoryLoader]   二进制文件: ", display_path, " (", content_bytes.size(), " bytes)")
+			continue
+
+		var content: String = _decode_text_content(content_bytes)
+
 		if filename == "manifest.json":
 			_parse_manifest_json(content)
 			continue
@@ -134,6 +155,8 @@ func load_story(path: String) -> bool:
 			"type": "file",
 			"content": content
 		}
+
+
 
 	# 去除多余的顶层文件夹前缀
 	var common_prefix: String = _detect_root_prefix()
