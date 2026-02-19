@@ -47,7 +47,6 @@ var _right_lines: PackedStringArray = []
 var _left_line_index: int = 0
 var _right_line_index: int = 0
 
-
 # ══════════════════════════════════════════
 #  初始化
 # ══════════════════════════════════════════
@@ -117,7 +116,6 @@ func _ensure_overlay() -> void:
 	vbox.add_theme_constant_override("separation", 6)
 	margin.add_child(vbox)
 
-
 	# ════════════════════════════════════
 	#  中间内容区：HBoxContainer
 	# ════════════════════════════════════
@@ -126,7 +124,6 @@ func _ensure_overlay() -> void:
 	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hbox.add_theme_constant_override("separation", 0)
 	vbox.add_child(hbox)
-
 
 	# ── 左页（带 margin 包裹）──
 	var left_margin := MarginContainer.new()
@@ -137,6 +134,7 @@ func _ensure_overlay() -> void:
 	left_margin.add_theme_constant_override("margin_top", 0)
 	left_margin.add_theme_constant_override("margin_bottom", 0)
 	hbox.add_child(left_margin)
+
 	left_page = _create_page_rtl(theme_colors)
 	left_margin.add_child(left_page)
 
@@ -163,9 +161,9 @@ func _ensure_overlay() -> void:
 	right_margin.add_theme_constant_override("margin_top", 0)
 	right_margin.add_theme_constant_override("margin_bottom", 0)
 	hbox.add_child(right_margin)
+
 	right_page = _create_page_rtl(theme_colors)
 	right_margin.add_child(right_page)
-
 
 	# ════════════════════════════════════
 	#  底部导航栏
@@ -180,7 +178,6 @@ func _ensure_overlay() -> void:
 		nav_label.add_theme_color_override("default_color", theme_colors.muted)
 	vbox.add_child(nav_label)
 
-
 ## 将 overlay 对齐到 OutputArea 的位置和大小
 func _align_overlay_to_output_area() -> void:
 	if overlay == null or not is_instance_valid(overlay):
@@ -190,7 +187,6 @@ func _align_overlay_to_output_area() -> void:
 	overlay.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	overlay.position = rect.position
 	overlay.size = rect.size
-
 
 ## 创建一个页面用的 RichTextLabel
 func _create_page_rtl(theme_colors) -> RichTextLabel:
@@ -204,14 +200,22 @@ func _create_page_rtl(theme_colors) -> RichTextLabel:
 	rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rtl.size_flags_stretch_ratio = 1.0
 	rtl.mouse_filter = Control.MOUSE_FILTER_STOP
+
 	CrtmlParser.apply_fonts(rtl)
 	UIManager._apply_bold_font(rtl)
+
 	# ★ 表格间距
 	rtl.add_theme_constant_override("table_h_separation", 16)
 	rtl.add_theme_constant_override("table_v_separation", 4)
+
 	if theme_colors:
 		rtl.add_theme_color_override("default_color", theme_colors.secondary)
 		rtl.add_theme_color_override("font_color", theme_colors.secondary)
+
+	# ★ 连接 meta_clicked 信号到 main 的统一处理函数
+	if main != null and main.has_method("_on_meta_clicked"):
+		rtl.meta_clicked.connect(main._on_meta_clicked)
+
 	return rtl
 
 # ══════════════════════════════════════════
@@ -225,13 +229,16 @@ func open(p_type: String, p_pages: Array[Dictionary], p_title: String = "", p_on
 
 	viewer_type = p_type
 	viewer_title = p_title
+
 	# ★ 先对齐 overlay 尺寸（自动分页需要知道可视区域大小）
 	_align_overlay_to_output_area()
+
 	# ★ 自动分页处理
 	pages = _auto_paginate(p_pages)
 	current_page = 0
 	total_pages = pages.size()
 	_on_exit_callback = p_on_exit
+
 	is_active = true
 
 	# 缓存并隐藏终端元素
@@ -247,7 +254,6 @@ func open(p_type: String, p_pages: Array[Dictionary], p_title: String = "", p_on
 	# 更新状态栏
 	main.path_label.text = "DOCUMENT VIEWER | " + p_title + " | Q/Esc 退出"
 
-
 	# 显示覆盖层
 	overlay.visible = true
 
@@ -260,7 +266,6 @@ func open(p_type: String, p_pages: Array[Dictionary], p_title: String = "", p_on
 func close() -> void:
 	if not is_active:
 		return
-
 	is_active = false
 
 	# 隐藏覆盖层
@@ -290,6 +295,20 @@ func close() -> void:
 	viewer_title = ""
 
 # ══════════════════════════════════════════
+#  ★ 获取当前活动的页面 RichTextLabel
+#  供外部追加音频状态信息等
+# ══════════════════════════════════════════
+func get_active_page_rtl() -> RichTextLabel:
+	if not is_active:
+		return null
+	# 优先返回左页（当前正在显示的主页面）
+	if left_page != null and is_instance_valid(left_page) and left_page.visible:
+		return left_page
+	if right_page != null and is_instance_valid(right_page) and right_page.visible:
+		return right_page
+	return null
+
+# ══════════════════════════════════════════
 #  键盘输入处理
 # ══════════════════════════════════════════
 func handle_input(event: InputEvent) -> bool:
@@ -316,6 +335,7 @@ func handle_input(event: InputEvent) -> bool:
 			KEY_END:
 				go_to_page(total_pages - 1)
 				return true
+
 	return false
 
 # ══════════════════════════════════════════
@@ -390,8 +410,6 @@ func _render_current_page() -> void:
 
 	_type_timer = 0.0
 
-
-
 ## 每帧调用，驱动打字效果
 func process_typing(delta: float) -> void:
 	if not is_active:
@@ -412,7 +430,11 @@ func process_typing(delta: float) -> void:
 			var line: String = _left_lines[_left_line_index]
 			if _left_line_index > 0:
 				left_page.append_text("\n")
-			left_page.append_text(line)
+			# ★ 检测内联图片占位符
+			if line.contains("\u0001IMG:") and line.contains("\u0002"):
+				_append_line_with_images(left_page, line)
+			else:
+				left_page.append_text(line)
 			_left_line_index += 1
 
 	if _typing_right:
@@ -424,24 +446,26 @@ func process_typing(delta: float) -> void:
 			var line: String = _right_lines[_right_line_index]
 			if _right_line_index > 0:
 				right_page.append_text("\n")
-			right_page.append_text(line)
+			# ★ 检测内联图片占位符
+			if line.contains("\u0001IMG:") and line.contains("\u0002"):
+				_append_line_with_images(right_page, line)
+			else:
+				right_page.append_text(line)
 			_right_line_index += 1
 
-
-
+## ★ 修复：跳过打字效果（消除重复代码 bug）
 func _skip_typing() -> void:
 	if _typing_left:
 		left_page.text = ""
-		left_page.append_text("\n".join(_left_lines))
+		_append_lines_with_images(left_page, _left_lines)
 		left_page.scroll_to_line(0)
 		_typing_left = false
+
 	if _typing_right:
 		right_page.text = ""
-		right_page.append_text("\n".join(_right_lines))
+		_append_lines_with_images(right_page, _right_lines)
 		right_page.scroll_to_line(0)
 		_typing_right = false
-
-
 
 func _get_page_content(page_idx: int) -> String:
 	if page_idx < 0 or page_idx >= pages.size():
@@ -452,7 +476,6 @@ func _get_page_content(page_idx: int) -> String:
 	if page.has("left"):
 		return str(page["left"])
 	return ""
-
 
 ## 对原始页面数组进行自动分页处理
 ## 支持 ---PAGE--- 手动分页标记
@@ -466,55 +489,53 @@ func _auto_paginate(raw_pages: Array[Dictionary]) -> Array[Dictionary]:
 		elif page.has("left"):
 			content = str(page["left"])
 		all_sections.append(content)
-	
+
 	# 把所有 section 合并，用 ---PAGE--- 连接（保留原有手动分页）
 	var full_text: String = "\n---PAGE---\n".join(all_sections)
-	
-	# 按手动分页符先分割
-	var manual_sections: PackedStringArray = full_text.split("---PAGE---")
-	
+
+	# ★ 同时识别原始 ---PAGE--- 和 CRT-ML 解析后的 PAGE_BREAK_TAG
+	var normalized: String = full_text.replace(CrtmlParser.PAGE_BREAK_TAG, "---PAGE---")
+	var manual_sections: PackedStringArray = normalized.split("---PAGE---")
+
 	# 对每个 manual section 再按行高自动分页
 	var result: Array[Dictionary] = []
-	
+
 	# 估算可用行数：用 overlay 的高度和行高估算
 	var available_height: float = _get_content_height()
 	var line_height: float = _estimate_line_height()
 	var max_lines: int = maxi(5, int(available_height / line_height) - 2)  # 留2行余量
-	
+
 	for section in manual_sections:
 		var trimmed: String = section.strip_edges()
 		if trimmed.is_empty():
 			continue
-		
+
 		var lines: PackedStringArray = trimmed.split("\n")
 		var current_lines: PackedStringArray = []
 		var current_count: int = 0
-		
+
 		for line in lines:
 			current_lines.append(line)
 			current_count += 1
-			
 			if current_count >= max_lines:
 				result.append({"content": "\n".join(current_lines)})
 				current_lines = []
 				current_count = 0
-		
+
 		# 剩余行
 		if current_lines.size() > 0:
 			result.append({"content": "\n".join(current_lines)})
-	
+
 	if result.is_empty():
 		result.append({"content": ""})
-	
-	return result
 
+	return result
 
 func _get_content_height() -> float:
 	if overlay and is_instance_valid(overlay):
 		# overlay 高度减去导航栏和边距
 		return overlay.size.y - 60.0  # 导航栏 + margin 大约 60px
 	return 400.0
-
 
 func _estimate_line_height() -> float:
 	# RichTextLabel 默认字体行高，通常 16-22px
@@ -525,8 +546,6 @@ func _estimate_line_height() -> float:
 			return font.get_height(font_size) + 2.0
 	return 20.0
 
-
-
 func _build_nav_text() -> String:
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
@@ -534,8 +553,8 @@ func _build_nav_text() -> String:
 
 	var left_num: int = current_page + 1
 	var right_num: int = current_page + 2
-	var page_display: String = ""
 
+	var page_display: String = ""
 	if total_pages >= 2:
 		if right_num <= total_pages:
 			page_display = str(left_num) + "-" + str(right_num) + "/" + str(total_pages)
@@ -545,7 +564,6 @@ func _build_nav_text() -> String:
 		page_display = "1/1"
 
 	var parts: Array[String] = []
-
 	if total_pages > 2:
 		if current_page > 0:
 			parts.append("[color=" + p + "]← A/←/PgUp[/color]")
@@ -562,19 +580,80 @@ func _build_nav_text() -> String:
 		parts.append("[color=" + w + "]" + page_display + "[/color]")
 
 	parts.append("    [color=" + m + "][Q/Esc 退出][/color]")
-
 	return "  ".join(parts)
 
-
-# 分页时的切分逻辑：
-func _split_pages(content: String) -> PackedStringArray:
+## ★ 修复：局部变量名避免遮蔽类成员 pages
+func _split_pages_by_tag(content: String) -> PackedStringArray:
 	# 按 PAGE_BREAK_TAG 分割
-	var raw_pages: PackedStringArray = content.split(CrtmlParser.PAGE_BREAK_TAG)
-	var pages: PackedStringArray = PackedStringArray()
-	for page in raw_pages:
-		var trimmed: String = page.strip_edges()
+	var raw_splits: PackedStringArray = content.split(CrtmlParser.PAGE_BREAK_TAG)
+	var result_pages: PackedStringArray = PackedStringArray()
+	for pg in raw_splits:
+		var trimmed: String = pg.strip_edges()
 		if not trimmed.is_empty():
-			pages.append(trimmed)
-	if pages.is_empty():
-		pages.append(content)
-	return pages
+			result_pages.append(trimmed)
+	if result_pages.is_empty():
+		result_pages.append(content)
+	return result_pages
+
+## ★ 批量追加多行（含图片检测）
+func _append_lines_with_images(rtl: RichTextLabel, lines: PackedStringArray) -> void:
+	for idx in range(lines.size()):
+		if idx > 0:
+			rtl.append_text("\n")
+		var line: String = lines[idx]
+		if line.contains("\u0001IMG:") and line.contains("\u0002"):
+			_append_line_with_images(rtl, line)
+		else:
+			rtl.append_text(line)
+
+## ★ 处理包含内联图片占位符的单行
+func _append_line_with_images(rtl: RichTextLabel, line: String) -> void:
+	var crtml_ref = null
+	if main != null and main.crtml != null:
+		crtml_ref = main.crtml
+
+	if crtml_ref == null:
+		rtl.append_text(line)
+		return
+
+	var images: Array[Dictionary] = crtml_ref.get_inline_images()
+
+	var remaining: String = line
+	while true:
+		var start_pos: int = remaining.find("\u0001IMG:")
+		if start_pos == -1:
+			break
+		var end_pos: int = remaining.find("\u0002", start_pos)
+		if end_pos == -1:
+			break
+
+		# 占位符前的文本
+		if start_pos > 0:
+			rtl.append_text(remaining.substr(0, start_pos))
+
+		# 提取占位符ID
+		var placeholder_id: String = remaining.substr(start_pos + 5, end_pos - start_pos - 5)
+
+		# 查找对应的图片
+		var found: bool = false
+		for img_info in images:
+			if str(img_info.get("placeholder", "")) == placeholder_id:
+				var texture = img_info.get("texture")
+				if texture != null and texture is ImageTexture:
+					var w: int = int(img_info.get("width", 200))
+					var h: int = int(img_info.get("height", 150))
+					rtl.newline()
+					rtl.add_image(texture as Texture2D, w, h)
+					rtl.newline()
+				else:
+					rtl.append_text("[IMG]")
+				found = true
+				break
+
+		if not found:
+			rtl.append_text("[IMG]")
+
+		remaining = remaining.substr(end_pos + 1)
+
+	if not remaining.is_empty():
+		rtl.append_text(remaining)

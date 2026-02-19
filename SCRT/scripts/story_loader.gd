@@ -16,6 +16,14 @@ var error_message: String = ""
 var _gbk_table: Dictionary = {}
 var _gbk_table_loaded: bool = false
 
+# ★ 白名单策略：只有这些扩展名才当作文本文件处理
+# 其他所有未知格式一律当作二进制，从根本上杜绝解析崩溃
+const TEXT_EXTENSIONS: Array[String] = [
+	"txt", "crtml", "cfg", "json", "md", "ini",
+	"csv", "xml", "html", "htm", "yaml", "yml",
+	"log", "bat", "sh", "py", "gd", "toml",
+]
+
 # ============================================================
 # 主入口：加载剧本
 # ============================================================
@@ -48,7 +56,6 @@ func load_story(path: String) -> bool:
 	if err != OK:
 		error_message = "无法打开文件: " + path
 		return false
-
 	var godot_files := reader.get_files()
 
 	# ★ 第3步：构建映射 godot路径 → 修复后路径
@@ -84,7 +91,6 @@ func load_story(path: String) -> bool:
 	for godot_path in godot_files:
 		if godot_path.strip_edges().is_empty():
 			continue
-
 		var display_raw: String = path_map.get(godot_path, godot_path)
 		var clean_path: String = _clean_zip_path(display_raw)
 
@@ -114,25 +120,25 @@ func load_story(path: String) -> bool:
 
 		var display_raw: String = path_map.get(godot_path, godot_path)
 		var display_path: String = _clean_zip_path(display_raw)
-
 		var content_bytes := reader.read_file(godot_path)
 		if content_bytes == null:
 			print("[StoryLoader] 警告: 无法读取 [", godot_path, "]")
 			continue
 
-
 		var filename: String = display_path.get_file()
 		var ext: String = filename.get_extension().to_lower()
 
-		# 二进制文件类型列表（音频、图片、视频等）
-		var binary_extensions: Array[String] = [
-			"ogg", "wav", "mp3",		  # 音频
-			"png", "jpg", "jpeg", "webp",  # 图片
-			"ogv",						  # 视频
-			"bin", "dat",				   # 其他二进制
-		]
+		# ★ 核心修复：使用白名单策略判断文本文件
+		# 只有已知的文本扩展名才做 UTF-8 解析
+		# 其他一律当作二进制，彻底避免未知格式导致的解析崩溃
+		var is_text_file: bool = ext in TEXT_EXTENSIONS
 
-		if ext in binary_extensions:
+		# manifest 文件无论扩展名都当文本处理
+		var is_manifest: bool = (filename == "manifest.json" or filename == "manifest.cfg")
+		if is_manifest:
+			is_text_file = true
+
+		if not is_text_file:
 			# 二进制文件：保存原始字节数据，不做文本解码
 			file_system[display_path] = {
 				"type": "file",
@@ -142,6 +148,7 @@ func load_story(path: String) -> bool:
 			print("[StoryLoader]   二进制文件: ", display_path, " (", content_bytes.size(), " bytes)")
 			continue
 
+		# 文本文件：解码内容
 		var content: String = _decode_text_content(content_bytes)
 
 		if filename == "manifest.json":
@@ -155,8 +162,6 @@ func load_story(path: String) -> bool:
 			"type": "file",
 			"content": content
 		}
-
-
 
 	# 去除多余的顶层文件夹前缀
 	var common_prefix: String = _detect_root_prefix()
@@ -176,7 +181,12 @@ func load_story(path: String) -> bool:
 
 	print("[StoryLoader] 最终文件系统路径:")
 	for key in file_system.keys():
-		print("[StoryLoader]   ", key, " (", file_system[key].get("type", "?"), ")")
+		var entry: Dictionary = file_system[key]
+		var type_str: String = entry.get("type", "?")
+		var extra: String = ""
+		if entry.has("binary"):
+			extra = " [binary: " + str((entry["binary"] as PackedByteArray).size()) + " bytes]"
+		print("[StoryLoader]   ", key, " (", type_str, ")", extra)
 
 	return true
 
@@ -187,14 +197,11 @@ func _detect_file_format(path: String) -> String:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return "unknown"
-
 	if file.get_length() < 4:
 		file.close()
 		return "unknown"
-
 	var header: PackedByteArray = file.get_buffer(8)
 	file.close()
-
 	if header.size() < 4:
 		return "unknown"
 
@@ -214,7 +221,6 @@ func _detect_file_format(path: String) -> String:
 
 	if header[0] == 0x1F and header[1] == 0x8B:
 		return "gzip"
-
 	if header[0] == 0x42 and header[1] == 0x5A:
 		return "bzip2"
 
@@ -225,7 +231,6 @@ func _detect_file_format(path: String) -> String:
 # ============================================================
 func _parse_zip_central_directory(zip_path: String) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
-
 	var file := FileAccess.open(zip_path, FileAccess.READ)
 	if file == null:
 		return results
@@ -272,7 +277,6 @@ func _parse_zip_central_directory(zip_path: String) -> Array[Dictionary]:
 
 	var pos: int = 0
 	var count: int = 0
-
 	while pos + 46 <= cd_buf.size() and count < total_entries:
 		if not (cd_buf[pos] == 0x50 and cd_buf[pos + 1] == 0x4B
 			and cd_buf[pos + 2] == 0x01 and cd_buf[pos + 3] == 0x02):
@@ -301,7 +305,6 @@ func _parse_zip_central_directory(zip_path: String) -> Array[Dictionary]:
 			is_directory = true
 
 		var fixed_name: String = _decode_filename(name_bytes, is_utf8_flag)
-
 		results.append({
 			"fixed_path": fixed_name,
 			"is_directory": is_directory
@@ -319,37 +322,29 @@ func _parse_zip_central_directory(zip_path: String) -> Array[Dictionary]:
 func _decode_filename(name_bytes: PackedByteArray, force_utf8: bool) -> String:
 	if name_bytes.is_empty():
 		return ""
-
 	if force_utf8:
 		var result: String = name_bytes.get_string_from_utf8()
 		if not result.is_empty():
 			return result
-
 	# 检查是否全是 ASCII
 	var all_ascii: bool = true
 	for b in name_bytes:
 		if b > 127:
 			all_ascii = false
 			break
-
 	if all_ascii:
 		return name_bytes.get_string_from_ascii()
-
 	# 尝试 UTF-8
 	var utf8_result: String = name_bytes.get_string_from_utf8()
 	if _is_valid_decoded(utf8_result, name_bytes):
 		return utf8_result
-
 	# UTF-8 失败，尝试 GBK
 	var gbk_result: String = _decode_gbk_bytes(name_bytes)
-	# ★ 修复：只有当 GBK 结果不含问号时才采用
 	if not gbk_result.is_empty() and gbk_result.find("?") == -1:
 		return gbk_result
-
 	# 都失败了，用 UTF-8 结果
 	if not utf8_result.is_empty():
 		return utf8_result
-
 	return name_bytes.get_string_from_ascii()
 
 # ============================================================
@@ -358,16 +353,12 @@ func _decode_filename(name_bytes: PackedByteArray, force_utf8: bool) -> String:
 func _decode_text_content(bytes: PackedByteArray) -> String:
 	if bytes.is_empty():
 		return ""
-
 	# 检测 BOM
 	if bytes.size() >= 3 and bytes[0] == 0xEF and bytes[1] == 0xBB and bytes[2] == 0xBF:
 		return bytes.slice(3).get_string_from_utf8()
-
 	if bytes.size() >= 2 and bytes[0] == 0xFF and bytes[1] == 0xFE:
 		return bytes.slice(2).get_string_from_utf16()
-
 	if bytes.size() >= 2 and bytes[0] == 0xFE and bytes[1] == 0xFF:
-		# UTF-16 BE -> 交换字节序
 		var source: PackedByteArray = bytes.slice(2)
 		var swapped: PackedByteArray = PackedByteArray()
 		swapped.resize(source.size())
@@ -377,20 +368,16 @@ func _decode_text_content(bytes: PackedByteArray) -> String:
 			swapped[idx + 1] = source[idx]
 			idx += 2
 		return swapped.get_string_from_utf16()
-
 	# 尝试 UTF-8
 	var utf8_result: String = bytes.get_string_from_utf8()
 	if _is_valid_decoded(utf8_result, bytes):
 		return utf8_result
-
 	# 尝试 GBK
 	var gbk_result: String = _decode_gbk_bytes(bytes)
 	if not gbk_result.is_empty() and gbk_result.find("?") == -1:
 		return gbk_result
-
 	if not utf8_result.is_empty():
 		return utf8_result
-
 	return bytes.get_string_from_ascii()
 
 # ============================================================
@@ -399,17 +386,14 @@ func _decode_text_content(bytes: PackedByteArray) -> String:
 func _is_valid_decoded(decoded: String, original_bytes: PackedByteArray) -> bool:
 	if decoded.is_empty() and original_bytes.size() > 0:
 		return false
-
 	for i in range(decoded.length()):
 		if decoded.unicode_at(i) == 0xFFFD:
 			return false
-
 	var has_high: bool = false
 	for b in original_bytes:
 		if b > 127:
 			has_high = true
 			break
-
 	if has_high:
 		var has_non_ascii: bool = false
 		for i in range(decoded.length()):
@@ -418,7 +402,6 @@ func _is_valid_decoded(decoded: String, original_bytes: PackedByteArray) -> bool
 				break
 		if not has_non_ascii:
 			return false
-
 	return true
 
 # ============================================================
@@ -426,16 +409,12 @@ func _is_valid_decoded(decoded: String, original_bytes: PackedByteArray) -> bool
 # ============================================================
 func _decode_gbk_bytes(bytes: PackedByteArray) -> String:
 	_ensure_gbk_table()
-
 	if _gbk_table.is_empty():
 		return ""
-
 	var result: String = ""
 	var i: int = 0
-
 	while i < bytes.size():
 		var b1: int = bytes[i]
-
 		if b1 < 0x80:
 			result += String.chr(b1)
 			i += 1
@@ -444,13 +423,11 @@ func _decode_gbk_bytes(bytes: PackedByteArray) -> String:
 				result += "?"
 				i += 1
 				continue
-
 			var b2: int = bytes[i + 1]
 			if b2 < 0x40 or b2 == 0x7F or b2 > 0xFE:
 				result += "?"
 				i += 1
 				continue
-
 			var gbk_code: int = (b1 << 8) | b2
 			if _gbk_table.has(gbk_code):
 				result += String.chr(_gbk_table[gbk_code])
@@ -460,30 +437,21 @@ func _decode_gbk_bytes(bytes: PackedByteArray) -> String:
 		else:
 			result += "?"
 			i += 1
-
 	return result
 
 # ============================================================
-# ★ 修复：加载 GBK 映射表（兼容编辑器和导出后）
+# 加载 GBK 映射表（兼容编辑器和导出后）
 # ============================================================
 func _ensure_gbk_table() -> void:
 	if _gbk_table_loaded:
 		return
 	_gbk_table_loaded = true
 
-	# ★ 关键修复：不用 ResourceLoader.exists()，改用 FileAccess.file_exists()
-	# ResourceLoader.exists() 只识别 Godot 导入的资源格式，.bin 不在其中
 	var search_paths: Array[String] = []
-
-	# 编辑器中：res:// 实际映射到项目根目录
 	search_paths.append("res://gbk_unicode.bin")
-
-	# 导出后：exe 同级目录
 	if not OS.has_feature("editor"):
 		var exe_dir: String = OS.get_executable_path().get_base_dir()
 		search_paths.append(exe_dir + "/gbk_unicode.bin")
-
-	# user:// 作为备用
 	search_paths.append("user://gbk_unicode.bin")
 
 	for bin_path in search_paths:
@@ -491,33 +459,27 @@ func _ensure_gbk_table() -> void:
 		if not FileAccess.file_exists(bin_path):
 			print("[StoryLoader]   文件不存在")
 			continue
-
 		var file := FileAccess.open(bin_path, FileAccess.READ)
 		if file == null:
 			print("[StoryLoader]   无法打开: ", FileAccess.get_open_error())
 			continue
-
 		var magic: PackedByteArray = file.get_buffer(4)
 		if magic.size() < 4 or magic.get_string_from_ascii() != "GBK1":
 			print("[StoryLoader]   魔数不匹配")
 			file.close()
 			continue
-
 		var entry_count: int = file.get_32()
 		print("[StoryLoader]   条目数: ", entry_count)
-
 		for idx in range(entry_count):
 			if file.get_position() + 4 > file.get_length():
 				break
 			var gbk_code: int = file.get_16()
 			var unicode_cp: int = file.get_16()
 			_gbk_table[gbk_code] = unicode_cp
-
 		file.close()
 		print("[StoryLoader] GBK 映射表已加载: ", _gbk_table.size(), " 条目 (从 ", bin_path, ")")
 		return
 
-	# 所有路径都找不到，使用内嵌子集
 	print("[StoryLoader] 未找到 gbk_unicode.bin，使用内嵌常用字符子集")
 	_build_builtin_gbk_subset()
 
@@ -554,14 +516,12 @@ func _build_builtin_gbk_subset() -> void:
 	_gbk_table[0xA3BA] = 0xFF1A
 	_gbk_table[0xA3BB] = 0xFF1B
 	_gbk_table[0xA3BF] = 0xFF1F
-
 	for i in range(10):
 		_gbk_table[0xA3B0 + i] = 0xFF10 + i
 	for i in range(26):
 		_gbk_table[0xA3C1 + i] = 0xFF21 + i
 	for i in range(26):
 		_gbk_table[0xA3E1 + i] = 0xFF41 + i
-
 	print("[StoryLoader] 内嵌GBK子集: ", _gbk_table.size(), " 条目（仅标点+符号）")
 	print("[StoryLoader] ★ 如需完整中文支持，请将 gbk_unicode.bin 放入项目根目录")
 
@@ -574,15 +534,12 @@ func _try_fix_encoding(raw_path: String) -> String:
 		if raw_path.unicode_at(i) > 127:
 			has_high_byte = true
 			break
-
 	if not has_high_byte:
 		return raw_path
-
 	for i in range(raw_path.length()):
 		var code: int = raw_path.unicode_at(i)
 		if code >= 0x4E00 and code <= 0x9FFF:
 			return raw_path
-
 	var bytes: PackedByteArray = PackedByteArray()
 	for i in range(raw_path.length()):
 		var code: int = raw_path.unicode_at(i)
@@ -590,28 +547,25 @@ func _try_fix_encoding(raw_path: String) -> String:
 			bytes.append(code)
 		else:
 			return raw_path
-
 	var utf8_str: String = bytes.get_string_from_utf8()
 	if _is_valid_decoded(utf8_str, bytes):
 		return utf8_str
-
 	var gbk_str: String = _decode_gbk_bytes(bytes)
 	if not gbk_str.is_empty() and gbk_str.find("?") == -1:
 		return gbk_str
-
 	return raw_path
 
 # ============================================================
 # 清理ZIP路径
 # ============================================================
 func _clean_zip_path(zip_path: String) -> String:
-	var path: String = zip_path
-	if path.begins_with("./"):
-		path = path.substr(2)
-	path = path.rstrip("/")
-	if not path.begins_with("/"):
-		path = "/" + path
-	return path
+	var path_str: String = zip_path
+	if path_str.begins_with("./"):
+		path_str = path_str.substr(2)
+	path_str = path_str.rstrip("/")
+	if not path_str.begins_with("/"):
+		path_str = "/" + path_str
+	return path_str
 
 # ============================================================
 # 检测顶层文件夹前缀
@@ -619,19 +573,16 @@ func _clean_zip_path(zip_path: String) -> String:
 func _detect_root_prefix() -> String:
 	if file_system.is_empty():
 		return ""
-
 	var first_parts: Dictionary = {}
 	for key in file_system.keys():
 		var parts: PackedStringArray = str(key).split("/", false)
 		if parts.size() > 0:
 			first_parts[parts[0]] = true
-
 	if first_parts.size() == 1:
 		var prefix_name: String = first_parts.keys()[0]
 		var prefix_path: String = "/" + prefix_name
 		if file_system.has(prefix_path) and file_system[prefix_path].get("type", "") == "folder":
 			return prefix_path
-
 	return ""
 
 # ============================================================
@@ -639,12 +590,11 @@ func _detect_root_prefix() -> String:
 # ============================================================
 func _parse_manifest_json(content: String) -> void:
 	var json := JSON.new()
-	var err := json.parse(content)
-	if err != OK:
+	var parse_err := json.parse(content)
+	if parse_err != OK:
 		error_message = "manifest.json 解析失败: 第" + str(json.get_error_line()) + "行 " + json.get_error_message()
 		print("[StoryLoader] " + error_message)
 		return
-
 	if json.data is Dictionary:
 		manifest = json.data
 		print("[StoryLoader] manifest.json 已加载，字段: ", manifest.keys())
@@ -657,7 +607,6 @@ func _parse_manifest_json(content: String) -> void:
 # ============================================================
 func _parse_manifest(content: String) -> void:
 	var current_section: String = ""
-
 	for line in content.split("\n"):
 		line = line.strip_edges()
 		if line.is_empty() or line.begins_with("#") or line.begins_with(";"):

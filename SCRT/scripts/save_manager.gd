@@ -101,6 +101,9 @@ func auto_save(story_id: String, player_clearance: int, read_files: Array[String
 func load_save(story_id: String) -> Variant:
 	# 如果桥接到用户管理器
 	if _user_mgr != null and _user_mgr.is_logged_in:
+
+
+
 		var data: Dictionary = _user_mgr.load_story_progress(story_id)
 		if not data.is_empty():
 			print("[SaveManager] 从用户目录加载存档: " + _user_mgr.get_username())

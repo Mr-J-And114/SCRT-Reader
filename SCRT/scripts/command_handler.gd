@@ -174,6 +174,7 @@ func _is_audio_desc_file(item_name: String, dir_path: String) -> bool:
 			return true
 	return false
 
+
 ## 判断文件是否为图片描述文件（与音频描述文件同理）
 func _is_image_desc_file(item_name: String, dir_path: String) -> bool:
 	if item_name.get_extension().to_lower() != "txt":
@@ -187,9 +188,25 @@ func _is_image_desc_file(item_name: String, dir_path: String) -> bool:
 			return true
 	return false
 
+
+## ★ 判断文件是否为视频描述文件
+func _is_video_desc_file(item_name: String, dir_path: String) -> bool:
+	if item_name.get_extension().to_lower() != "txt":
+		return false
+	var base_name: String = item_name.get_basename()
+	var video_exts: Array[String] = ["ogv", "webm"]
+	for vext in video_exts:
+		var video_name: String = base_name + "." + vext
+		var video_path: String = fs.join_path(dir_path, video_name)
+		if fs.get_node_at_path(video_path) != null:
+			return true
+	return false
+
+
 ## ★ 统一判断：文件是否为任意媒体类型的描述文件
 func _is_media_desc_file(item_name: String, dir_path: String) -> bool:
-	return _is_audio_desc_file(item_name, dir_path) or _is_image_desc_file(item_name, dir_path)
+	return _is_audio_desc_file(item_name, dir_path) or _is_image_desc_file(item_name, dir_path) or _is_video_desc_file(item_name, dir_path)
+
 
 # ══════════════════════════════════════════
 #  Tab 自动补全
@@ -230,6 +247,8 @@ func get_completions(current_text: String) -> Array[String]:
 				if fs.is_hidden_path(item_path):
 					continue
 				if _is_media_desc_file(item, main.current_path):
+					continue
+				if item == ".meta.cfg" or item.ends_with(".meta.cfg"):
 					continue
 				if item.to_lower().begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + item)
@@ -616,6 +635,10 @@ func _cmd_ls(_args: Array = []) -> void:
 		if _is_media_desc_file(item_str, main.current_path):
 			continue
 
+		# ★ 跳过 .meta.cfg 元数据文件
+		if item_str == ".meta.cfg" or item_str.ends_with(".meta.cfg"):
+			continue
+
 		var item_required: int = fs.get_required_clearance(item_path)
 		var is_locked: bool = not fs.has_clearance(item_path)
 
@@ -730,6 +753,11 @@ func _cmd_open(args: Array = []) -> void:
 	if _is_media_desc_file(base_filename, dir_path):
 		main.append_output("[color=" + T.error_hex + "][ERROR] 文件不存在: " + filename + "[/color]\n", false)
 		return
+	# ★ 阻止直接打开 .meta.cfg
+	if base_filename == ".meta.cfg":
+		main.append_output("[color=" + T.error_hex + "][ERROR] 文件不存在: " + filename + "[/color]\n", false)
+		return
+
 
 	# 权限检查
 	var required: int = fs.get_required_clearance(file_path)
@@ -767,6 +795,16 @@ func _cmd_open(args: Array = []) -> void:
 		main.open_oscilloscope_with_file(file_path, filename, stream)
 		return
 
+	if VideoPlayerViewer.is_supported_video(filename):
+		var video_data: PackedByteArray = fs.get_binary_data(file_path)
+		if video_data.is_empty():
+			main.append_output("[color=" + T.error_hex + "]无法读取视频数据。[/color]\n", false)
+			return
+		var ext_tag: String = filename.get_extension().to_upper()
+		main.append_output("[color=" + T.muted_hex + "]正在加载视频 [" + ext_tag + "]: " + filename + "...[/color]\n", false)
+		main.open_video_player_with_file(file_path, filename, video_data)
+		return
+
 	# 检查是否是图片文件
 	var image_extensions: Array[String] = ["png", "jpg", "jpeg", "bmp", "webp", "tga"]
 	if ext in image_extensions:
@@ -781,16 +819,36 @@ func _cmd_open(args: Array = []) -> void:
 	# 打开文本文件
 	await _display_file(file_path, filename, node.content)
 
+
 func _display_file(file_path: String, filename: String, content: String) -> void:
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
 
-	main.append_output("\n[color=" + p + "]══════════ " + filename + " ══════════[/color]\n\n", false)
+	# ★ 头文件解析
+	var header_result: Dictionary = HeaderParser.parse(content)
+	var header: Dictionary = header_result["header"]
+	var body: String = header_result["body"]
+	var has_header: bool = header_result["has_header"]
+
+	# ★ 根据头文件中的 title 字段，优先用头文件标题
+	var display_title: String = filename
+	if has_header:
+		var header_title: String = str(header.get("title", ""))
+		if not header_title.is_empty():
+			display_title = header_title
+
+	main.append_output("\n[color=" + p + "]══════════ " + display_title + " ══════════[/color]\n\n", false)
+
+	# ★ 如果有头文件，显示标题横幅
+	if has_header:
+		var banner: String = HeaderParser.build_title_banner(header, T)
+		if not banner.is_empty():
+			main.append_output(banner + "\n", false)
 
 	# CRT-ML 解析
-	var parsed_content: String = content
+	var parsed_content: String = body
 	if crtml != null:
-		parsed_content = crtml.parse(content)
+		parsed_content = crtml.parse(body)
 
 	# 替换 {username} 变量
 	if user_mgr.is_logged_in:
@@ -815,6 +873,31 @@ func _display_file(file_path: String, filename: String, content: String) -> void
 
 	main.append_output("\n[color=" + p + "]══════════ 文件结束 ══════════[/color]\n", false)
 	main.append_output("[color=" + m + "]输入任意命令返回终端。[/color]\n", false)
+
+
+## ★ 替换内联图片占位符为纯文本链接（终端模式下不嵌入真实图片）
+func _replace_inline_image_placeholders(text: String) -> String:
+	if crtml == null:
+		return text
+	var result: String = text
+	var images: Array[Dictionary] = crtml.get_inline_images()
+	for img_info in images:
+		var placeholder_id: String = str(img_info.get("placeholder", ""))
+		var img_path: String = str(img_info.get("path", ""))
+		var original_size: Vector2 = img_info.get("original_size", Vector2.ZERO) as Vector2
+		var placeholder_tag: String = "\u0001IMG:" + placeholder_id + "\u0002"
+
+		if result.contains(placeholder_tag):
+			var file_name: String = img_path.get_file()
+			var size_str: String = ""
+			if original_size.x > 0:
+				size_str = " (" + str(int(original_size.x)) + "x" + str(int(original_size.y)) + ")"
+			var info_c: String = T.info_hex
+			var m_c: String = T.muted_hex
+			var replacement: String = "[color=" + m_c + "][IMG] " + file_name + size_str + "[/color]  [url=cmd://open " + img_path + "][color=" + info_c + "][ 查看图片 ][/color][/url]"
+			result = result.replace(placeholder_tag, replacement)
+	return result
+
 
 func _cmd_unlock(args: Array = []) -> void:
 	if args.is_empty():

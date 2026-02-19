@@ -1,4 +1,0 @@
-res://scenes/main.tscn
-res://shaders/background_vignette.gdshader
-res://shaders/crt_effect.gdshader
-res://scripts/command_handler.gd

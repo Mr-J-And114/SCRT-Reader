@@ -4,16 +4,23 @@
 # 支持：标题、粗体、斜体、删除线、分割线、涂黑遮蔽、SCP标记、
 #       颜色、速度控制、延迟、清屏、抖动、超链接、居中、引用、
 #       代码、表格、黑幕方块、分页标记、原始文本块、强制不可跳过、
-#       多媒体内联标记（图片、音频、视频）
+#       多媒体内联标记（图片缩略图、音频播放器、视频占位符）
 # ============================================================
 class_name CrtmlParser
 extends RefCounted
 
 var T = null  # ThemeManager.ThemeColors
 var fs = null  # FileSystem 引用，用于 display_width 和文件存在性检查
+var main_ref = null  # ★ main 引用，用于获取当前路径做相对→绝对路径转换
+
+# ★ 内联图片缓存（placeholder_id → info dict）
+var _inline_image_cache: Dictionary = {}
 
 # ★ 原始文本块保护用
 var _raw_blocks: Array[String] = []
+
+# ★ 超链接保护用（防止 BBCode 中的 [ 被 _parse_links 误匹配）
+var _link_blocks: Array[Dictionary] = []
 
 # ★ 字体路径常量
 const FONT_DIR: String = "res://fonts/"
@@ -25,16 +32,23 @@ const FONT_BOLD_ITALIC: String = FONT_DIR + "SarasaMonoSC-SemiBoldItalic.ttf"
 # ★ 分页标记常量（供外部 document_viewer / typewriter 识别）
 const PAGE_BREAK_TAG: String = "\u0001PAGEBREAK\u0002"
 
+# ★ 字符单位像素换算常量
+const CHAR_WIDTH_PX: float = 9.6
+const LINE_HEIGHT_PX: float = 22.0
+
+# ★ 图片默认显示宽度（字符单位）
+const IMAGE_DEFAULT_CHAR_WIDTH: int = 48
+
 # ============================================================
 # 初始化
 # ============================================================
-func setup(p_theme, p_fs = null) -> void:
+func setup(p_theme, p_fs, p_main = null) -> void:
 	T = p_theme
 	fs = p_fs
+	main_ref = p_main
 
 # ============================================================
 # ★ 静态工具：为 RichTextLabel 应用完整字体族覆盖
-# 在 ui_manager.gd 和 document_viewer.gd 中调用
 # ============================================================
 static func apply_fonts(rtl: RichTextLabel) -> void:
 	if ResourceLoader.exists(FONT_REGULAR):
@@ -45,7 +59,6 @@ static func apply_fonts(rtl: RichTextLabel) -> void:
 		var f: Font = load(FONT_BOLD)
 		if f:
 			rtl.add_theme_font_override("bold_font", f)
-	# ★ 关键修复：指定真正的斜体字体，避免 Godot 回退到伪粗斜体
 	if ResourceLoader.exists(FONT_ITALIC):
 		var f: Font = load(FONT_ITALIC)
 		if f:
@@ -56,11 +69,50 @@ static func apply_fonts(rtl: RichTextLabel) -> void:
 			rtl.add_theme_font_override("bold_italics_font", f)
 
 # ============================================================
+# 内联图片 API
+# ============================================================
+
+## 获取本次解析生成的内联图片列表
+## 返回 Array[Dictionary]，每项包含:
+## { "path", "texture", "width", "height", "placeholder", "original_size" }
+func get_inline_images() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for key in _inline_image_cache:
+		result.append(_inline_image_cache[key])
+	return result
+
+## 清除内联图片缓存
+func clear_inline_image_cache() -> void:
+	_inline_image_cache.clear()
+
+# ============================================================
+# ★ 路径工具：将相对路径转为绝对路径
+# ============================================================
+func _resolve_media_path(media_path: String) -> String:
+	# 已经是绝对路径
+	if media_path.begins_with("/"):
+		return media_path
+	# 通过 main_ref 获取当前目录拼接
+	if main_ref != null and main_ref.has_method("get") == false:
+		# main_ref 是 main.gd 节点，有 current_path 属性
+		var current_dir: String = ""
+		if "current_path" in main_ref:
+			current_dir = str(main_ref.current_path)
+		if not current_dir.is_empty() and fs != null:
+			var joined: String = fs.join_path(current_dir, media_path)
+			return fs.normalize_path(joined)
+	# 无法解析，原样返回
+	return media_path
+
+# ============================================================
 # 主解析函数：将 CRT-ML 转换为 BBCode
 # ============================================================
 func parse(raw_text: String) -> String:
 	if raw_text.is_empty():
 		return ""
+
+	# 清除上次解析的缓存
+	_inline_image_cache.clear()
 
 	# 第0步：保护 @@...@@ 原始文本块
 	_raw_blocks.clear()
@@ -204,7 +256,7 @@ func _process_inline(text: String) -> String:
 	# 2. SCP 特殊标记（移到链接之前，避免 [REDACTED] 被链接解析干扰）
 	result = _parse_scp_markers(result)
 
-	# 3. ★ 多媒体内联标记 ![type](path)（必须在超链接之前，因为 ![ 需要优先匹配）
+	# 3. ★ 多媒体内联标记 ![type|params](path)（必须在超链接之前）
 	result = _parse_media_tags(result)
 
 	# 4. 超链接 [文本](url)
@@ -239,6 +291,7 @@ func _process_inline(text: String) -> String:
 func _make_heading(text: String, level: int) -> String:
 	var p: String = _get_primary_hex()
 	var processed_text: String = _process_inline(text)
+
 	match level:
 		1:
 			var line_char: String = "═"
@@ -258,7 +311,6 @@ func _make_heading(text: String, level: int) -> String:
 func _is_separator(line: String) -> bool:
 	if line.length() < 3:
 		return false
-	# ★ 排除分页标记
 	if line == "---PAGE---":
 		return false
 	var first_char: String = line[0]
@@ -353,7 +405,6 @@ func _parse_strikethrough(text: String) -> String:
 			var end_pos: int = text.find("~~", i + 2)
 			if end_pos != -1:
 				var inner: String = text.substr(i + 2, end_pos - i - 2)
-				# ★ dim 色 + 粗体删除线，让线条更清晰可见
 				result += "[color=" + dim + "][s][b]" + inner + "[/b][/s][/color]"
 				i = end_pos + 2
 				continue
@@ -408,7 +459,6 @@ func _parse_scp_markers(text: String) -> String:
 	var w: String = _get_warning_hex()
 	var result: String = text
 
-	# ★ 使用 [lb] [rb] 转义确保方括号在 BBCode 中正确渲染
 	result = result.replace("[REDACTED]", "[color=" + e + "][b][lb] REDACTED [rb][/b][/color]")
 	result = result.replace("[redacted]", "[color=" + e + "][b][lb] REDACTED [rb][/b][/color]")
 	result = result.replace("[DATA EXPUNGED]", "[color=" + e + "][b][lb] DATA EXPUNGED [rb][/b][/color]")
@@ -416,17 +466,14 @@ func _parse_scp_markers(text: String) -> String:
 	result = result.replace("[CLASSIFIED]", "[color=" + w + "][b][lb] CLASSIFIED [rb][/b][/color]")
 	result = result.replace("[classified]", "[color=" + w + "][b][lb] CLASSIFIED [rb][/b][/color]")
 	result = result.replace("[ACCESS DENIED]", "[color=" + e + "][b][lb]X[rb] ACCESS DENIED [lb]X[rb][/b][/color]")
-
 	for level in range(0, 6):
 		var marker: String = "[LEVEL " + str(level) + " CLEARANCE REQUIRED]"
 		var replacement: String = "[color=" + w + "][b]/!\\ LEVEL " + str(level) + " CLEARANCE REQUIRED /!\\[/b][/color]"
 		result = result.replace(marker, replacement)
-
 	return result
 
 # ============================================================
-# ★ 黑幕方块 ████ — CRT 发光效果（正常文字渲染）
-# 在 CRT 显示器上 █ 是正常发光的文字块
+# ★ 黑幕方块 ████ — CRT 发光效果
 # ============================================================
 func _parse_black_blocks(text: String) -> String:
 	var result: String = ""
@@ -443,7 +490,6 @@ func _parse_black_blocks(text: String) -> String:
 			block_buffer += "█"
 		else:
 			if in_blocks:
-				# ★ dim 主题色发光方块
 				result += "[color=" + dim + "]" + block_buffer + "[/color]"
 				block_buffer = ""
 				in_blocks = false
@@ -452,11 +498,10 @@ func _parse_black_blocks(text: String) -> String:
 
 	if in_blocks:
 		result += "[color=" + dim + "]" + block_buffer + "[/color]"
-
 	return result
 
 # ============================================================
-# ★ 纯黑标记 {blackout}内容{/blackout} — 真正纯黑不发光
+# ★ 纯黑标记 {blackout}内容{/blackout}
 # ============================================================
 func _parse_blackout(text: String) -> String:
 	var result: String = text
@@ -465,10 +510,7 @@ func _parse_blackout(text: String) -> String:
 	return result
 
 # ============================================================
-# ★ 多媒体内联标记 ![type](path)
-# 语法：![image](path) ![audio](path) ![video](path)
-# 检查文件是否存在于虚拟文件系统中，不存在则显示占位符
-# 存在则生成可点击的 cmd:// 链接，点击后执行 open 命令
+# ★ 多媒体内联标记 ![type|params](path)
 # ============================================================
 func _parse_media_tags(text: String) -> String:
 	var result: String = ""
@@ -481,59 +523,315 @@ func _parse_media_tags(text: String) -> String:
 			if bracket_end != -1 and bracket_end + 1 < text.length() and text[bracket_end + 1] == "(":
 				var paren_end: int = text.find(")", bracket_end + 2)
 				if paren_end != -1:
-					var media_type: String = text.substr(i + 2, bracket_end - i - 2).strip_edges().to_lower()
+					var type_params: String = text.substr(i + 2, bracket_end - i - 2).strip_edges()
 					var media_path: String = text.substr(bracket_end + 2, paren_end - bracket_end - 2).strip_edges()
+					var media_type: String = ""
+					var params: String = ""
+					var pipe_pos: int = type_params.find("|")
+					if pipe_pos != -1:
+						media_type = type_params.substr(0, pipe_pos).strip_edges().to_lower()
+						params = type_params.substr(pipe_pos + 1).strip_edges()
+					else:
+						media_type = type_params.to_lower()
 
-					# 验证 media_type 是否合法
 					if media_type in ["image", "audio", "video"] and not media_path.is_empty():
-						result += _build_media_replacement(media_type, media_path)
+						result += _build_media_replacement(media_type, media_path, params)
 						i = paren_end + 1
 						continue
-
 		result += text[i]
 		i += 1
-
 	return result
 
-## 构建多媒体标记的 BBCode 替换文本
-func _build_media_replacement(media_type: String, media_path: String) -> String:
-	var p: String = _get_primary_hex()
-	var m: String = _get_muted_hex()
+# ============================================================
+# ★ 构建多媒体标记的 BBCode 替换文本
+# ============================================================
+func _build_media_replacement(media_type: String, media_path: String, params: String) -> String:
 	var e: String = _get_error_hex()
+
+	# ★ 将相对路径转为绝对路径
+	var resolved_path: String = _resolve_media_path(media_path)
 
 	# 检查文件是否存在于虚拟文件系统中
 	var file_exists: bool = false
 	if fs != null:
-		var node = fs.get_node_at_path(media_path)
+		var node = fs.get_node_at_path(resolved_path)
 		if node != null:
 			file_exists = true
 
 	if not file_exists:
-		# 文件不存在：显示缺失占位符
 		return "[color=" + e + "][lb]MISSING FILE: " + media_path + "[rb][/color]"
 
-	# 根据类型选择图标文字（不使用 emoji）
-	var icon_text: String = ""
-	var type_label: String = ""
 	match media_type:
 		"image":
-			icon_text = "[IMG]"
-			type_label = "IMAGE"
+			return _build_image_inline(resolved_path, params)
 		"audio":
-			icon_text = "[AUD]"
-			type_label = "AUDIO"
+			return _build_audio_inline(resolved_path, params)
 		"video":
-			icon_text = "[VID]"
-			type_label = "VIDEO"
-
-	# 生成可点击链接，点击后通过 cmd:// 协议执行 open 命令
-	var file_name: String = media_path.get_file()
-	var cmd_url: String = "cmd://open " + media_path
-
-	return "[color=" + m + "]" + icon_text + " [/color][url=" + cmd_url + "][color=" + p + "]" + file_name + "[/color][/url][color=" + m + "] (" + type_label + ")[/color]"
+			return _build_video_placeholder(resolved_path, params)
+	return ""
 
 # ============================================================
-# 超链接
+# ★ 图片内联渲染
+# ============================================================
+func _build_image_inline(media_path: String, params: String) -> String:
+	var p: String = _get_primary_hex()
+	var m: String = _get_muted_hex()
+	var info_c: String = _get_info_hex()
+	var file_name: String = media_path.get_file()
+
+	# 解析尺寸参数
+	var size_info: Dictionary = _parse_size_params(params)
+
+	# 尝试加载图片
+	var img_data: PackedByteArray = PackedByteArray()
+	var original_size: Vector2 = Vector2.ZERO
+	var loaded_texture: ImageTexture = null
+
+	if fs != null and fs.has_method("get_binary_data"):
+		img_data = fs.get_binary_data(media_path)
+		if not img_data.is_empty():
+			var img := Image.new()
+			var ext: String = media_path.get_extension().to_lower()
+			var err: Error = ERR_FILE_UNRECOGNIZED
+			match ext:
+				"png": err = img.load_png_from_buffer(img_data)
+				"jpg", "jpeg": err = img.load_jpg_from_buffer(img_data)
+				"bmp": err = img.load_bmp_from_buffer(img_data)
+				"webp": err = img.load_webp_from_buffer(img_data)
+				"tga": err = img.load_tga_from_buffer(img_data)
+			if err == OK:
+				original_size = Vector2(img.get_width(), img.get_height())
+				loaded_texture = ImageTexture.create_from_image(img)
+
+	# 计算目标像素尺寸
+	var target_px: Vector2 = _calculate_image_pixel_size(size_info, original_size)
+
+	# 构建输出
+	var lines: Array[String] = []
+
+	if loaded_texture != null:
+		# ★ 缓存纹理信息
+		var placeholder_id: String = "INLINE_IMG_" + str(_inline_image_cache.size())
+		_inline_image_cache[placeholder_id] = {
+			"path": media_path,
+			"texture": loaded_texture,
+			"width": int(target_px.x),
+			"height": int(target_px.y),
+			"placeholder": placeholder_id,
+			"original_size": original_size,
+		}
+
+		# ★ 占位符标记（调用方识别并用 add_image() 替代）
+		lines.append("\u0001IMG:" + placeholder_id + "\u0002")
+
+		# 图片下方：文件名 + 查看大图链接
+		var size_str: String = str(int(original_size.x)) + "x" + str(int(original_size.y))
+		lines.append("[color=" + m + "]  " + file_name + " (" + size_str + ")[/color]  [url=cmd://open " + media_path + "][color=" + info_c + "][ 点击查看大图 ][/color][/url]")
+	else:
+		# 无法加载图片，显示文本链接
+		lines.append("[color=" + m + "][lb]IMG[rb] [/color][url=cmd://open " + media_path + "][color=" + p + "]" + file_name + "[/color][/url][color=" + m + "] (IMAGE)[/color]")
+
+	return "\n".join(lines)
+
+# ============================================================
+# ★ 音频内联播放器
+# ============================================================
+func _build_audio_inline(media_path: String, params: String) -> String:
+	var p: String = _get_primary_hex()
+	var m: String = _get_muted_hex()
+	var info_c: String = _get_info_hex()
+	var s: String = _get_success_hex()
+	var w: String = _get_warning_hex()
+	var file_name: String = media_path.get_file()
+	var is_compact: bool = params.to_lower() == "compact"
+
+	# ★ 三种 URL scheme：
+	# audio://toggle/ — 播放/暂停切换（如果正在播放同一文件则暂停，否则开始播放）
+	# audio://stop	— 停止播放
+	# cmd://open	  — 跳转示波器（全功能播放器）
+	var cmd_toggle: String = "audio://toggle/" + media_path
+	var cmd_stop: String = "audio://stop"
+	var cmd_scope: String = "cmd://open " + media_path
+
+	if is_compact:
+		# 紧凑模式：▶ filename ⏹ ⟫
+		return "[url=" + cmd_toggle + "][color=" + s + "]▶/⏸[/color][/url] [color=" + m + "]" + file_name + "[/color]  [url=" + cmd_stop + "][color=" + w + "]⏹[/color][/url]  [url=" + cmd_scope + "][color=" + info_c + "]⟫ 示波器[/color][/url]"
+
+	# 标准模式：带进度条样式的播放器条
+	var bar: String = "░".repeat(20)
+	var lines: Array[String] = []
+
+	# 顶部：文件名
+	lines.append("[color=" + m + "]┌─ [/color][color=" + p + "]♫ " + file_name + "[/color]")
+
+	# 播放器控制行
+	var player_line: String = "[color=" + m + "]│ [/color]"
+	player_line += "[url=" + cmd_toggle + "][color=" + s + "] ▶/⏸ [/color][/url]"
+	player_line += "[url=" + cmd_stop + "][color=" + w + "] ⏹ [/color][/url]"
+	player_line += " [color=" + m + "]" + bar + "[/color]"
+	player_line += " [color=" + m + "]--:--/--:--[/color]"
+	lines.append(player_line)
+
+	# 底部：提示
+	lines.append("[color=" + m + "]└─ [/color][url=" + cmd_scope + "][color=" + info_c + "]⟫ 在示波器中打开[/color][/url][color=" + m + "] (实时波形+完整控制)[/color]")
+
+	return "\n".join(lines)
+
+
+
+# ============================================================
+# ★ 视频占位符（预留接口）
+# ============================================================
+# ============================================================
+# ★ 视频内联播放器（方案C：信息块 + 控制按钮 + 全屏播放器）
+# ============================================================
+func _build_video_placeholder(media_path: String, params: String) -> String:
+	var p: String = _get_primary_hex()
+	var m: String = _get_muted_hex()
+	var info_c: String = _get_info_hex()
+	var s: String = _get_success_hex()
+	var w: String = _get_warning_hex()
+	var file_name: String = media_path.get_file()
+	var ext: String = media_path.get_extension().to_upper()
+	var is_compact: bool = params.to_lower() == "compact"
+
+	# ★ URL scheme 定义：
+	# video://play/   — 在全屏视频播放器中打开（主要操作）
+	# video://stop	 — 停止当前视频播放并返回
+	# cmd://open	   — 等价于 video://play（兼容 open 命令）
+	var cmd_play: String = "video://play/" + media_path
+	var cmd_stop: String = "video://stop"
+	var cmd_open: String = "cmd://open " + media_path
+
+	if is_compact:
+		# 紧凑模式：▶ filename [OGV] ⟫
+		return "[url=" + cmd_play + "][color=" + s + "]▶ 播放[/color][/url] [color=" + m + "]" + file_name + " [" + ext + "][/color]  [url=" + cmd_stop + "][color=" + w + "]⏹[/color][/url]"
+
+	# 标准模式：带边框的视频信息块
+	var lines: Array[String] = []
+
+	# 顶部：文件名 + 格式标签
+	lines.append("[color=" + m + "]┌─ [/color][color=" + p + "]▶ VIDEO: " + file_name + "[/color][color=" + m + "]  [" + ext + "][/color]")
+
+	# 控制行：播放 | 停止 | ASCII 进度条占位
+	var ctrl_line: String = "[color=" + m + "]│ [/color]"
+	ctrl_line += "[url=" + cmd_play + "][color=" + s + "] ▶ 播放 [/color][/url]"
+	ctrl_line += "[url=" + cmd_stop + "][color=" + w + "] ⏹ 停止 [/color][/url]"
+	ctrl_line += " [color=" + m + "]░░░░░░░░░░░░░░░░░░░░[/color]"
+	ctrl_line += " [color=" + m + "]--:--/--:--[/color]"
+	lines.append(ctrl_line)
+
+	# 操作提示行
+	var hint_line: String = "[color=" + m + "]│ [/color]"
+	hint_line += "[color=" + m + "]Space:暂停  ←→:快退/快进  ↑↓:音量  Q/Esc:退出[/color]"
+	lines.append(hint_line)
+
+	# 底部：打开全屏播放器链接
+	lines.append("[color=" + m + "]└─ [/color][url=" + cmd_open + "][color=" + info_c + "]⟫ 在全屏播放器中打开[/color][/url][color=" + m + "] (CRT效果 + 完整控制)[/color]")
+
+	return "\n".join(lines)
+
+
+# ============================================================
+# ★ 尺寸参数解析
+# ============================================================
+func _parse_size_params(params: String) -> Dictionary:
+	var result: Dictionary = {
+		"width_chars": 0,
+		"height_lines": 0,
+		"mode": "default",
+	}
+	if params.is_empty():
+		return result
+
+	var lower: String = params.to_lower().strip_edges()
+
+	if lower == "compact":
+		result["mode"] = "compact"
+		return result
+
+	if lower.begins_with("x") and lower.substr(1).is_valid_int():
+		result["height_lines"] = lower.substr(1).to_int()
+		result["mode"] = "height_only"
+		return result
+
+	if lower.contains("x"):
+		var parts: PackedStringArray = lower.split("x")
+		if parts.size() == 2:
+			var w_str: String = parts[0].strip_edges()
+			var h_str: String = parts[1].strip_edges()
+			if w_str.is_valid_int() and h_str.is_valid_int():
+				result["width_chars"] = w_str.to_int()
+				result["height_lines"] = h_str.to_int()
+				result["mode"] = "exact"
+				return result
+
+	if lower.is_valid_int():
+		result["width_chars"] = lower.to_int()
+		result["mode"] = "width_only"
+		return result
+
+	return result
+
+# ============================================================
+# ★ 计算图片目标像素尺寸
+# ============================================================
+func _calculate_image_pixel_size(size_info: Dictionary, original_size: Vector2) -> Vector2:
+	var mode: String = str(size_info.get("mode", "default"))
+	var w_chars: int = int(size_info.get("width_chars", 0))
+	var h_lines: int = int(size_info.get("height_lines", 0))
+
+	if mode == "default":
+		w_chars = IMAGE_DEFAULT_CHAR_WIDTH
+
+	var target_w: float = 0.0
+	var target_h: float = 0.0
+
+	match mode:
+		"default", "width_only":
+			if w_chars <= 0:
+				w_chars = IMAGE_DEFAULT_CHAR_WIDTH
+			target_w = float(w_chars) * CHAR_WIDTH_PX
+			if original_size.x > 0 and original_size.y > 0:
+				target_h = target_w * (original_size.y / original_size.x)
+			else:
+				target_h = target_w * 0.75
+		"height_only":
+			if h_lines <= 0:
+				h_lines = 16
+			target_h = float(h_lines) * LINE_HEIGHT_PX
+			if original_size.x > 0 and original_size.y > 0:
+				target_w = target_h * (original_size.x / original_size.y)
+			else:
+				target_w = target_h * 1.333
+		"exact":
+			if w_chars <= 0:
+				w_chars = IMAGE_DEFAULT_CHAR_WIDTH
+			if h_lines <= 0:
+				h_lines = 16
+			target_w = float(w_chars) * CHAR_WIDTH_PX
+			target_h = float(h_lines) * LINE_HEIGHT_PX
+		_:
+			target_w = float(IMAGE_DEFAULT_CHAR_WIDTH) * CHAR_WIDTH_PX
+			if original_size.x > 0 and original_size.y > 0:
+				target_h = target_w * (original_size.y / original_size.x)
+			else:
+				target_h = target_w * 0.75
+
+	# 不超过原始尺寸（防止放大模糊）
+	if original_size.x > 0 and original_size.y > 0:
+		if target_w > original_size.x:
+			var scale_down: float = original_size.x / target_w
+			target_w = original_size.x
+			target_h *= scale_down
+
+	target_w = maxf(target_w, 32.0)
+	target_h = maxf(target_h, 22.0)
+	return Vector2(target_w, target_h)
+
+# ============================================================
+# 超链接 [文本](url)
+# ★ 修复：跳过已经是 BBCode 标签的 [ 开头
 # ============================================================
 func _parse_links(text: String) -> String:
 	var result: String = ""
@@ -541,8 +839,21 @@ func _parse_links(text: String) -> String:
 
 	while i < text.length():
 		if text[i] == "[":
-			# ★ 跳过已被多媒体标记消费后残留的 BBCode 标签
-			# BBCode 标签以 [/ 或 [已知标签名 开头，不应被当作超链接
+			# ★ 先检测是否是 BBCode 标签（[color=, [b], [/b], [url=, [lb], [rb] 等）
+			# 如果 [ 后面跟的是 BBCode 关键字或 /，则不是 CRT-ML 超链接
+			if _is_bbcode_tag_start(text, i):
+				# 原样保留，找到匹配的 ] 并跳过
+				var close_b: int = text.find("]", i + 1)
+				if close_b != -1:
+					result += text.substr(i, close_b - i + 1)
+					i = close_b + 1
+					continue
+				else:
+					result += text[i]
+					i += 1
+					continue
+
+			# 尝试匹配 [text](url) 格式
 			var bracket_end: int = text.find("]", i + 1)
 			if bracket_end != -1 and bracket_end + 1 < text.length() and text[bracket_end + 1] == "(":
 				var paren_end: int = text.find(")", bracket_end + 2)
@@ -558,9 +869,49 @@ func _parse_links(text: String) -> String:
 							result += "[color=" + info + "][url=" + link_url + "]" + display_text + "[/url][/color]"
 						i = paren_end + 1
 						continue
+
 		result += text[i]
 		i += 1
 	return result
+
+## ★ 检测 text[pos] 处的 [ 是否是 BBCode 标签的开始
+func _is_bbcode_tag_start(text: String, pos: int) -> bool:
+	if pos + 1 >= text.length():
+		return false
+
+	var close_bracket: int = text.find("]", pos + 1)
+	if close_bracket == -1:
+		return false
+
+	var tag_content: String = text.substr(pos + 1, close_bracket - pos - 1)
+	if tag_content.is_empty():
+		return false
+
+	# 关闭标签 [/xxx]
+	if tag_content.begins_with("/"):
+		return true
+
+	# [lb] [rb] 转义
+	if tag_content == "lb" or tag_content == "rb":
+		return true
+
+	# 已知 BBCode 标签前缀
+	var known_tags: Array[String] = [
+		"color", "bgcolor", "fgcolor",
+		"b", "i", "u", "s",
+		"url", "font", "font_size",
+		"img", "cell", "table",
+		"center", "right", "left", "fill",
+		"indent", "ol", "ul", "li",
+		"p", "code",
+		"wave", "shake", "rainbow", "tornado", "fade", "pulse",
+		"hint",
+	]
+	for tag in known_tags:
+		if tag_content == tag or tag_content.begins_with(tag + "=") or tag_content.begins_with(tag + " "):
+			return true
+
+	return false
 
 # ============================================================
 # 效果标记 {tag} 系列
@@ -577,16 +928,23 @@ static func make_tw_tag(tag_name: String, value: String = "") -> String:
 static func has_tw_tags(text: String) -> bool:
 	return text.contains(_TW_PREFIX + "TW:")
 
+## ★ 修复：strip_tw_tags 只剥离 TW: 前缀的占位符，保留 IMG: / RAW: / PAGEBREAK 等
 static func strip_tw_tags(text: String) -> String:
 	var result: String = ""
 	var i: int = 0
 	while i < text.length():
 		if text[i] == _TW_PREFIX:
-			var end_pos: int = text.find(_TW_SUFFIX, i)
-			if end_pos != -1:
-				i = end_pos + 1
-				continue
-		result += text[i]
+			# 检查是否是 TW: 占位符
+			var check_str: String = text.substr(i, 4)  # "\u0001TW:"
+			if check_str == _TW_PREFIX + "TW:":
+				var end_pos: int = text.find(_TW_SUFFIX, i)
+				if end_pos != -1:
+					i = end_pos + 1
+					continue
+			# 不是 TW: 开头的占位符，原样保留
+			result += text[i]
+		else:
+			result += text[i]
 		i += 1
 	return result
 
@@ -644,7 +1002,7 @@ func _parse_effect_tags(text: String) -> String:
 
 	result = result.replace("{clear}", make_tw_tag("clear"))
 
-	# ★ 强制不可跳过 {noskip} / {/noskip}
+	# ★ 强制不可跳过
 	result = result.replace("{noskip}", make_tw_tag("noskip"))
 	result = result.replace("{/noskip}", make_tw_tag("noskip_end"))
 
@@ -662,7 +1020,7 @@ func _parse_effect_tags(text: String) -> String:
 	result = result.replace("{right}", "[right]")
 	result = result.replace("{/right}", "[/right]")
 
-	# {color:颜色名/hex}文本{/color}
+	# {color:颜色名/hex}
 	var color_regex := RegEx.new()
 	color_regex.compile("\\{color:([^}]+)\\}")
 	var color_matches: Array[RegExMatch] = color_regex.search_all(result)
@@ -686,7 +1044,7 @@ func _parse_effect_tags(text: String) -> String:
 	return result
 
 # ============================================================
-# ★ 表格解析 — 使用 Godot 原生 [table] BBCode，完全自动
+# ★ 表格解析 — 使用 Godot 原生 [table] BBCode
 # ============================================================
 func _is_table_separator(line: String) -> bool:
 	var inner: String = line.substr(1, line.length() - 2)
@@ -717,14 +1075,11 @@ func _render_table(rows: Array[Array]) -> String:
 		return ""
 
 	var p: String = _get_primary_hex()
-
-	# 计算最大列数
 	var col_count: int = 0
 	for row in rows:
 		if row.size() > col_count:
 			col_count = row.size()
 
-	# ★ 使用 Godot 原生 [table=N] BBCode
 	var result: String = "\n[table=" + str(col_count) + "]"
 	for r in range(rows.size()):
 		var row: Array = rows[r]
@@ -734,7 +1089,6 @@ func _render_table(rows: Array[Array]) -> String:
 				cell_text = str(row[c])
 			var processed_cell: String = _process_inline(cell_text)
 			if r == 0:
-				# 表头：主色加粗
 				result += "[cell][color=" + p + "][b] " + processed_cell + " [/b][/color][/cell]"
 			else:
 				result += "[cell] " + processed_cell + " [/cell]"
