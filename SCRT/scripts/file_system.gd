@@ -26,6 +26,11 @@ var player_clearance: int = 0
 var unlocked_file_passwords: Array[String] = []
 var ambient_sounds: Dictionary = {}        # 环境音配置 { "/path": { "file": "xxx", "volume": 0.0~1.0 } }
 
+## ★ 新增：路径显示名/元数据 { "/path": { "display_name": "xxx" } }
+var path_headers: Dictionary = {}
+
+## ★ 新增：文件描述 { "/dir_path": { "folder_name": "xxx", "folder_description": "xxx", "files": { "name": "desc" } } }
+var file_descriptions: Dictionary = {}
 
 ## 检查路径是否在隐藏目录中
 func is_hidden_path(path: String) -> bool:
@@ -309,6 +314,45 @@ func build_box_sectioned(sections: Array, color: String) -> String:
 	return result
 
 
+
+# ============================================================
+# ★ 新增：路径元数据查询
+# ============================================================
+
+## 获取路径的显示名称（如果在 manifest.headers 中配置了）
+func get_display_name(path: String) -> String:
+	path = normalize_path(path)
+	if path_headers.has(path):
+		return str(path_headers[path].get("display_name", ""))
+	return ""
+
+## 获取文件的描述文本
+## dir_path: 文件所在目录的路径
+## filename: 文件名
+func get_file_description(dir_path: String, filename: String) -> String:
+	dir_path = normalize_path(dir_path)
+	if file_descriptions.has(dir_path):
+		var desc_block: Dictionary = file_descriptions[dir_path]
+		var files_dict: Dictionary = desc_block.get("files", {}) as Dictionary
+		if files_dict.has(filename):
+			return str(files_dict[filename])
+	return ""
+
+## 获取目录的描述信息
+## 返回 { "name": "xxx", "description": "xxx" }，没有则返回空字典
+func get_folder_description(dir_path: String) -> Dictionary:
+	dir_path = normalize_path(dir_path)
+	if file_descriptions.has(dir_path):
+		var desc_block: Dictionary = file_descriptions[dir_path]
+		return {
+			"name": str(desc_block.get("folder_name", "")),
+			"description": str(desc_block.get("folder_description", "")),
+		}
+	return {}
+
+
+
+
 # ============================================================
 # 环境音查询
 # ============================================================
@@ -376,3 +420,5 @@ func clear_all() -> void:
 	player_clearance = 0
 	unlocked_file_passwords.clear()
 	ambient_sounds.clear()
+	path_headers.clear()
+	file_descriptions.clear()

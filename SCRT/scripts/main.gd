@@ -82,6 +82,14 @@ var _image_viewer_mode: bool = false
 var video_player_viewer: VideoPlayerViewer = null
 var _video_player_mode: bool = false
 
+# 无线电接收器
+var radio_receiver: RadioReceiver = null
+var _radio_mode: bool = false
+
+# 密码解码器
+var decode_viewer: DecodeViewer = null
+var _decode_mode: bool = false
+
 # ★ 内联音频播放系统
 var _inline_audio_path: String = ""
 var _inline_audio_timer: float = 0.0
@@ -120,6 +128,14 @@ func _ready() -> void:
 	# 初始化视频播放器
 	video_player_viewer = VideoPlayerViewer.new()
 	video_player_viewer.setup(self, audio_manager)
+
+	# 初始化无线电接收器
+	radio_receiver = RadioReceiver.new()
+	radio_receiver.setup(self, audio_manager)
+
+	#初始化密码解码器
+	decode_viewer = DecodeViewer.new()
+	decode_viewer.setup(self)
 
 	# 初始化各模块
 	story_loader = StoryLoader.new()
@@ -282,11 +298,16 @@ func _get_default_placeholder() -> String:
 		return "请输入密码..."
 	if _file_password_mode:
 		return "请输入文件密码..."
+	if _radio_mode:
+		return ""
+	if _decode_mode:
+		return ""
 	if _theme_confirm_mode:
 		return "输入 Y 确认，其它取消..."
 	if _delete_user_mode:
 		return "输入 Y 确认删除..."
 	return "按 Enter 输入命令..."
+
 
 # ══════════════════════════════════════════
 #  回车提交
@@ -305,6 +326,12 @@ func _on_input_submitted(_text: String) -> void:
 		return
 	# ★ 视频播放器模式下不接受终端输入
 	if video_player_viewer and video_player_viewer.is_active:
+		return
+	# ★ 无线电接收器模式下不接受终端输入
+	if radio_receiver and radio_receiver.is_active:
+		return
+	# ★ 密码解码器模式下不接受终端输入
+	if decode_viewer and decode_viewer.is_active:
 		return
 	if raw.is_empty():
 		if _login_mode and _login_step == 0:
@@ -658,12 +685,21 @@ func _input(event: InputEvent) -> void:
 		if video_player_viewer.handle_input(event):
 			get_viewport().set_input_as_handled()
 			return
+	# 无线电接收器模式优先处理输入
+	if _radio_mode and radio_receiver and radio_receiver.is_active:
+		if radio_receiver.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
+	# ★ 密码解码器模式优先处理输入
+	if _decode_mode and decode_viewer and decode_viewer.is_active:
+		if decode_viewer.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
 	# ★ 文档查看器优先处理输入
 	if doc_viewer and doc_viewer.is_active:
 		if doc_viewer.handle_input(event):
 			get_viewport().set_input_as_handled()
 			return
-
 	# --- 鼠标按下事件 ---
 	if event is InputEventMouseButton and event.pressed:
 		match event.button_index:
@@ -690,7 +726,6 @@ func _input(event: InputEvent) -> void:
 				if not output_rect.has_point(mouse_pos):
 					input_field.grab_focus()
 				return
-
 	# --- 鼠标释放事件 ---
 	if event is InputEventMouseButton and not event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
@@ -699,20 +734,16 @@ func _input(event: InputEvent) -> void:
 			if not output_rect.has_point(mouse_pos):
 				input_field.grab_focus()
 			return
-
 	# --- 键盘事件 ---
 	if not event is InputEventKey or not event.pressed:
 		return
-
 	if not input_field.has_focus():
 		input_field.grab_focus()
-
 	# 打字机播放中：空格或ESC跳过
 	if tw.is_typing and event.keycode in [KEY_SPACE, KEY_ESCAPE]:
 		tw.skip()
 		get_viewport().set_input_as_handled()
 		return
-
 	match event.keycode:
 		KEY_UP:
 			var prev_cmd: String = cmd_handler.history_up()
@@ -734,6 +765,8 @@ func _input(event: InputEvent) -> void:
 		KEY_TAB:
 			_handle_tab_complete()
 			get_viewport().set_input_as_handled()
+
+
 
 # ══════════════════════════════════════════
 #  Tab 自动补全
@@ -926,6 +959,35 @@ func _on_video_player_closed() -> void:
 		_media_status_output("[color=" + T.muted_hex + "]⏹ 视频播放结束: " + file_name + "[/color]\n")
 	_update_status_bar()
 
+
+## 无线电接收器关闭回调
+func _on_radio_closed() -> void:
+	_radio_mode = false
+	input_field.editable = true
+
+## 打开无线电接收器
+func open_radio_receiver() -> void:
+	if radio_receiver == null:
+		return
+	_radio_mode = true
+	input_field.editable = false
+	radio_receiver.open()
+
+
+## decode_viewer 关闭回调
+func _on_decode_viewer_closed() -> void:
+	_decode_mode = false
+	input_field.editable = true
+	_update_status_bar()
+
+
+## 打开密码解码器
+func open_decode_viewer(args: Array = []) -> void:
+	if decode_viewer == null:
+		return
+	_decode_mode = true
+	input_field.editable = false
+	decode_viewer.open(args)
 
 
 ## 打开视频播放器

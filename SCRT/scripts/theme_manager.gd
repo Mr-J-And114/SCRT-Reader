@@ -334,6 +334,8 @@ static func _refresh_all_ui(main_node: Node) -> void:
 		main_node.crtml.T = current
 	if main_node.tw != null:
 		main_node.tw.T = current
+	if main_node.decode_viewer != null:
+		main_node.decode_viewer.T = current
 
 	# 重新应用 UI 样式
 	UIManager.setup_all_styles(

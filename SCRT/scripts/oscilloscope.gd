@@ -123,7 +123,7 @@ func _update_colors() -> void:
 	peak_color.a = 0.7
 	peak_color = peak_color.lightened(0.3)
 	background_color = T.bg
-	background_color.a = 0.95
+	background_color.a = 0
 	# 更新说明文字区域颜色
 	if desc_label and is_instance_valid(desc_label):
 		desc_label.add_theme_color_override("default_color", T.secondary)

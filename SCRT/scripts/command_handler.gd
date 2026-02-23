@@ -62,6 +62,7 @@ func _register_commands() -> void:
 		"passwd": _cmd_passwd,
 		"birthday": _cmd_birthday,
 		"users": _cmd_users,
+		"decode": _cmd_decode,
 	}
 
 	# ── 桌面模式专用命令 ──
@@ -85,6 +86,8 @@ func _register_commands() -> void:
 		"eject": _cmd_eject,
 		"save": _cmd_save,
 		"clearsave": _cmd_clearsave,
+		"radio": _cmd_radio,
+		"decode": _cmd_decode,
 	}
 
 # ══════════════════════════════════════════
@@ -328,6 +331,8 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]back[/color]          返回上级目录")
 		lines.append("  [color=" + p + "]open <文件名>[/color] 打开文件")
 		lines.append("  [color=" + p + "]unlock[/color]        尝试密码认证提升权限")
+		lines.append("  [color=" + p + "]radio[/color]         打开无线电接收器")
+		lines.append("  [color=" + p + "]decode[/color]       [color=" + m + "]密码解码器[/color]")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 磁盘管理 ──[/color]")
 		lines.append("  [color=" + p + "]eject[/color]         弹出当前磁盘")
@@ -610,55 +615,100 @@ func _cmd_vdisc(_args: Array = []) -> void:
 # ══════════════════════════════════════════════════════════════
 #  磁盘模式命令
 # ══════════════════════════════════════════════════════════════
-func _cmd_ls(_args: Array = []) -> void:
-	var items: Array = fs.get_children_at_path(main.current_path)
-	if items.is_empty():
-		main.append_output("[color=" + T.muted_hex + "]该目录为空。[/color]\n", false)
+func _cmd_ls(args: Array = []) -> void:
+	var target_path: String = main.current_path
+	if args.size() > 0:
+		var arg: String = str(args[0])
+		if arg.begins_with("/"):
+			target_path = fs.normalize_path(arg)
+		else:
+			target_path = fs.normalize_path(fs.join_path(main.current_path, arg))
+
+	var node = fs.get_node_at_path(target_path)
+	if node == null or node.type != "folder":
+		main.append_output("[color=" + T.error_hex + "]目录不存在: " + target_path + "[/color]\n", false)
 		return
 
-	var lines: Array[String] = []
-	lines.append("[color=" + T.primary_hex + "]目录: " + main.current_path + "[/color]")
-	lines.append("")
+	if not fs.has_clearance(target_path):
+		var required: int = fs.get_required_clearance(target_path)
+		main.append_output("[color=" + T.error_hex + "]权限不足。需要等级 " + str(required) + " 的安全许可。[/color]\n", false)
+		return
 
-	for item in items:
-		var item_str: String = str(item)
-		var item_path: String = fs.join_path(main.current_path, item_str)
-		var node = fs.get_node_at_path(item_path)
-		if node == null:
+	var children: Array[String] = fs.get_children_at_path(target_path)
+	if children.is_empty():
+		main.append_output("[color=" + T.muted_hex + "]（空目录）[/color]\n", false)
+		return
+
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var w: String = T.warning_hex
+	var e: String = T.error_hex
+
+	# ★ 显示目录描述（如果在 manifest.file_descriptions 中配置了）
+	var folder_desc: Dictionary = fs.get_folder_description(target_path)
+	if not folder_desc.is_empty():
+		var fname: String = str(folder_desc.get("name", ""))
+		var fdesc: String = str(folder_desc.get("description", ""))
+		if not fname.is_empty():
+			main.append_output("[color=" + p + "]" + fname + "[/color]\n", false)
+		if not fdesc.is_empty():
+			main.append_output("[color=" + m + "]" + fdesc + "[/color]\n", false)
+		main.append_output("\n", false)
+
+	for child_name in children:
+		var child_path: String = fs.join_path(target_path, child_name)
+		var child_node = fs.get_node_at_path(child_path)
+		if child_node == null:
 			continue
 
-		# 跳过隐藏目录
-		if fs.is_hidden_path(item_path):
+		# ★ 跳过隐藏目录中的内容（替代旧的 _headers.cfg / .meta.cfg 硬编码过滤）
+		if fs.is_hidden_path(child_path):
 			continue
 
-		# ★ 跳过所有媒体描述文件（音频+图片）
-		if _is_media_desc_file(item_str, main.current_path):
+		# ★ 跳过旧版配置文件（过渡期兼容，防止残留文件显示在列表中）
+		if child_name in ["_headers.cfg", ".meta.cfg", "signals.cfg"]:
 			continue
 
-		# ★ 跳过 .meta.cfg 元数据文件
-		if item_str == ".meta.cfg" or item_str.ends_with(".meta.cfg"):
-			continue
+		var required_clearance: int = fs.get_required_clearance(child_path)
+		var has_access: bool = fs.player_clearance >= required_clearance
 
-		var item_required: int = fs.get_required_clearance(item_path)
-		var is_locked: bool = not fs.has_clearance(item_path)
+		# ★ 获取显示名和文件描述
+		var display_name: String = fs.get_display_name(child_path)
+		var file_desc: String = fs.get_file_description(target_path, child_name)
 
-		if node.type == "folder":
-			if is_locked:
-				lines.append("  [color=" + T.error_hex + "][DIR]  " + item_str + "/  【LOCKED LV." + str(item_required) + "】[/color]")
+		if child_node.type == "folder":
+			var dir_display: String = child_name + "/"
+			if not display_name.is_empty():
+				dir_display = child_name + "/  [color=" + m + "]" + display_name + "[/color]"
+
+			if not has_access:
+				main.append_output("  [color=" + e + "]" + child_name + "/  [LOCKED - 等级 " + str(required_clearance) + "][/color]\n", false)
 			else:
-				lines.append("  [color=" + T.info_hex + "][DIR]  " + item_str + "/[/color]")
+				main.append_output("  [color=" + p + "]" + dir_display + "[/color]\n", false)
 		else:
-			if is_locked:
-				lines.append("  [color=" + T.error_hex + "][FILE] " + item_str + "  【LOCKED LV." + str(item_required) + "】[/color]")
-			else:
-				var fp_key: String = fs.get_file_password_key(item_path)
-				if not fp_key.is_empty() and not fs.is_file_password_unlocked(item_path):
-					lines.append("  [color=" + T.warning_hex + "][FILE] " + item_str + "  [PASSWORD][/color]")
-				else:
-					lines.append("  [color=" + T.success_hex + "][FILE] " + item_str + "[/color]")
+			# 检查是否已读
+			var read_marker: String = ""
+			if main.read_files.has(child_path):
+				read_marker = " [color=" + m + "]✓[/color]"
 
-	lines.append("")
-	main.append_output("\n".join(lines) + "\n", false)
+			# 检查文件密码
+			var fp_key: String = fs.get_file_password_key(child_path)
+			var fp_locked: bool = not fp_key.is_empty() and not fs.is_file_password_unlocked(child_path)
+
+			# ★ 构建显示名：display_name 优先，其次 file_description
+			var name_display: String = child_name
+			if not display_name.is_empty():
+				name_display = child_name + "  [color=" + m + "]" + display_name + "[/color]"
+			elif not file_desc.is_empty():
+				name_display = child_name + "  [color=" + m + "]— " + file_desc + "[/color]"
+
+			if not has_access:
+				main.append_output("  [color=" + e + "]" + child_name + "  [LOCKED - 等级 " + str(required_clearance) + "][/color]\n", false)
+			elif fp_locked:
+				main.append_output("  [color=" + w + "]" + child_name + "  [需要文件密码][/color]" + read_marker + "\n", false)
+			else:
+				main.append_output("  [color=" + p + "]" + name_display + "[/color]" + read_marker + "\n", false)
+
 
 func _cmd_cd(args: Array = []) -> void:
 	if args.is_empty():
@@ -909,15 +959,43 @@ func _cmd_unlock(args: Array = []) -> void:
 
 func _verify_password(password: String) -> void:
 	var passwords: Dictionary = {}
-	var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
-	if story_dict.has("passwords"):
-		passwords = story_dict.get("passwords", {}) as Dictionary
-	elif main.story_manifest.has("passwords"):
-		passwords = main.story_manifest.get("passwords", {}) as Dictionary
 
+	# ★ 统一从 manifest 顶层读取（story_loader 已标准化为新格式）
+	if main.story_manifest.has("passwords"):
+		passwords = main.story_manifest.get("passwords", {}) as Dictionary
+	else:
+		# 旧版兼容：从 story 区块读取
+		var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
+		if story_dict.has("passwords"):
+			passwords = story_dict.get("passwords", {}) as Dictionary
+
+	# 新格式: { "password_string": { "grants_clearance": N, "message": "..." } }
+	if passwords.has(password):
+		var entry = passwords[password]
+		if entry is Dictionary:
+			var level: int = int(entry.get("grants_clearance", 0))
+			var msg: String = str(entry.get("message", "权限等级已提升至 " + str(level) + "。"))
+			if fs.player_clearance < level:
+				fs.player_clearance = level
+				if not main.unlocked_passwords.has(password):
+					main.unlocked_passwords.append(password)
+				var box: String = fs.build_box(
+					["ACCESS GRANTED", msg] as Array[String],
+					T.success_hex
+				)
+				main.append_output(box + "\n", false)
+				disc_mgr._auto_save()
+				main._update_status_bar()
+				return
+			else:
+				main.append_output("[color=" + T.warning_hex + "]当前等级已达到或超过该密码对应的等级。[/color]\n", false)
+				return
+
+	# 旧格式兜底: { "level_number": "password_string" }
+	# (如果 story_loader 的标准化没有覆盖到，例如 manifest.cfg 旧格式)
 	for level_str in passwords.keys():
-		var pwd_value: String = str(passwords[level_str])
-		if password == pwd_value:
+		var pwd_value = passwords[level_str]
+		if pwd_value is String and password == pwd_value:
 			var level: int = int(float(level_str))
 			if fs.player_clearance < level:
 				fs.player_clearance = level
@@ -936,6 +1014,7 @@ func _verify_password(password: String) -> void:
 				return
 
 	main.append_output("[color=" + T.error_hex + "]密码无效。[/color]\n", false)
+
 
 func verify_file_password(password: String) -> void:
 	var file_path: String = main._file_password_target
@@ -987,3 +1066,77 @@ func _cmd_clearsave(args: Array = []) -> void:
 		return
 	main.save_mgr.delete_save(main.story_id)
 	main.append_output("[color=" + e + "]当前磁盘存档已清除。[/color]\n", false)
+
+
+func _cmd_radio(_args: Array = []) -> void:
+	if main.radio_receiver == null:
+		main.append_output("[color=" + T.error_hex + "]无线电模块未初始化。[/color]\n", false)
+		return
+	if not main.radio_receiver.has_signals():
+		main.append_output("[color=" + T.muted_hex + "]当前磁盘未包含无线电信号配置。[/color]\n", false)
+		return
+	main.append_output("[color=" + T.muted_hex + "]正在启动无线电接收器...[/color]\n", false)
+	main.open_radio_receiver()
+
+
+# ══════════════════════════════════════════
+#  decode 命令 —— 密码解码器
+# ══════════════════════════════════════════
+func _cmd_decode(args: Array = []) -> void:
+	# 检查 decode_viewer 是否已初始化
+	if main.decode_viewer == null:
+		main.append_output("[color=" + T.error_hex + "]解码器模块未初始化。[/color]\n", false)
+		return
+
+	if args.is_empty():
+		# 无参数：打开交互式选择界面
+		main.append_output("[color=" + T.muted_hex + "]正在启动密码解码器...[/color]\n", false)
+		main.open_decode_viewer([])
+		return
+
+	# 有参数：decode <method> [key]
+	var method: String = str(args[0]).to_lower()
+
+	# 帮助信息
+	if method == "help" or method == "?":
+		var p: String = T.primary_hex
+		var m: String = T.muted_hex
+		var lines: Array[String] = []
+		lines.append("[color=" + p + "]═══════════ 密码解码器 ═══════════[/color]")
+		lines.append("")
+		lines.append("  [color=" + p + "]decode[/color]			  [color=" + m + "]打开交互式解码界面[/color]")
+		lines.append("  [color=" + p + "]decode <方法>[/color]	   [color=" + m + "]指定解码方法后输入密文[/color]")
+		lines.append("  [color=" + p + "]decode <方法> <密钥>[/color] [color=" + m + "]同时指定密钥[/color]")
+		lines.append("  [color=" + p + "]decode help[/color]		 [color=" + m + "]显示此帮助[/color]")
+		lines.append("")
+		lines.append("[color=" + m + "]可用方法:[/color]")
+		lines.append("  [color=" + p + "]caesar[/color]   [color=" + m + "]凯撒密码 (key=偏移量, 留空自动检测)[/color]")
+		lines.append("  [color=" + p + "]vigenere[/color] [color=" + m + "]维吉尼亚密码 (需要密钥单词)[/color]")
+		lines.append("  [color=" + p + "]rot13[/color]	[color=" + m + "]ROT13[/color]")
+		lines.append("  [color=" + p + "]atbash[/color]   [color=" + m + "]Atbash 镜像密码[/color]")
+		lines.append("  [color=" + p + "]sub[/color]	  [color=" + m + "]替换密码 (需要26位密钥)[/color]")
+		lines.append("  [color=" + p + "]base64[/color]   [color=" + m + "]Base64 解码[/color]")
+		lines.append("  [color=" + p + "]morse[/color]	[color=" + m + "]摩斯电码解码[/color]")
+		lines.append("  [color=" + p + "]reverse[/color]  [color=" + m + "]字符串反转[/color]")
+		lines.append("")
+		lines.append("[color=" + p + "]════════════════════════════════════[/color]")
+		main.append_output("\n".join(lines) + "\n", false)
+		return
+
+	# 验证方法是否有效
+	var valid_methods: Array[String] = [
+		"caesar", "vigenere", "rot13", "atbash",
+		"sub", "substitution", "base64", "b64",
+		"morse", "reverse", "rev"
+	]
+	if method not in valid_methods:
+		main.append_output("[color=" + T.error_hex + "]未知的解码方法: " + method + "[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]输入 decode help 查看可用方法。[/color]\n", false)
+		return
+
+	# 传递参数给 decode_viewer 打开
+	main.append_output("[color=" + T.muted_hex + "]正在启动密码解码器...[/color]\n", false)
+	main.open_decode_viewer(args)
+
+
+	

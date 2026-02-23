@@ -3,13 +3,13 @@
 	"avatar": "",
 	"badge": "O5-COUNCIL",
 	"birthday": "",
-	"command_count": 220,
+	"command_count": 287,
 	"created_at": "2026-02-15 15:06:42",
-	"discs_loaded_count": 90,
-	"files_read_count": 10.0,
-	"last_fail_time": "2026-02-18 22:07:32",
-	"last_login": "2026-02-19 20:05:39",
-	"login_count": 98,
+	"discs_loaded_count": 119,
+	"files_read_count": 14.0,
+	"last_fail_time": "2026-02-23 10:56:38",
+	"last_login": "2026-02-23 13:46:07",
+	"login_count": 127,
 	"login_fail_count": 0,
 	"password": "admin",
 	"preferences": {
@@ -30,6 +30,18 @@
 			"date": "2026-02-15 15:06:42",
 			"from": "O5-1",
 			"tone": "warning"
+		},
+		{
+			"content": "欢迎 Admin，这是综合演示磁盘。里面有些有趣的东西等你发现。",
+			"date": "2026-02-22 22:18:36",
+			"from": "Dr. Bright",
+			"tone": "positive"
+		},
+		{
+			"content": "Admin，请注意：无线电监听室中的信号内容为实时模拟，不代表真实通讯。",
+			"date": "2026-02-22 22:18:36",
+			"from": "系统管理员",
+			"tone": "neutral"
 		}
 	],
 	"title": "系统管理员",

@@ -597,10 +597,36 @@ func _parse_manifest_json(content: String) -> void:
 		return
 	if json.data is Dictionary:
 		manifest = json.data
+		# ★ 标准化密码表格式（兼容新旧两种写法）
+		if manifest.has("passwords"):
+			manifest["passwords"] = _normalize_passwords(manifest["passwords"])
 		print("[StoryLoader] manifest.json 已加载，字段: ", manifest.keys())
 	else:
 		error_message = "manifest.json 格式错误"
 		print("[StoryLoader] " + error_message)
+
+## ★ 新增：标准化密码表
+## 新格式: { "password_string": { "grants_clearance": N, "message": "..." } }
+## 旧格式: { "level_number": "password_string" } → 自动转换为新格式
+func _normalize_passwords(raw: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for key in raw.keys():
+		var value = raw[key]
+		if value is Dictionary:
+			# 已经是新格式，直接保留
+			result[key] = value
+		elif value is String:
+			# 旧格式: key 是等级数字字符串, value 是密码字符串
+			# 转换: 密码作为 key → { grants_clearance, message }
+			result[str(value)] = {
+				"grants_clearance": int(float(key)),
+				"message": "权限等级已提升至 " + str(key) + "。"
+			}
+		else:
+			push_warning("[StoryLoader] 未知的密码表条目格式: ", key)
+	return result
+
+
 
 # ============================================================
 # 解析 manifest.cfg

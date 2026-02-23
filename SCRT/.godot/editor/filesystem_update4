@@ -1,0 +1,12 @@
+res://scenes/main.tscn
+res://shaders/background_vignette.gdshader
+res://shaders/crt_effect.gdshader
+res://scripts/cipher_decoder.gd
+res://scripts/decode_viewer.gd
+res://scripts/radio_receiver.gd
+res://scripts/command_handler.gd
+res://scripts/main.gd
+res://scripts/theme_manager.gd
+res://scripts/oscilloscope.gd
+res://templates/two_page_reader.gd
+res://templates/two_page_reader_demo.gd

@@ -54,6 +54,9 @@ func reset_all() -> void:
 	main.story_manifest = {}
 	main.current_story_index = -1
 	main.audio_manager.stop_ambient(0.5)
+	# 关闭无线电接收器
+	if main.radio_receiver != null and main.radio_receiver.is_active:
+		main.radio_receiver.close()
 
 # ══════════════════════════════════════════
 #  扫描可用故事包
@@ -157,7 +160,6 @@ func load_story(args: Array) -> void:
 		main.append_output("[color=" + T.error_hex + "]磁盘编号超出范围。可用: 1-" + str(available_stories.size()) + "[/color]\n", false)
 		return
 
-	# 如果当前已加载磁盘，先自动保存并弹出
 	if not main.story_id.is_empty():
 		_auto_save()
 		fs.clear_all()
@@ -165,12 +167,10 @@ func load_story(args: Array) -> void:
 	var story_data: Dictionary = available_stories[index]
 	var path: String = str(story_data.get("path", ""))
 
-	# 显示加载动画（使用 typewriter 内置进度条）
 	main.append_output("\n[color=" + T.muted_hex + "]正在载入虚拟磁盘...[/color]\n", false)
 	await tw.show_progress_bar(800)
 	await main.get_tree().create_timer(0.3).timeout
 
-	# 加载故事包
 	if not story_loader.load_story(path):
 		main.append_output("[color=" + T.error_hex + "]磁盘加载失败: " + story_loader.error_message + "[/color]\n", false)
 		return
@@ -181,80 +181,130 @@ func load_story(args: Array) -> void:
 	main.current_story_index = index
 
 	var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
+	var settings_dict: Dictionary = main.story_manifest.get("settings", {}) as Dictionary
 	var story_id: String = str(story_dict.get("id", ""))
-	var start_clearance: int = int(story_dict.get("start_clearance", 0))
 	main.story_id = story_id
 
+	# start_clearance: 优先 settings，回退 story（旧版兼容）
+	var start_clearance: int = 0
+	if settings_dict.has("start_clearance"):
+		start_clearance = int(settings_dict.get("start_clearance", 0))
+	elif story_dict.has("start_clearance"):
+		start_clearance = int(story_dict.get("start_clearance", 0))
 
-	# 加载隐藏目录配置
+	# ── 加载隐藏目录配置 ──
 	fs.hidden_dirs.clear()
 	if main.story_manifest.has("hidden_dirs"):
 		var dirs = main.story_manifest["hidden_dirs"]
 		if dirs is Array:
 			for d in dirs:
 				fs.hidden_dirs.append(str(d))
-			print("[DiscManager] 隐藏目录: " + str(fs.hidden_dirs.size()) + " 个")
+	print("[DiscManager] 隐藏目录: " + str(fs.hidden_dirs.size()) + " 个")
 
-
-	# 加载权限表
+	# ── 加载权限表（支持顶层 permissions 和旧版 story.permissions）──
 	fs.story_permissions.clear()
 	if main.story_manifest.has("permissions"):
-		fs.story_permissions = main.story_manifest["permissions"]
+		var perms = main.story_manifest["permissions"]
+		if perms is Dictionary:
+			fs.story_permissions = perms
+	elif story_dict.has("permissions"):
+		var perms = story_dict["permissions"]
+		if perms is Dictionary:
+			fs.story_permissions = perms
 
-	# 加载文件密码表
+	# ── 加载密码表（已被 story_loader 标准化为新格式）──
+	# 新格式: { "password_string": { "grants_clearance": N, "message": "..." } }
+	# 支持顶层 passwords 和旧版 story.passwords
+	# （无需额外处理，_verify_password 中适配新格式即可）
+
+	# ── 加载文件密码表 ──
 	fs.story_file_passwords.clear()
 	if main.story_manifest.has("file_passwords"):
-		var fps: Dictionary = main.story_manifest["file_passwords"]
-		for fp_path in fps.keys():
-			fs.story_file_passwords[fp_path] = fps[fp_path]
-		print("[DiscManager] 文件密码表: " + str(fs.story_file_passwords.size()) + " 条")
+		var fps = main.story_manifest["file_passwords"]
+		if fps is Dictionary:
+			for fp_path in fps.keys():
+				fs.story_file_passwords[fp_path] = fps[fp_path]
+	elif story_dict.has("file_passwords"):
+		var fps = story_dict["file_passwords"]
+		if fps is Dictionary:
+			for fp_path in fps.keys():
+				fs.story_file_passwords[fp_path] = fps[fp_path]
+	print("[DiscManager] 文件密码表: " + str(fs.story_file_passwords.size()) + " 条")
 
-	# 加载环境音配置
+	# ── 加载环境音配置 ──
 	fs.ambient_sounds.clear()
 	if main.story_manifest.has("ambient"):
-		var ambient_cfg: Dictionary = main.story_manifest["ambient"]
-		for dir_path in ambient_cfg.keys():
-			var normalized: String = fs.normalize_path(str(dir_path))
-			var value = ambient_cfg[dir_path]
-			if value is String:
-				# 简写格式: "/path": "audio_file.ogg"
-				fs.ambient_sounds[normalized] = { "file": value, "volume": 1.0 }
-			elif value is Dictionary:
-				# 完整格式: "/path": { "file": "...", "volume": 0.3 }
-				fs.ambient_sounds[normalized] = {
-					"file": str(value.get("file", "")),
-					"volume": float(value.get("volume", 1.0))
-				}
-		print("[DiscManager] 环境音配置: " + str(fs.ambient_sounds.size()) + " 条")
+		var ambient_cfg = main.story_manifest["ambient"]
+		if ambient_cfg is Dictionary:
+			for dir_path in ambient_cfg.keys():
+				var normalized: String = fs.normalize_path(str(dir_path))
+				var value = ambient_cfg[dir_path]
+				if value is String:
+					fs.ambient_sounds[normalized] = { "file": value, "volume": 1.0 }
+				elif value is Dictionary:
+					fs.ambient_sounds[normalized] = {
+						"file": str(value.get("file", "")),
+						"volume": float(value.get("volume", 1.0))
+					}
+	print("[DiscManager] 环境音配置: " + str(fs.ambient_sounds.size()) + " 条")
+
+	# ── ★ 新增：加载路径元数据 (headers) ──
+	fs.path_headers.clear()
+	if main.story_manifest.has("headers"):
+		var headers_cfg = main.story_manifest["headers"]
+		if headers_cfg is Dictionary:
+			for h_path in headers_cfg.keys():
+				var normalized: String = fs.normalize_path(str(h_path))
+				var value = headers_cfg[h_path]
+				if value is Dictionary:
+					fs.path_headers[normalized] = value
+				elif value is String:
+					fs.path_headers[normalized] = { "display_name": value }
+	print("[DiscManager] 路径元数据: " + str(fs.path_headers.size()) + " 条")
+
+	# ── ★ 新增：加载文件描述 (file_descriptions) ──
+	fs.file_descriptions.clear()
+	if main.story_manifest.has("file_descriptions"):
+		var fd_cfg = main.story_manifest["file_descriptions"]
+		if fd_cfg is Dictionary:
+			for fd_path in fd_cfg.keys():
+				var normalized: String = fs.normalize_path(str(fd_path))
+				fs.file_descriptions[normalized] = fd_cfg[fd_path]
+	print("[DiscManager] 文件描述: " + str(fs.file_descriptions.size()) + " 个目录")
+
+	# ── 加载无线电信号（优先 manifest 中的 radio_signals，回退旧版 signals.cfg）──
+# 加载无线电信号配置
+	if main.radio_receiver != null:
+		if main.story_manifest.has("radio_signals"):
+			main.radio_receiver.load_signals_from_manifest(main.story_manifest, fs)
+		else:
+			main.radio_receiver.load_signals_from_fs(fs)
+		if main.radio_receiver.has_signals():
+			print("[DiscManager] 无线电信号源已加载: " + str(main.radio_receiver.signal_mgr.signals.size()) + " 个")
 
 
-	# 尝试加载存档
+	# ── 尝试加载存档 ──
 	var save_result = save_mgr.load_save(story_id)
 	var save_data: Dictionary = save_result if save_result is Dictionary else {}
 
 	if not save_data.is_empty():
 		fs.player_clearance = int(save_data.get("player_clearance", 0))
-
 		main.read_files.clear()
 		if save_data.has("read_files"):
 			for f in save_data["read_files"]:
 				main.read_files.append(str(f))
-
 		main.unlocked_passwords.clear()
 		if save_data.has("unlocked_passwords"):
 			for pwd in save_data["unlocked_passwords"]:
 				main.unlocked_passwords.append(str(pwd))
-
 		fs.unlocked_file_passwords.clear()
 		if save_data.has("unlocked_file_passwords"):
 			for fp in save_data["unlocked_file_passwords"]:
 				fs.unlocked_file_passwords.append(str(fp))
-
 		if save_data.has("current_path"):
 			var saved_path: String = save_data["current_path"]
 			if fs.has_clearance(saved_path):
 				main.current_path = saved_path
-
 		print("[DiscManager] 存档已恢复，权限: " + str(fs.player_clearance))
 	else:
 		fs.player_clearance = start_clearance
@@ -265,19 +315,17 @@ func load_story(args: Array) -> void:
 	# 清屏，切换到磁盘模式
 	main.output_text.text = ""
 	tw.clear_queue()
-
 	main._desktop_mode = false
 	main._update_status_bar()
 
-	# 显示欢迎信息
 	main._show_welcome_message()
 	main.update_ambient_sound()
 
-	# 注入故事包系统评价到用户档案
 	if main.user_mgr.is_logged_in:
 		main.user_mgr.inject_story_notes(main.story_manifest)
 		main.user_mgr._increment_stat("discs_loaded_count")
 		main.user_mgr._save_current_profile()
+
 
 # ══════════════════════════════════════════
 #  弹出磁盘
@@ -288,6 +336,11 @@ func eject_story() -> void:
 		return
 
 	_auto_save()
+
+	# 关闭无线电接收器
+	if main.radio_receiver != null and main.radio_receiver.is_active:
+		main.radio_receiver.close()
+		main._radio_mode = false
 
 	var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
 	var title: String = str(story_dict.get("title", "未知"))
