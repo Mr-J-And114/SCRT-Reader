@@ -519,51 +519,54 @@ func _load_ogg_from_bytes(data: PackedByteArray) -> AudioStream:
 
 ## 从字节加载 WAV
 func _load_wav_from_bytes(data: PackedByteArray) -> AudioStream:
-	# WAV 格式解析（标准 PCM）
-	# WAV 文件结构: RIFF header → fmt chunk → data chunk
+	# WAV 格式解析（标准 PCM，健壮的 chunk 遍历）
 	if data.size() < 44:
 		push_warning("[AudioManager] WAV 数据太短")
 		return null
-
 	# 验证 RIFF 头
 	var riff: String = data.slice(0, 4).get_string_from_ascii()
 	if riff != "RIFF":
 		push_warning("[AudioManager] 无效的 WAV 文件（缺少 RIFF 头）")
 		return null
-
-	# 解析 fmt chunk
-	var audio_format: int = data.decode_u16(20)
-	var channels: int = data.decode_u16(22)
-	var sample_rate: int = data.decode_u32(24)
-	var bits_per_sample: int = data.decode_u16(34)
-
+	# 遍历 chunk 查找 fmt 和 data
+	var audio_format: int = 0
+	var channels: int = 0
+	var sample_rate: int = 0
+	var bits_per_sample: int = 0
+	var fmt_found: bool = false
+	var audio_data: PackedByteArray = PackedByteArray()
+	var offset: int = 12  # 跳过 RIFF 头（12 字节：'RIFF' + size + 'WAVE'）
+	while offset < data.size() - 8:
+		var chunk_id: String = data.slice(offset, offset + 4).get_string_from_ascii()
+		var chunk_size: int = data.decode_u32(offset + 4)
+		if chunk_id == "fmt ":
+			if chunk_size >= 16 and offset + 8 + 16 <= data.size():
+				audio_format = data.decode_u16(offset + 8)
+				channels = data.decode_u16(offset + 10)
+				sample_rate = data.decode_u32(offset + 12)
+				# offset+16 = byte_rate(4), offset+20 = block_align(2)
+				bits_per_sample = data.decode_u16(offset + 22)
+				fmt_found = true
+		elif chunk_id == "data":
+			var available: int = mini(chunk_size, data.size() - offset - 8)
+			audio_data = data.slice(offset + 8, offset + 8 + available)
+		offset += 8 + chunk_size
+		# WAV chunk 需要对齐到偶数字节
+		if chunk_size % 2 != 0:
+			offset += 1
+	if not fmt_found:
+		push_warning("[AudioManager] WAV 中找不到 fmt chunk")
+		return null
 	if audio_format != 1:  # 只支持 PCM
 		push_warning("[AudioManager] WAV 非 PCM 格式，不支持")
 		return null
-
-	# 查找 data chunk
-	var data_offset: int = 12
-	var audio_data_size: int = 0
-	while data_offset < data.size() - 8:
-		var chunk_id: String = data.slice(data_offset, data_offset + 4).get_string_from_ascii()
-		var chunk_size: int = data.decode_u32(data_offset + 4)
-		if chunk_id == "data":
-			data_offset += 8
-			audio_data_size = chunk_size
-			break
-		data_offset += 8 + chunk_size
-
-	if audio_data_size == 0:
+	if audio_data.is_empty():
 		push_warning("[AudioManager] WAV 中找不到 data chunk")
 		return null
-
-	var audio_data: PackedByteArray = data.slice(data_offset, data_offset + audio_data_size)
-
 	var wav_stream := AudioStreamWAV.new()
 	wav_stream.mix_rate = sample_rate
 	wav_stream.stereo = (channels == 2)
 	wav_stream.data = audio_data
-
 	if bits_per_sample == 8:
 		wav_stream.format = AudioStreamWAV.FORMAT_8_BITS
 	elif bits_per_sample == 16:
@@ -571,8 +574,9 @@ func _load_wav_from_bytes(data: PackedByteArray) -> AudioStream:
 	else:
 		push_warning("[AudioManager] WAV 不支持的位深: ", bits_per_sample)
 		return null
-
 	return wav_stream
+
+
 
 ## 从字节加载 MP3
 func _load_mp3_from_bytes(data: PackedByteArray) -> AudioStream:

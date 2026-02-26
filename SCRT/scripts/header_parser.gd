@@ -18,17 +18,21 @@ const HEADER_END: String = "---END_HEADER---"
 # ══════════════════════════════════════════
 enum Template {
 	DOCUMENT,   # 标准文档
-	CHAT,       # 聊天记录（阶段B实现）
-	EMAIL,      # 邮件（远景）
-	REPORT,     # 报告（远景）
+	TWO_PAGE,   # 双页阅读器
+	CHAT,       # 聊天记录
+	EMAIL,      # 邮件
+	REPORT,     # 报告
+	ARTICLE,    # 全屏文章
 	RAW,        # 原始文本，不解析
 }
 
 static var template_map: Dictionary = {
 	"document": Template.DOCUMENT,
+	"two_page": Template.TWO_PAGE,
 	"chat": Template.CHAT,
 	"email": Template.EMAIL,
 	"report": Template.REPORT,
+	"article": Template.ARTICLE,
 	"raw": Template.RAW,
 }
 

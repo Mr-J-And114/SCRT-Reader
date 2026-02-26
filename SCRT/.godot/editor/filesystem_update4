@@ -1,12 +1,8 @@
 res://scenes/main.tscn
 res://shaders/background_vignette.gdshader
-res://shaders/crt_effect.gdshader
-res://scripts/cipher_decoder.gd
-res://scripts/decode_viewer.gd
-res://scripts/radio_receiver.gd
-res://scripts/command_handler.gd
+res://shaders/background_logo.gdshader
 res://scripts/main.gd
-res://scripts/theme_manager.gd
-res://scripts/oscilloscope.gd
-res://templates/two_page_reader.gd
-res://templates/two_page_reader_demo.gd
+res://scripts/boot_sequence.gd
+res://scripts/command_handler.gd
+res://scripts/loading_screen.gd
+res://scripts/disc_manager.gd

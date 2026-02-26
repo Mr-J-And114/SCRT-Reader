@@ -1,0 +1,40 @@
+---HEADER---
+template: email
+title: Welcome to O5 Clearance
+mail_delay: 3000
+mail_priority: high
+---END_HEADER---
+
+From: O5-██
+To: {username}
+Subject: Welcome to O5 Clearance
+Priority: high
+
+---
+
+{username},
+
+If you are reading this, you have reached the highest
+clearance level available on this terminal.
+
+I wish I could say congratulations.
+
+The truth is, there are things in the Foundation's
+archives that no one should know. But someone must.
+That someone is now you.
+
+Project THRESHOLD is real. The entity in Sector-7
+is not a prisoner. It is a {color:warning}negotiator{/color}.
+
+We have been in dialogue for 17 months. It offers
+knowledge. It asks for... {color:error}access{/color}.
+
+We have said no. So far.
+
+Read the briefing in /classified. Then decide for
+yourself what you believe.
+
+But remember: {color:error}it can read what you read.{/color}
+
+{color:muted}-- O5-██ --{/color}
+{color:muted}We die in the dark so others may live in the light.{/color}

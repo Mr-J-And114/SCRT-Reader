@@ -1,11 +1,21 @@
 {
 	"current_path": "/",
+	"mail_data": {
+		"delivered_ids": [],
+		"temp_inbox": []
+	},
 	"player_clearance": 0,
-	"read_files": [
-		"/readme.txt",
-		"/crtml_guide.txt"
-	],
+	"radio_data": {
+		"beacon_log": [],
+		"bookmarks": [],
+		"discovered": [],
+		"log": []
+	},
+	"read_files": [],
 	"story_id": "scp_unified_demo",
+	"trigger_data": {
+
+	},
 	"unlocked_file_passwords": [],
 	"unlocked_passwords": [],
 	"username": "Admin"

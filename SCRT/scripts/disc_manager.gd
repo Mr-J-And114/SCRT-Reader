@@ -14,6 +14,7 @@ var T = null
 var tw = null
 var story_loader = null
 var save_mgr = null
+var loading_screen: LoadingScreen = null
 
 # ══════════════════════════════════════════
 #  磁盘数据
@@ -31,6 +32,11 @@ func setup(p_main, p_fs, p_theme, p_tw, p_story_loader, p_save_mgr) -> void:
 	tw = p_tw
 	story_loader = p_story_loader
 	save_mgr = p_save_mgr
+
+	# 初始化载入画面系统
+	loading_screen = LoadingScreen.new()
+	var crt = main.crt_shader if "crt_shader" in main else null
+	loading_screen.setup(main, fs, T, main.audio_manager if "audio_manager" in main else null, crt)
 
 	if OS.has_feature("editor"):
 		vdisc_dir = ProjectSettings.globalize_path("res://") + "vdisc/"
@@ -57,6 +63,17 @@ func reset_all() -> void:
 	# 关闭无线电接收器
 	if main.radio_receiver != null and main.radio_receiver.is_active:
 		main.radio_receiver.close()
+	if "_radio_mode" in main:
+		main._radio_mode = false
+	# 重置触发器系统
+	if main.trigger_sys and main.trigger_sys.has_method("reset"):
+		main.trigger_sys.reset()
+	# 重置邮件系统
+	if main.mail_sys and main.mail_sys.has_method("reset"):
+		main.mail_sys.reset()
+	main.has_new_mail = false
+
+
 
 # ══════════════════════════════════════════
 #  扫描可用故事包
@@ -167,20 +184,36 @@ func load_story(args: Array) -> void:
 	var story_data: Dictionary = available_stories[index]
 	var path: String = str(story_data.get("path", ""))
 
-	main.append_output("\n[color=" + T.muted_hex + "]正在载入虚拟磁盘...[/color]\n", false)
-	await tw.show_progress_bar(800)
-	await main.get_tree().create_timer(0.3).timeout
-
+	# ★ 先加载故事包（获取 manifest 后才能读取 loading_screen 配置）
+	main.append_output("\n[color=" + T.muted_hex + "]Reading disc...[/color]\n", false)
 	if not story_loader.load_story(path):
 		main.append_output("[color=" + T.error_hex + "]磁盘加载失败: " + story_loader.error_message + "[/color]\n", false)
 		return
 
-	# 设置文件系统
+	# 设置文件系统（loading_screen 的 sound 动作需要访问虚拟FS）
 	fs.file_system = story_loader.file_system
 	main.story_manifest = story_loader.manifest
 	main.current_story_index = index
 
 	var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
+
+	# ★ 注入磁盘信息到载入画面
+	loading_screen.set_disc_info({
+		"title": str(story_dict.get("title", "Unknown Disc")),
+		"author": str(story_dict.get("author", "Unknown")),
+		"version": str(story_dict.get("version", "")),
+		"description": str(story_dict.get("description", "")),
+		"id": str(story_dict.get("id", "")),
+	})
+
+	# ★ 播放自定义载入画面（或内置默认）
+	if main.story_manifest.has("loading_screen") and main.story_manifest["loading_screen"] is Dictionary:
+		loading_screen.play(main.story_manifest["loading_screen"] as Dictionary)
+	else:
+		loading_screen.play_default()
+
+	# ★ 等待载入画面完成
+	await loading_screen.loading_completed
 	var settings_dict: Dictionary = main.story_manifest.get("settings", {}) as Dictionary
 	var story_id: String = str(story_dict.get("id", ""))
 	main.story_id = story_id
@@ -273,7 +306,6 @@ func load_story(args: Array) -> void:
 	print("[DiscManager] 文件描述: " + str(fs.file_descriptions.size()) + " 个目录")
 
 	# ── 加载无线电信号（优先 manifest 中的 radio_signals，回退旧版 signals.cfg）──
-# 加载无线电信号配置
 	if main.radio_receiver != null:
 		if main.story_manifest.has("radio_signals"):
 			main.radio_receiver.load_signals_from_manifest(main.story_manifest, fs)
@@ -301,11 +333,18 @@ func load_story(args: Array) -> void:
 		if save_data.has("unlocked_file_passwords"):
 			for fp in save_data["unlocked_file_passwords"]:
 				fs.unlocked_file_passwords.append(str(fp))
+		# 恢复当前路径
 		if save_data.has("current_path"):
-			var saved_path: String = save_data["current_path"]
+			var saved_path: String = str(save_data["current_path"])
 			if fs.has_clearance(saved_path):
 				main.current_path = saved_path
-		print("[DiscManager] 存档已恢复，权限: " + str(fs.player_clearance))
+			else:
+				main.current_path = "/"
+		# 恢复无线电信号状态
+		if save_data.has("radio_data"):
+			if main.radio_receiver and main.radio_receiver.signal_mgr:
+				main.radio_receiver.signal_mgr.load_save_data(save_data["radio_data"])
+
 	else:
 		fs.player_clearance = start_clearance
 		main.read_files.clear()
@@ -316,8 +355,35 @@ func load_story(args: Array) -> void:
 	main.output_text.text = ""
 	tw.clear_queue()
 	main._desktop_mode = false
-	main._update_status_bar()
 
+	if main.has_method("load_effects_from_manifest"):
+		main.load_effects_from_manifest(main.story_manifest)
+
+
+	# ── 加载触发器配置 ──
+	if main.trigger_sys:
+		main.trigger_sys.load_from_manifest(main.story_manifest)
+		# ★ 在 load_from_manifest 之后恢复存档（避免被清空）
+		if not save_data.is_empty() and save_data.has("trigger_data"):
+			main.trigger_sys.load_save_data(save_data["trigger_data"])
+		print("[DiscManager] 触发器已加载")
+	# ── 加载邮件系统配置 ──
+	if main.mail_sys:
+		# 先加载全局邮箱索引（仅登录状态有效）
+		if main.user_mgr != null and main.user_mgr.is_logged_in:
+			main.mail_sys.load_global_inbox()
+
+		# 清空本故事会话的临时状态（不清 delivered_ids）
+		main.mail_sys.load_from_manifest(main.story_manifest)
+
+		# 再恢复本故事的 mail_data（临时邮件 + delivered_ids）
+		if not save_data.is_empty() and save_data.has("mail_data"):
+			main.mail_sys.load_save_data(save_data["mail_data"])
+		print("[DiscManager] 邮件系统已加载")
+
+
+
+	main._update_status_bar()
 	main._show_welcome_message()
 	main.update_ambient_sound()
 
@@ -337,10 +403,6 @@ func eject_story() -> void:
 
 	_auto_save()
 
-	# 关闭无线电接收器
-	if main.radio_receiver != null and main.radio_receiver.is_active:
-		main.radio_receiver.close()
-		main._radio_mode = false
 
 	var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
 	var title: String = str(story_dict.get("title", "未知"))
@@ -362,14 +424,25 @@ func eject_story() -> void:
 func _auto_save() -> void:
 	if main.story_id.is_empty():
 		return
+	# ★ 收集额外存档数据
+	var extra: Dictionary = {}
+	if main.trigger_sys and main.trigger_sys.has_method("get_save_data"):
+		extra["trigger_data"] = main.trigger_sys.get_save_data()
+	if main.mail_sys and main.mail_sys.has_method("get_save_data"):
+		extra["mail_data"] = main.mail_sys.get_save_data()
+	# 无线电信号状态
+	if main.radio_receiver and main.radio_receiver.signal_mgr:
+		extra["radio_data"] = main.radio_receiver.signal_mgr.get_save_data()
 	save_mgr.auto_save(
 		main.story_id,
 		fs.player_clearance,
 		main.read_files,
 		main.unlocked_passwords,
 		fs.unlocked_file_passwords,
-		main.current_path
+		main.current_path,
+		extra
 	)
+
 
 # ══════════════════════════════════════════
 #  桌面欢迎界面

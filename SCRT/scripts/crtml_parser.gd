@@ -1041,6 +1041,91 @@ func _parse_effect_tags(text: String) -> String:
 	result = result.replace("{s}", "[s]")
 	result = result.replace("{/s}", "[/s]")
 
+
+	# ══════════════════════════════════════════════════════════
+	# ★ 第五阶段：CRT Shader 内联效果标记
+	# ══════════════════════════════════════════════════════════
+
+	# --- {glitch} / {glitch=强度或预设} ... {/glitch} ---
+	var glitch_regex := RegEx.new()
+	glitch_regex.compile("\\{glitch(?:=([^}]*))?\\}")
+	var glitch_matches: Array[RegExMatch] = glitch_regex.search_all(result)
+	for j in range(glitch_matches.size() - 1, -1, -1):
+		var gm: RegExMatch = glitch_matches[j]
+		var gval: String = gm.get_string(1) if gm.get_string(1) else "0.5"
+		result = result.substr(0, gm.get_start()) + make_tw_tag("fx_glitch", gval) + result.substr(gm.get_end())
+	result = result.replace("{/glitch}", make_tw_tag("fx_glitch_end"))
+
+	# --- {screen_shake} / {screen_shake=强度} ... {/screen_shake} ---
+	var shake_regex := RegEx.new()
+	shake_regex.compile("\\{screen_shake(?:=([^}]*))?\\}")
+	var shake_matches: Array[RegExMatch] = shake_regex.search_all(result)
+	for j in range(shake_matches.size() - 1, -1, -1):
+		var skm: RegExMatch = shake_matches[j]
+		var skval: String = skm.get_string(1) if skm.get_string(1) else "0.01"
+		result = result.substr(0, skm.get_start()) + make_tw_tag("fx_shake", skval) + result.substr(skm.get_end())
+	result = result.replace("{/screen_shake}", make_tw_tag("fx_shake_end"))
+
+	# --- {tear} / {tear=强度} ... {/tear} ---
+	var tear_regex := RegEx.new()
+	tear_regex.compile("\\{tear(?:=([^}]*))?\\}")
+	var tear_matches: Array[RegExMatch] = tear_regex.search_all(result)
+	for j in range(tear_matches.size() - 1, -1, -1):
+		var tm: RegExMatch = tear_matches[j]
+		var tval: String = tm.get_string(1) if tm.get_string(1) else "0.08"
+		result = result.substr(0, tm.get_start()) + make_tw_tag("fx_tear", tval) + result.substr(tm.get_end())
+	result = result.replace("{/tear}", make_tw_tag("fx_tear_end"))
+
+	# --- {noise} / {noise=强度} ... {/noise} ---
+	var noise_regex := RegEx.new()
+	noise_regex.compile("\\{noise(?:=([^}]*))?\\}")
+	var noise_matches: Array[RegExMatch] = noise_regex.search_all(result)
+	for j in range(noise_matches.size() - 1, -1, -1):
+		var nm: RegExMatch = noise_matches[j]
+		var nval: String = nm.get_string(1) if nm.get_string(1) else "0.8"
+		result = result.substr(0, nm.get_start()) + make_tw_tag("fx_noise", nval) + result.substr(nm.get_end())
+	result = result.replace("{/noise}", make_tw_tag("fx_noise_end"))
+
+	# --- {effect=effect_id} 触发效果序列（瞬时） ---
+	var effect_regex := RegEx.new()
+	effect_regex.compile("\\{effect=([^}]+)\\}")
+	var effect_matches: Array[RegExMatch] = effect_regex.search_all(result)
+	for j in range(effect_matches.size() - 1, -1, -1):
+		var em: RegExMatch = effect_matches[j]
+		var eid: String = em.get_string(1)
+		result = result.substr(0, em.get_start()) + make_tw_tag("fx_effect", eid) + result.substr(em.get_end())
+
+	# --- {preset=预设名} 触发内置预设（瞬时） ---
+	var preset_regex := RegEx.new()
+	preset_regex.compile("\\{preset=([^}]+)\\}")
+	var preset_matches: Array[RegExMatch] = preset_regex.search_all(result)
+	for j in range(preset_matches.size() - 1, -1, -1):
+		var prm: RegExMatch = preset_matches[j]
+		var prname: String = prm.get_string(1)
+		result = result.substr(0, prm.get_start()) + make_tw_tag("fx_preset", prname) + result.substr(prm.get_end())
+
+	# --- {blackscreen=毫秒} 黑屏（瞬时触发） ---
+	var bs_regex := RegEx.new()
+	bs_regex.compile("\\{blackscreen=(\\d+)\\}")
+	var bs_matches: Array[RegExMatch] = bs_regex.search_all(result)
+	for j in range(bs_matches.size() - 1, -1, -1):
+		var bsm: RegExMatch = bs_matches[j]
+		var bsval: String = bsm.get_string(1)
+		result = result.substr(0, bsm.get_start()) + make_tw_tag("fx_blackscreen", bsval) + result.substr(bsm.get_end())
+
+	# --- {reboot} 重启效果（瞬时触发） ---
+	result = result.replace("{reboot}", make_tw_tag("fx_reboot"))
+
+	# --- {sound=路径} 播放音效（瞬时触发） ---
+	var sound_regex := RegEx.new()
+	sound_regex.compile("\\{sound=([^}]+)\\}")
+	var sound_matches: Array[RegExMatch] = sound_regex.search_all(result)
+	for j in range(sound_matches.size() - 1, -1, -1):
+		var snm: RegExMatch = sound_matches[j]
+		var snpath: String = snm.get_string(1)
+		result = result.substr(0, snm.get_start()) + make_tw_tag("fx_sound", snpath) + result.substr(snm.get_end())
+
+
 	return result
 
 # ============================================================

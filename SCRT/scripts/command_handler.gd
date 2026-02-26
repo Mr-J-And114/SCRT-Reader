@@ -63,6 +63,9 @@ func _register_commands() -> void:
 		"birthday": _cmd_birthday,
 		"users": _cmd_users,
 		"decode": _cmd_decode,
+		"fx_level": _cmd_fx_level,
+		"fx_safe": _cmd_fx_safe,
+		"sound": _cmd_sound,
 	}
 
 	# ── 桌面模式专用命令 ──
@@ -71,6 +74,7 @@ func _register_commands() -> void:
 		"load": _cmd_load,
 		"vdisc": _cmd_vdisc,
 		"deluser": _cmd_deluser,
+		"explore": _cmd_explore,
 	}
 
 	# ── 磁盘模式专用命令 ──
@@ -88,6 +92,7 @@ func _register_commands() -> void:
 		"clearsave": _cmd_clearsave,
 		"radio": _cmd_radio,
 		"decode": _cmd_decode,
+		"explore": _cmd_explore,
 	}
 
 # ══════════════════════════════════════════
@@ -102,6 +107,10 @@ func execute(raw: String) -> void:
 	var args: Array = []
 	for i in range(1, parts.size()):
 		args.append(parts[i])
+
+	# ★ 触发 on_command
+	if main.trigger_sys:
+		main.trigger_sys.on_command(cmd)
 
 	# 记录历史
 	_add_to_history(raw)
@@ -270,6 +279,16 @@ func get_completions(current_text: String) -> Array[String]:
 			for ch in channels:
 				if ch.begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + ch)
+		elif cmd == "fx_level":
+			var fx_options: Array[String] = ["full", "mild", "off"]
+			for opt in fx_options:
+				if opt.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + opt)
+		elif cmd == "fx_safe":
+			var safe_options: Array[String] = ["on", "off"]
+			for opt in safe_options:
+				if opt.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + opt)
 		elif cmd == "profile":
 			for page in ["1", "2"]:
 				if page.begins_with(arg_prefix):
@@ -300,6 +319,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]scan[/color]          扫描可用虚拟磁盘")
 		lines.append("  [color=" + p + "]load <编号>[/color]   加载指定磁盘")
 		lines.append("  [color=" + p + "]vdisc[/color]         查看磁盘信息")
+		lines.append("  [color=" + p + "]explore[/color]       查看探索进度")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 用户管理 ──[/color]")
 		lines.append("  [color=" + p + "]profile [1|2][/color] 查看个人档案 (第1/2页)")
@@ -318,6 +338,10 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
+		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
+		lines.append("  [color=" + p + "]fx_safe[/color]	   光敏安全模式 (on/off)")
 		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
 		lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 补全[/color]")
 	else:
@@ -353,6 +377,10 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
+		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
+		lines.append("  [color=" + p + "]fx_safe[/color]	   光敏安全模式 (on/off)")
 		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
 		lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 补全[/color]")
 
@@ -394,8 +422,16 @@ func _cmd_status(_args: Array = []) -> void:
 
 	main.append_output("\n".join(lines) + "\n", false)
 
-func _cmd_mail(_args: Array = []) -> void:
-	main.append_output("[color=" + T.muted_hex + "]收件箱为空。\n(邮件系统将在后续版本中实现)[/color]\n", false)
+
+func _cmd_mail(args: Array = []) -> void:
+	if not user_mgr.is_logged_in:
+		main.append_output("[color=" + T.error_hex + "]请先登录。[/color]\n", false)
+		return
+	if main.mail_sys != null:
+		await main.mail_sys.handle_mail_command(args)
+	else:
+		main.append_output("[color=" + T.muted_hex + "]邮件系统未初始化。[/color]\n", false)
+
 
 func _cmd_volume(args: Array = []) -> void:
 	var p: String = T.primary_hex
@@ -465,21 +501,31 @@ func _cmd_reboot(_args: Array = []) -> void:
 	main.append_output("[color=" + T.muted_hex + "]正在重启终端...[/color]\n", false)
 	if user_mgr.is_logged_in:
 		user_mgr._save_current_profile()
-	await main.get_tree().create_timer(0.5).timeout
-	main.output_text.text = ""
-	tw.clear_queue()
-	command_history.clear()
-	history_index = -1
-	disc_mgr.reset_all()
-	await main.get_tree().create_timer(0.3).timeout
-	main._start_login_flow()
+	# ★ 使用 CRT shader 重启效果（如果可用）
+	if main.has_method("trigger_reboot"):
+		# trigger_reboot 会处理关机动画 → 清屏 → 开机动画 → 欢迎消息
+		# 但我们还需要重置命令历史和磁盘状态
+		command_history.clear()
+		history_index = -1
+		disc_mgr.reset_all()
+		tw.clear_queue()
+		main.trigger_reboot()
+	else:
+		# 回退：无 shader 效果的普通重启
+		await main.get_tree().create_timer(0.5).timeout
+		main.output_text.text = ""
+		tw.clear_queue()
+		command_history.clear()
+		history_index = -1
+		disc_mgr.reset_all()
+		await main.get_tree().create_timer(0.3).timeout
+		main._start_login_flow()
+
 
 func _cmd_exit(_args: Array = []) -> void:
 	main.append_output("[color=" + T.muted_hex + "]正在关闭终端...[/color]\n", false)
-	if user_mgr.is_logged_in:
-		user_mgr.logout()
-	await main.get_tree().create_timer(0.5).timeout
-	main.get_tree().quit()
+	main._perform_shutdown()
+
 
 # ══════════════════════════════════════════════════════════════
 #  用户系统命令
@@ -612,6 +658,31 @@ func _cmd_load(args: Array = []) -> void:
 func _cmd_vdisc(_args: Array = []) -> void:
 	disc_mgr.show_story_info()
 
+func _cmd_explore(args: Array = []) -> void:
+	if not main.explore_viewer:
+		return
+	# 桌面模式下可以指定磁盘编号: explore 1
+	if main._desktop_mode and not args.is_empty():
+		var idx: int = str(args[0]).to_int()
+		if idx > 0 and idx <= disc_mgr.available_stories.size():
+			# 临时加载指定磁盘的存档数据来显示进度
+			main.explore_viewer.open_for_story(idx - 1)
+			return
+		else:
+			main.append_output("[color=" + T.error_hex + "]无效的磁盘编号。用法: explore <编号>[/color]\n", false)
+			return
+	if main._desktop_mode and args.is_empty():
+		# 桌面模式无参数时提示
+		main.append_output("[color=" + T.muted_hex + "]用法: explore <磁盘编号>  (查看指定磁盘的探索进度)[/color]\n", false)
+		if disc_mgr.available_stories.size() > 0:
+			main.append_output("[color=" + T.muted_hex + "]可用磁盘:[/color]\n", false)
+			for i in range(disc_mgr.available_stories.size()):
+				var info: Dictionary = disc_mgr.available_stories[i]
+				var title: String = str(info.get("title", "未知"))
+				main.append_output("  [color=" + T.primary_hex + "]" + str(i + 1) + "[/color]  " + title + "\n", false)
+		return
+	# 磁盘模式下直接切换
+	main.explore_viewer.toggle()
 # ══════════════════════════════════════════════════════════════
 #  磁盘模式命令
 # ══════════════════════════════════════════════════════════════
@@ -753,10 +824,21 @@ func _cmd_cd(args: Array = []) -> void:
 		main.append_output(box + "\n", false)
 		return
 
+	if main.ui_sound:
+		main.ui_sound.play_click()
+
 	main.current_path = new_path
 	main._update_status_bar()
+	
+	
 	main.append_output("已切换到: " + main.current_path + "\n", false)
 	main.update_ambient_sound()
+	# ★ 触发 on_enter / on_first_enter
+	if main.trigger_sys:
+		main.trigger_sys.on_enter_directory(new_path)
+	# ★ 记录已访问目录
+	if not main.visited_paths.has(new_path):
+		main.visited_paths.append(new_path)
 
 func _cmd_back(_args: Array = []) -> void:
 	if main.current_path == "/":
@@ -767,6 +849,11 @@ func _cmd_back(_args: Array = []) -> void:
 	main._update_status_bar()
 	main.append_output("已返回: " + main.current_path + "\n", false)
 	main.update_ambient_sound()
+	# ★ 触发 on_enter
+	if main.trigger_sys:
+		main.trigger_sys.on_enter_directory(parent_path)
+	if not main.visited_paths.has(parent_path):
+		main.visited_paths.append(parent_path)
 
 func _cmd_open(args: Array = []) -> void:
 	if args.is_empty():
@@ -872,6 +959,8 @@ func _cmd_open(args: Array = []) -> void:
 
 func _display_file(file_path: String, filename: String, content: String) -> void:
 	var p: String = T.primary_hex
+	if main.ui_sound:
+		main.ui_sound.play_click()
 	var m: String = T.muted_hex
 
 	# ★ 头文件解析
@@ -887,6 +976,85 @@ func _display_file(file_path: String, filename: String, content: String) -> void
 		if not header_title.is_empty():
 			display_title = header_title
 
+	# ★ 检查模板类型，决定用哪个查看器
+	var template_name: String = str(header.get("template", "document")).to_lower()
+
+	if template_name == "two_page" and main.two_page_viewer != null:
+		# ── 双页阅读器模式 ──
+		var parsed_content: String = body
+		if crtml != null:
+			parsed_content = crtml.parse(body)
+		if user_mgr.is_logged_in:
+			parsed_content = parsed_content.replace("{username}", user_mgr.get_username())
+
+		var page_data: Array[Dictionary] = [{"content": parsed_content}]
+		main.two_page_viewer.open("two_page", page_data, display_title, Callable())
+
+		# 记录已读
+		if not main.read_files.has(file_path):
+			main.read_files.append(file_path)
+			
+		# ★ 触发 on_open_file 和 on_read_complete
+		if main.trigger_sys:
+			main.trigger_sys.on_open_file(file_path)
+			main.trigger_sys.on_read_complete(file_path)
+		
+		if user_mgr.is_logged_in:
+			user_mgr.increment_files_read()
+		disc_mgr._auto_save()
+		return
+
+	if template_name == "email" and main.email_viewer != null:
+		# ── 邮件查看器模式 ──
+		var parsed_content: String = body
+		if crtml != null:
+			parsed_content = crtml.parse(body)
+		if user_mgr.is_logged_in:
+			parsed_content = parsed_content.replace("{username}", user_mgr.get_username())
+		main.email_viewer.open(display_title, header, parsed_content, Callable())
+		if not main.read_files.has(file_path):
+			main.read_files.append(file_path)
+		# ★ 触发 on_open_file 和 on_read_complete
+		if main.trigger_sys:
+			main.trigger_sys.on_open_file(file_path)
+			main.trigger_sys.on_read_complete(file_path)
+		if user_mgr.is_logged_in:
+			user_mgr.increment_files_read()
+		disc_mgr._auto_save()
+		return
+
+
+		# 聊天记录模板
+	if template_name == "chat" and main.chat_viewer != null:
+		main.chat_viewer.open(display_title, header, body, Callable())
+		if not main.read_files.has(file_path):
+			main.read_files.append(file_path)
+		# ★ 触发 on_open_file 和 on_read_complete
+		if main.trigger_sys:
+			main.trigger_sys.on_open_file(file_path)
+			main.trigger_sys.on_read_complete(file_path)
+		if user_mgr.is_logged_in:
+			user_mgr.increment_files_read()
+		disc_mgr._auto_save()
+		return
+
+
+		# 文章模板
+	if template_name == "article" and main.article_viewer != null:
+		main.article_viewer.open(display_title, header, body, Callable())
+		if not main.read_files.has(file_path):
+			main.read_files.append(file_path)
+		# ★ 触发 on_open_file 和 on_read_complete
+		if main.trigger_sys:
+			main.trigger_sys.on_open_file(file_path)
+			main.trigger_sys.on_read_complete(file_path)
+		if user_mgr.is_logged_in:
+			user_mgr.increment_files_read()
+		disc_mgr._auto_save()
+		return
+
+
+	# ── 默认终端模式（原有逻辑） ──
 	main.append_output("\n[color=" + p + "]══════════ " + display_title + " ══════════[/color]\n\n", false)
 
 	# ★ 如果有头文件，显示标题横幅
@@ -895,34 +1063,69 @@ func _display_file(file_path: String, filename: String, content: String) -> void
 		if not banner.is_empty():
 			main.append_output(banner + "\n", false)
 
-	# CRT-ML 解析
-	var parsed_content: String = body
-	if crtml != null:
-		parsed_content = crtml.parse(body)
+		# CRT-ML 解析
+		var parsed_content: String = body
+		if crtml != null:
+			parsed_content = crtml.parse(body)
 
-	# 替换 {username} 变量
-	if user_mgr.is_logged_in:
-		parsed_content = parsed_content.replace("{username}", user_mgr.get_username())
+		# 替换 {username} 变量
+		if user_mgr.is_logged_in:
+			parsed_content = parsed_content.replace("{username}", user_mgr.get_username())
 
-	main.append_output(parsed_content + "\n", true)
+		parsed_content = _replace_inline_image_placeholders(parsed_content)
 
-	# 记录已读
-	if not main.read_files.has(file_path):
-		main.read_files.append(file_path)
+		main.append_output(parsed_content + "\n", true)
 
-	# 统计文件阅读数
-	if user_mgr.is_logged_in:
-		user_mgr.increment_files_read()
+		# 记录已读
+		if not main.read_files.has(file_path):
+			main.read_files.append(file_path)
 
-	# 自动保存
-	disc_mgr._auto_save()
+		# ★ 触发 on_open_file 和 on_read_complete
+		if main.trigger_sys:
+			main.trigger_sys.on_open_file(file_path)
+			main.trigger_sys.on_read_complete(file_path)
 
-	# 等待打字机完成
-	while tw.is_typing:
-		await main.get_tree().process_frame
+		# 统计文件阅读数
+		if user_mgr.is_logged_in:
+			user_mgr.increment_files_read()
 
-	main.append_output("\n[color=" + p + "]══════════ 文件结束 ══════════[/color]\n", false)
-	main.append_output("[color=" + m + "]输入任意命令返回终端。[/color]\n", false)
+		# 自动保存
+		disc_mgr._auto_save()
+
+		# 等待打字机完成
+		while tw.is_typing:
+			await main.get_tree().process_frame
+
+		main.append_output("\n[color=" + p + "]══════════ 文件结束 ══════════[/color]\n", false)
+		main.append_output("[color=" + m + "]输入任意命令返回终端。[/color]\n", false)
+
+	else:
+		# 无头文件：直接显示原始内容
+		var parsed_content: String = body
+		if crtml != null:
+			parsed_content = crtml.parse(body)
+		if user_mgr.is_logged_in:
+			parsed_content = parsed_content.replace("{username}", user_mgr.get_username())
+		
+		parsed_content = _replace_inline_image_placeholders(parsed_content)
+		
+		main.append_output(parsed_content + "\n", true)
+		
+		# 记录已读
+		if not main.read_files.has(file_path):
+			main.read_files.append(file_path)
+		# ★ 触发
+		if main.trigger_sys:
+			main.trigger_sys.on_open_file(file_path)
+			main.trigger_sys.on_read_complete(file_path)
+		if user_mgr.is_logged_in:
+			user_mgr.increment_files_read()
+		disc_mgr._auto_save()
+		while tw.is_typing:
+			await main.get_tree().process_frame
+		main.append_output("\n[color=" + p + "]══════════ 文件结束 ══════════[/color]\n", false)
+		main.append_output("[color=" + m + "]输入任意命令返回终端。[/color]\n", false)
+
 
 
 ## ★ 替换内联图片占位符为纯文本链接（终端模式下不嵌入真实图片）
@@ -986,6 +1189,10 @@ func _verify_password(password: String) -> void:
 				main.append_output(box + "\n", false)
 				disc_mgr._auto_save()
 				main._update_status_bar()
+					# ★ 触发权限变化
+				if main.trigger_sys:
+					main.trigger_sys.on_level_change(level)
+
 				return
 			else:
 				main.append_output("[color=" + T.warning_hex + "]当前等级已达到或超过该密码对应的等级。[/color]\n", false)
@@ -1008,6 +1215,10 @@ func _verify_password(password: String) -> void:
 				main.append_output(box + "\n", false)
 				disc_mgr._auto_save()
 				main._update_status_bar()
+				# ★ 触发权限变化
+				if main.trigger_sys:
+					main.trigger_sys.on_level_change(level)
+
 				return
 			else:
 				main.append_output("[color=" + T.warning_hex + "]当前等级已达到或超过该密码对应的等级。[/color]\n", false)
@@ -1029,7 +1240,12 @@ func verify_file_password(password: String) -> void:
 		main._file_password_filename = ""
 		return
 
-	var expected_password: String = str(fs.story_file_passwords.get(fp_key, {}).get("password", ""))
+	var fp_value = fs.story_file_passwords.get(fp_key, "")
+	var expected_password: String = ""
+	if fp_value is Dictionary:
+		expected_password = str(fp_value.get("password", ""))
+	else:
+		expected_password = str(fp_value)
 	if password == expected_password:
 		fs.unlocked_file_passwords.append(file_path)
 		main.append_output("[color=" + T.success_hex + "]文件密码正确，已解锁。[/color]\n", false)
@@ -1077,6 +1293,117 @@ func _cmd_radio(_args: Array = []) -> void:
 		return
 	main.append_output("[color=" + T.muted_hex + "]正在启动无线电接收器...[/color]\n", false)
 	main.open_radio_receiver()
+
+
+# ══════════════════════════════════════════
+#  效果强度设置命令
+# ══════════════════════════════════════════
+func _cmd_fx_level(args: Array = []) -> void:
+	if main.effect_settings == null:
+		main.append_output("[color=" + T.error_hex + "]效果设置模块未初始化。[/color]\n", false)
+		return
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var s: String = T.success_hex
+	var w: String = T.warning_hex
+	var e: String = T.error_hex
+	if args.is_empty():
+		var current: String = main.effect_settings.get_level_name()
+		var lines: Array[String] = []
+		lines.append("[color=" + p + "]═══════════ 效果强度设置 ═══════════[/color]")
+		lines.append("")
+		lines.append("  当前等级: [color=" + p + "]" + current + "[/color]")
+		lines.append("")
+		lines.append("  [color=" + p + "]full[/color]   完整效果（默认）")
+		lines.append("  [color=" + w + "]mild[/color]   温和效果（强度降低50%，持续时间缩短）")
+		lines.append("  [color=" + m + "]off[/color]	关闭所有动态视觉效果")
+		lines.append("")
+		lines.append("[color=" + p + "]════════════════════════════════════[/color]")
+		lines.append("[color=" + m + "]用法: fx_level <full|mild|off>[/color]")
+		main.append_output("\n".join(lines) + "\n", false)
+		return
+	var level_str: String = str(args[0]).to_lower()
+	match level_str:
+		"full":
+			main.effect_settings.set_level(EffectSettings.Level.FULL)
+			main.append_output("[color=" + s + "]效果等级已设为: 完整 (FULL)[/color]\n", false)
+		"mild":
+			main.effect_settings.set_level(EffectSettings.Level.MILD)
+			main.append_output("[color=" + w + "]效果等级已设为: 温和 (MILD) — 强度降低50%[/color]\n", false)
+		"off":
+			main.effect_settings.set_level(EffectSettings.Level.OFF)
+			main.append_output("[color=" + m + "]所有动态视觉效果已关闭[/color]\n", false)
+		_:
+			main.append_output("[color=" + e + "]无效选项: " + level_str + "[/color]\n", false)
+			main.append_output("[color=" + m + "]可选: full / mild / off[/color]\n", false)
+
+func _cmd_fx_safe(args: Array = []) -> void:
+	if main.effect_settings == null:
+		main.append_output("[color=" + T.error_hex + "]效果设置模块未初始化。[/color]\n", false)
+		return
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var s: String = T.success_hex
+	var w: String = T.warning_hex
+	if args.is_empty():
+		var status: String = "开启" if main.effect_settings.photosensitive_mode else "关闭"
+		var status_color: String = s if main.effect_settings.photosensitive_mode else m
+		var lines: Array[String] = []
+		lines.append("[color=" + p + "]═══════════ 光敏安全模式 ═══════════[/color]")
+		lines.append("")
+		lines.append("  当前状态: [color=" + status_color + "]" + status + "[/color]")
+		lines.append("")
+		lines.append("  开启后将禁用以下效果:")
+		lines.append("  [color=" + m + "]· 快速闪烁 / 高强度故障效果[/color]")
+		lines.append("  [color=" + m + "]· Jumpscare 闪屏[/color]")
+		lines.append("  [color=" + m + "]· 突然黑屏[/color]")
+		lines.append("  [color=" + m + "]· 高强度噪点爆发[/color]")
+		lines.append("")
+		lines.append("[color=" + p + "]════════════════════════════════════[/color]")
+		lines.append("[color=" + m + "]用法: fx_safe <on|off>[/color]")
+		main.append_output("\n".join(lines) + "\n", false)
+		return
+	var val: String = str(args[0]).to_lower()
+	if val in ["on", "true", "1", "yes"]:
+		main.effect_settings.set_photosensitive(true)
+		main.append_output("[color=" + s + "]光敏安全模式已开启[/color]\n", false)
+		main.append_output("[color=" + m + "]已禁用: 快速闪烁、强故障、jumpscare、突然黑屏[/color]\n", false)
+	elif val in ["off", "false", "0", "no"]:
+		main.effect_settings.set_photosensitive(false)
+		main.append_output("[color=" + w + "]光敏安全模式已关闭[/color]\n", false)
+	else:
+		main.append_output("[color=" + T.error_hex + "]无效选项: " + val + "[/color]\n", false)
+		main.append_output("[color=" + m + "]用法: fx_safe on / fx_safe off[/color]\n", false)
+
+
+func _cmd_sound(args: Array = []) -> void:
+	if main.ui_sound == null:
+		main.append_output("[color=" + T.error_hex + "]音效系统未初始化。[/color]\n", false)
+		return
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var s: String = T.success_hex
+	if args.is_empty():
+		var status: String = "开启" if main.ui_sound.enabled else "关闭"
+		var lines: Array[String] = []
+		lines.append("[color=" + p + "]═══════════ 操作音效 ═══════════[/color]")
+		lines.append("")
+		lines.append("  状态: [color=" + p + "]" + status + "[/color]")
+		lines.append("")
+		lines.append("[color=" + p + "]════════════════════════════════[/color]")
+		lines.append("[color=" + m + "]用法: sound <on|off>[/color]")
+		main.append_output("\n".join(lines) + "\n", false)
+		return
+	var val: String = str(args[0]).to_lower()
+	if val in ["on", "true", "1"]:
+		main.ui_sound.set_enabled(true)
+		main.append_output("[color=" + s + "]操作音效已开启[/color]\n", false)
+	elif val in ["off", "false", "0"]:
+		main.ui_sound.set_enabled(false)
+		main.append_output("[color=" + m + "]操作音效已关闭[/color]\n", false)
+	else:
+		main.append_output("[color=" + T.error_hex + "]用法: sound on / sound off[/color]\n", false)
+
 
 
 # ══════════════════════════════════════════
@@ -1137,6 +1464,3 @@ func _cmd_decode(args: Array = []) -> void:
 	# 传递参数给 decode_viewer 打开
 	main.append_output("[color=" + T.muted_hex + "]正在启动密码解码器...[/color]\n", false)
 	main.open_decode_viewer(args)
-
-
-	

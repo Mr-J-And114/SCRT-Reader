@@ -32,6 +32,10 @@ var path_headers: Dictionary = {}
 ## ★ 新增：文件描述 { "/dir_path": { "folder_name": "xxx", "folder_description": "xxx", "files": { "name": "desc" } } }
 var file_descriptions: Dictionary = {}
 
+# 运行时权限覆盖（触发器 lock/unlock 专用）
+var runtime_permissions: Dictionary = {}   # "/path" -> int
+
+
 ## 检查路径是否在隐藏目录中
 func is_hidden_path(path: String) -> bool:
 	path = normalize_path(path)
@@ -114,16 +118,24 @@ func get_children_at_path(path: String) -> Array[String]:
 func get_required_clearance(path: String) -> int:
 	path = normalize_path(path)
 	var highest: int = 0
+	# 来自故事包的静态权限
 	for perm_path in story_permissions.keys():
 		var perm_value: int = int(float(story_permissions[perm_path]))
 		var normalized_perm: String = normalize_path(perm_path)
-		if path == normalized_perm:
+		if path == normalized_perm or path.begins_with(normalized_perm + "/"):
 			highest = maxi(highest, perm_value)
-			continue
-		var dir_prefix: String = normalized_perm + "/"
-		if path.begins_with(dir_prefix):
+	# 运行时覆盖（lock/unlock）
+	for perm_path in runtime_permissions.keys():
+		var perm_value: int = int(float(runtime_permissions[perm_path]))
+		var normalized_perm: String = normalize_path(perm_path)
+		if path == normalized_perm or path.begins_with(normalized_perm + "/"):
 			highest = maxi(highest, perm_value)
 	return highest
+
+func set_required_clearance(path: String, level: int) -> void:
+	path = normalize_path(path)
+	runtime_permissions[path] = maxi(0, level)
+
 
 func has_clearance(path: String) -> bool:
 	return player_clearance >= get_required_clearance(path)
@@ -422,3 +434,19 @@ func clear_all() -> void:
 	ambient_sounds.clear()
 	path_headers.clear()
 	file_descriptions.clear()
+	runtime_permissions.clear()
+
+## 读取指定路径文件的文本内容（供 trigger_system / mail_system 等调用）
+func read_text(path: String) -> String:
+	var node = get_node_at_path(path)
+	if node == null:
+		return ""
+	if node is Dictionary:
+		return str(node.get("content", ""))
+	if "content" in node:
+		return str(node.content)
+	return ""
+
+
+
+	

@@ -3,48 +3,48 @@
 	"avatar": "",
 	"badge": "O5-COUNCIL",
 	"birthday": "",
-	"command_count": 287,
-	"created_at": "2026-02-15 15:06:42",
-	"discs_loaded_count": 119,
-	"files_read_count": 14.0,
-	"last_fail_time": "2026-02-23 10:56:38",
-	"last_login": "2026-02-23 13:46:07",
-	"login_count": 127,
-	"login_fail_count": 0,
+	"command_count": 108.0,
+	"created_at": "2026-02-24 22:23:44",
+	"discs_loaded_count": 25.0,
+	"files_read_count": 3.0,
+	"last_fail_time": "2026-02-25 14:02:12",
+	"last_login": "2026-02-25 14:01:16",
+	"login_count": 17.0,
+	"login_fail_count": 1,
 	"password": "admin",
 	"preferences": {
 		"theme": "",
 		"typing_speed": 1.0
 	},
 	"role": "admin",
-	"session_count": 1.0,
+	"session_count": 0.0,
 	"system_notes": [
 		{
 			"content": "管理员账户已自动创建。此账户拥有最高权限。",
-			"date": "2026-02-15 15:06:42",
+			"date": "2026-02-24 22:23:44",
 			"from": "SYSTEM",
 			"tone": "neutral"
 		},
 		{
 			"content": "欢迎来到基金会终端系统。请谨慎操作。",
-			"date": "2026-02-15 15:06:42",
+			"date": "2026-02-24 22:23:44",
 			"from": "O5-1",
 			"tone": "warning"
 		},
 		{
 			"content": "欢迎 Admin，这是综合演示磁盘。里面有些有趣的东西等你发现。",
-			"date": "2026-02-22 22:18:36",
+			"date": "2026-02-25 11:39:19",
 			"from": "Dr. Bright",
 			"tone": "positive"
 		},
 		{
 			"content": "Admin，请注意：无线电监听室中的信号内容为实时模拟，不代表真实通讯。",
-			"date": "2026-02-22 22:18:36",
+			"date": "2026-02-25 11:39:19",
 			"from": "系统管理员",
 			"tone": "neutral"
 		}
 	],
 	"title": "系统管理员",
-	"total_time_seconds": 278.0,
+	"total_time_seconds": 0.0,
 	"username": "Admin"
 }

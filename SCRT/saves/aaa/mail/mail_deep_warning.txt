@@ -1,0 +1,34 @@
+---HEADER---
+template: email
+title: DEEP CONTAINMENT BREACH RISK
+mail_delay: 0
+mail_priority: high
+---END_HEADER---
+
+From: O5 Automated Warning System
+To: {username}
+Subject: DEEP CONTAINMENT BREACH RISK
+Priority: high
+
+---
+
+{color:error}=== O5 AUTOMATED WARNING ==={/color}
+{color:error}=== THIS IS A GLOBAL ALERT ==={/color}
+
+Operator {username} has accessed Deep Containment.
+
+The entity within has demonstrated awareness of terminal
+operators. Previous personnel who accessed this zone
+reported the following:
+
+- 73% experienced persistent auditory phenomena
+- 41% reported feeling "watched" for days afterward
+- 12% required Class-B amnestic treatment
+- ||3% could not be accounted for||
+
+This message has been saved to your permanent record.
+There is no undo.
+
+{color:warning}You chose to be here. Remember that.{/color}
+
+{color:muted}-- O5 Automated Warning System --{/color}

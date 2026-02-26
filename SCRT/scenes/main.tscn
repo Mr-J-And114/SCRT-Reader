@@ -54,6 +54,9 @@ shader_parameter/vignette_size = 0.6
 shader_parameter/flicker_intensity = 0.03
 shader_parameter/flicker_speed = 8.0
 shader_parameter/noise_intensity = 0.04
+shader_parameter/tear_strength = 0.0
+shader_parameter/tear_speed = 3.0
+shader_parameter/tear_count = 3.0
 shader_parameter/glow_intensity = 0.9
 shader_parameter/bloom_spread = 0.800000038
 shader_parameter/bloom_intensity = 0.4
@@ -63,6 +66,14 @@ shader_parameter/brightness = 1.20000003325
 shader_parameter/contrast = 1.1
 shader_parameter/max_brightness = 1.0
 shader_parameter/tonemap_compensation = 1.6
+shader_parameter/glitch_intensity = 0.0
+shader_parameter/glitch_line_speed = 8.0
+shader_parameter/glitch_line_density = 10.0
+shader_parameter/glitch_color_drift = 0.0
+shader_parameter/noise_burst = 0.0
+shader_parameter/shake_offset = Vector2(0, 0)
+shader_parameter/screen_height_ratio = 1.0
+shader_parameter/boot_glow = 0.0
 
 [node name="Main" type="Control" unique_id=1421056992]
 layout_mode = 3

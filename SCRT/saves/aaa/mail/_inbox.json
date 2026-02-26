@@ -1,0 +1,22 @@
+[
+	{
+		"delivered_at": "2026-02-26 13:21:52",
+		"from": "O5 Automated Warning System",
+		"id": "mail_deep_warning",
+		"priority": "high",
+		"read": true,
+		"story_id": "trigger_test_pack",
+		"template": "email",
+		"title": "DEEP CONTAINMENT BREACH RISK"
+	},
+	{
+		"delivered_at": "2026-02-26 13:23:52",
+		"from": "O5-██",
+		"id": "mail_o5_welcome",
+		"priority": "high",
+		"read": true,
+		"story_id": "trigger_test_pack",
+		"template": "email",
+		"title": "Welcome to O5 Clearance"
+	}
+]

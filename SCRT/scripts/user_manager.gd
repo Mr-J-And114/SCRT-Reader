@@ -62,6 +62,22 @@ func _get_global_config_path() -> String:
 func get_save_path_for_user(username: String, story_id: String) -> String:
 	return _get_user_dir(username) + "save_" + story_id + ".json"
 
+func get_mail_dir(username: String = "") -> String:
+	if username.is_empty():
+		if not is_logged_in:
+			return ""
+		username = get_username()
+	return _get_user_dir(username) + "mail/"
+
+func ensure_mail_dir(username: String = "") -> String:
+	var mail_dir: String = get_mail_dir(username)
+	if mail_dir.is_empty():
+		return ""
+	if not DirAccess.dir_exists_absolute(mail_dir):
+		DirAccess.make_dir_recursive_absolute(mail_dir)
+	return mail_dir
+
+
 # ============================================================
 # 管理员预设账户
 # ============================================================

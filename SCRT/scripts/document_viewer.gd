@@ -27,7 +27,6 @@ var _on_exit_callback: Callable = Callable()
 #  UI 节点引用
 # ══════════════════════════════════════════
 var overlay: Panel = null
-var title_label: RichTextLabel = null
 var left_page: RichTextLabel = null
 var right_page: RichTextLabel = null
 var separator_line: Panel = null
@@ -174,6 +173,9 @@ func _ensure_overlay() -> void:
 	nav_label.scroll_active = false
 	nav_label.selection_enabled = false
 	nav_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# ★ 应用 CRT-ML 字体（与其他查看器保持一致）
+	CrtmlParser.apply_fonts(nav_label)
+	UIManager._apply_bold_font(nav_label)
 	if theme_colors:
 		nav_label.add_theme_color_override("default_color", theme_colors.muted)
 	vbox.add_child(nav_label)
@@ -254,6 +256,14 @@ func open(p_type: String, p_pages: Array[Dictionary], p_title: String = "", p_on
 	# 更新状态栏
 	main.path_label.text = "DOCUMENT VIEWER | " + p_title + " | Q/Esc 退出"
 
+	# ★ 确保 overlay 在最顶层接收鼠标事件
+	var root_control: Control = main as Control
+	root_control.move_child(overlay, root_control.get_child_count() - 1)
+	# 把 CRT 效果层保持在最上面（仅渲染，不拦截事件）
+	var crt_node: Node = root_control.get_node_or_null("CRTEffect")
+	if crt_node:
+		root_control.move_child(crt_node, root_control.get_child_count() - 1)
+
 	# 显示覆盖层
 	overlay.visible = true
 
@@ -272,9 +282,8 @@ func close() -> void:
 	if overlay and is_instance_valid(overlay):
 		overlay.visible = false
 
-	# ★ 恢复 output_text 内容
-	main.output_text.text = ""
-	main.output_text.append_text(_cached_output_text)
+	# ★ 恢复 output_text 内容（直接赋值 text 属性，保留 BBCode 格式）
+	main.output_text.text = _cached_output_text
 	_cached_output_text = ""
 
 	# 恢复终端

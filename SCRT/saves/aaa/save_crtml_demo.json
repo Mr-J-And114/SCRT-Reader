@@ -1,0 +1,24 @@
+{
+	"current_path": "/",
+	"mail_data": {
+		"delivered_ids": [],
+		"temp_inbox": []
+	},
+	"player_clearance": 0,
+	"radio_data": {
+		"beacon_log": [],
+		"bookmarks": [],
+		"discovered": [],
+		"log": []
+	},
+	"read_files": [
+		"/crtml_guide.txt"
+	],
+	"story_id": "crtml_demo",
+	"trigger_data": {
+
+	},
+	"unlocked_file_passwords": [],
+	"unlocked_passwords": [],
+	"username": "aaa"
+}

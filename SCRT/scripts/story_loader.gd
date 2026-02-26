@@ -633,17 +633,76 @@ func _normalize_passwords(raw: Dictionary) -> Dictionary:
 # ============================================================
 func _parse_manifest(content: String) -> void:
 	var current_section: String = ""
-	for line in content.split("\n"):
-		line = line.strip_edges()
+	var in_multiline: bool = false
+	var ml_key: String = ""
+	var ml_buf: Array[String] = []
+
+	for raw_line in content.split("\n"):
+		var line: String = raw_line.strip_edges()
 		if line.is_empty() or line.begins_with("#") or line.begins_with(";"):
 			continue
+
+		if in_multiline:
+			# 结束符: 单独一行 """ 或 行尾以 """ 结束
+			if line == "\"\"\"" or line.ends_with("\"\"\""):
+				# 收集直到 """ 之前的内容
+				var end_at: int = raw_line.find("\"\"\"")
+				var to_append: String = raw_line.substr(0, end_at)
+				ml_buf.append(to_append)
+				if not manifest.has(current_section):
+					manifest[current_section] = {}
+				manifest[current_section][ml_key] = "\n".join(ml_buf)
+				in_multiline = false
+				ml_key = ""
+				ml_buf.clear()
+			else:
+				# 保留原始行，不 strip_edges，保留格式
+				ml_buf.append(raw_line)
+			continue
+
 		if line.begins_with("[") and line.ends_with("]"):
 			current_section = line.substr(1, line.length() - 2)
 			if not manifest.has(current_section):
 				manifest[current_section] = {}
 			continue
+
 		var eq_pos: int = line.find("=")
 		if eq_pos > 0 and not current_section.is_empty():
 			var key: String = line.substr(0, eq_pos).strip_edges()
-			var value: String = line.substr(eq_pos + 1).strip_edges()
-			manifest[current_section][key] = value
+			var value_raw: String = line.substr(eq_pos + 1).strip_edges()
+
+			# 三引号多行开始
+			if value_raw == "\"\"\"":
+				in_multiline = true
+				ml_key = key
+				ml_buf.clear()
+				continue
+
+			manifest[current_section][key] = _cfg_parse_scalar(value_raw)
+
+	# 旧格式密码表 → 标准化
+	if manifest.has("passwords") and manifest["passwords"] is Dictionary:
+		manifest["passwords"] = _normalize_passwords(manifest["passwords"])
+
+
+func _cfg_parse_scalar(v: String) -> Variant:
+	var s: String = v.strip_edges()
+	# 去掉成对引号
+	if (s.begins_with("\"") and s.ends_with("\"")) or (s.begins_with("'") and s.ends_with("'")):
+		return s.substr(1, s.length() - 2)
+	# 转 bool/int/float
+	var lower := s.to_lower()
+	if lower == "true":
+		return true
+	if lower == "false":
+		return false
+	if s.is_valid_int():
+		return int(s)
+	if s.is_valid_float():
+		return float(s)
+	# 默认按字符串
+	return s
+
+
+
+	

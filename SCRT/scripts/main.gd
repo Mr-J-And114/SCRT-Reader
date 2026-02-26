@@ -13,9 +13,16 @@ var cmd_handler = null
 var disc_mgr = null
 var user_mgr = null
 var crtml = null
+# 触发器
+var trigger_sys: TriggerSystem = null
+var mail_sys: MailSystem = null
 # ★ 文档查看器
 var doc_viewer: DocumentViewer = null
 var profile_builder: ProfileBuilder = null
+var two_page_viewer: TwoPageReader = null
+var email_viewer: EmailViewer = null
+var chat_viewer: ChatViewer = null
+var article_viewer: ArticleViewer = null
 
 # ══════════════════════════════════════════
 #  UI 节点
@@ -28,7 +35,14 @@ var profile_builder: ProfileBuilder = null
 @onready var status_frame: PanelContainer = $MainContent/StatusFrame
 @onready var input_frame: PanelContainer = $MainContent/InputFrame
 @onready var prompt_label: Label = $MainContent/InputFrame/InputArea/Prompt
+var crt_shader = null  # CRTShader 效果控制器引用（crt_shader.gd 实例）
+var effect_sys: EffectSystem = null  # 效果编排系统
+var effect_settings: EffectSettings = null  # 效果强度与安全设置
+var ui_sound: UiSound = null  # 操作音效系统
+var boot_sequence: BootSequence = null  # 开关机动画序列
 var background: TextureRect = null
+var background_base: ColorRect = null      # 纯黑底 Background(ColorRect)
+var background_logo: TextureRect = null    # SCP logo BackgroundLogo
 @onready var audio_manager: Node = $AudioManager
 
 # ══════════════════════════════════════════
@@ -37,6 +51,7 @@ var background: TextureRect = null
 var _desktop_mode: bool = true
 var current_path: String = "/"
 var read_files: Array[String] = []
+var visited_paths: Array[String] = []       # ★ 已访问的目录列表
 var unlocked_passwords: Array[String] = []
 var story_id: String = ""
 var story_manifest: Dictionary = {}
@@ -100,6 +115,7 @@ var _inline_video_path: String = ""
 var _inline_video_timer: float = 0.0
 var _inline_video_active: bool = false
 
+var explore_viewer: ExploreViewer = null
 
 # ══════════════════════════════════════════
 #  初始化
@@ -113,7 +129,7 @@ func _ready() -> void:
 	tw = Typewriter.new()
 	tw.name = "Typewriter"
 	add_child(tw)
-	tw.setup(output_text, scroll_container)
+	tw.setup(output_text, scroll_container, self)
 	tw.typing_completed.connect(_on_typing_completed)
 	tw.progress_completed.connect(_on_typing_completed)
 
@@ -152,6 +168,18 @@ func _ready() -> void:
 	cmd_handler = CommandHandler.new()
 	cmd_handler.setup(self, fs, T, tw, disc_mgr, user_mgr, crtml)
 
+	# ★ 触发器系统
+	trigger_sys = TriggerSystem.new()
+	trigger_sys.setup(self, fs, T)
+
+# ★ 邮件系统
+	mail_sys = MailSystem.new()
+	mail_sys.setup(self, fs, T)
+
+	# 互相注入
+	trigger_sys.set_mail_system(mail_sys)
+	mail_sys.set_trigger_system(trigger_sys)
+
 	# ★ 文档查看器初始化
 	doc_viewer = DocumentViewer.new()
 	doc_viewer.setup(self, fs, T)
@@ -159,12 +187,60 @@ func _ready() -> void:
 	profile_builder = ProfileBuilder.new()
 	profile_builder.setup(self, fs, T, doc_viewer, user_mgr)
 
+	# 双页阅读器模板初始化
+	two_page_viewer = TwoPageReader.new()
+	two_page_viewer.setup(self, fs, T)
+
+	# ★ 探索进度查看器
+	explore_viewer = ExploreViewer.new()
+	explore_viewer.setup(self, fs, T)
+
+	# 邮件查看器初始化
+	email_viewer = EmailViewer.new()
+	email_viewer.setup(self, fs, T)
+
+	chat_viewer = ChatViewer.new()
+	chat_viewer.setup(self, fs, T)
+	article_viewer = ArticleViewer.new()
+	article_viewer.setup(self, fs, T)
+
 	# UI 初始化
 	background = UIManager.setup_background(self, save_mgr.get_game_root_dir())
+	
+		# 获取背景相关节点引用
+	background_base = $Background as ColorRect if has_node("Background") else null
+	if has_node("Background/CenterContainer/BackgroundLogo"):
+		background_logo = $Background/CenterContainer/BackgroundLogo as TextureRect
+
+	
 	UIManager.setup_main_content(self, $MainContent)
 	UIManager.setup_all_styles(status_frame, path_label, mail_icon,
 		input_frame, input_field, output_text, scroll_container)
 	UIManager.setup_crt_effect($CRTEffect)
+	
+	# 缓存 CRT Shader 控制器引用
+	var crt_node: Node = $CRTEffect
+	if crt_node:
+		for child in crt_node.get_children():
+			if child.has_method("play_glitch"):
+				crt_shader = child
+				break
+	if crt_shader == null:
+		push_warning("[Main] 未找到 crt_shader.gd 控制器节点")
+	# 初始化效果强度设置
+	effect_settings = EffectSettings.new()
+	effect_settings.load_settings()
+	# 初始化操作音效系统
+	ui_sound = UiSound.new()
+	ui_sound.setup(get_tree())
+	boot_sequence = BootSequence.new()
+	boot_sequence.setup(self, audio_manager, crt_shader)
+	# 初始化效果编排系统
+	effect_sys = EffectSystem.new()
+	effect_sys.setup(self, fs, T, audio_manager, crt_shader)
+	print("[Main] 效果编排系统已初始化")
+
+	
 	UIManager.setup_custom_cursor(self)
 
 	# 提示符颜色跟随主题
@@ -181,6 +257,7 @@ func _ready() -> void:
 
 	# 信号连接
 	input_field.text_submitted.connect(_on_input_submitted)
+	input_field.text_changed.connect(_on_input_text_changed)
 	output_text.meta_clicked.connect(_on_meta_clicked)
 	input_field.focus_entered.connect(_on_input_focus_entered)
 	input_field.focus_exited.connect(_on_input_focus_exited)
@@ -201,19 +278,70 @@ func _ready() -> void:
 # ══════════════════════════════════════════
 #  登录流程
 # ══════════════════════════════════════════
+var _boot_count: int = 0  # 开机次数计数器（0=首次，1+=后续）
+
+
 func _start_login_flow() -> void:
+	# 每次都播放开机动画
+	if boot_sequence:
+		_boot_count += 1
+		_play_boot_then_login()
+		return
+	_show_login_prompt()
+
+
+func _play_boot_then_login() -> void:
+	# 开机前：通过 shader uniform 隐藏背景和 logo
+	_set_background_shader_value("brightness", 0.0)
+	_set_background_shader_value("alpha", 0.0)
+	_set_logo_shader_value("brightness", 0.0)
+	_set_logo_shader_value("alpha", 0.0)
+	# 隐藏输入相关UI
+	input_field.editable = false
+	input_field.visible = false
+	status_frame.visible = false
+	input_frame.visible = false
+	output_text.text = ""
+	# 告诉 boot_sequence 是否可跳过
+	boot_sequence.skippable = (_boot_count > 1)
+	# 连接完成信号
+	if not boot_sequence.boot_completed.is_connected(_on_boot_sequence_done):
+		boot_sequence.boot_completed.connect(_on_boot_sequence_done, CONNECT_ONE_SHOT)
+	# 延迟两帧确保 deferred 节点就绪
+	await get_tree().process_frame
+	await get_tree().process_frame
+	boot_sequence.play_boot()
+
+
+func _on_boot_sequence_done() -> void:
+	# 恢复UI
+	status_frame.visible = true
+	input_frame.visible = true
+	input_field.visible = true
+	input_field.editable = true
+	# 恢复背景和logo到正常状态（通过shader uniform）
+	_set_background_shader_value("brightness", 0.688)
+	_set_background_shader_value("alpha", 0.5)
+	_set_logo_shader_value("brightness", 0.0)  # logo 默认 brightness=0
+	_set_logo_shader_value("alpha", 0.4)
+	await get_tree().create_timer(0.3).timeout
+	output_text.text = ""
+	if audio_manager and audio_manager.has_method("play_beep"):
+		audio_manager.play_beep()
+	_show_login_prompt()
+
+
+func _show_login_prompt() -> void:
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
 	var w: String = T.warning_hex
-
 	var login_box: String = fs.build_box([
 		"SCP FOUNDATION SECURE TERMINAL",
-        "SECURE · CONTAIN · PROTECT"
+		"SECURE · CONTAIN · PROTECT"
 	] as Array[String], p)
 	output_text.append_text(login_box + "\n\n")
 	output_text.append_text("[color=" + m + "]身份验证系统 v2.0[/color]\n")
 	output_text.append_text("[color=" + m + "]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/color]\n\n")
-
 	var users: Array[String] = user_mgr.get_all_users()
 	if users.size() > 0:
 		output_text.append_text("[color=" + m + "]已注册操作员:[/color]\n")
@@ -225,20 +353,21 @@ func _start_login_flow() -> void:
 		output_text.append_text("\n")
 	else:
 		output_text.append_text("[color=" + m + "]未检测到已注册操作员。[/color]\n\n")
-
 	output_text.append_text("[color=" + m + "]输入用户名登录，或输入 [/color][color=" + p + "]register[/color][color=" + m + "] 注册新账户。[/color]\n\n")
-
 	var last_user: String = user_mgr.get_last_login_user()
 	if not last_user.is_empty():
 		output_text.append_text("[color=" + p + "]操作员代号 [" + last_user + "]: [/color]")
 	else:
 		output_text.append_text("[color=" + p + "]操作员代号: [/color]")
-
 	_login_mode = true
 	_login_step = 0
 	_login_username_input = ""
+	input_field.grab_focus()
 	_update_status_bar_login()
 	_request_scroll()
+
+
+
 
 # ══════════════════════════════════════════
 #  注册流程
@@ -262,15 +391,41 @@ func _start_register_flow() -> void:
 func _enter_desktop_after_login(message: String) -> void:
 	var m: String = T.muted_hex
 	output_text.append_text("\n[color=" + m + "]" + message + "[/color]\n")
+	# 加载用户自定义开机配置
+	if boot_sequence and user_mgr.is_logged_in:
+		boot_sequence.load_user_override(user_mgr.get_username())
 	output_text.append_text("[color=" + m + "]正在初始化终端...[/color]\n")
 	_request_scroll()
 	await get_tree().create_timer(0.8).timeout
 	output_text.text = ""
 	_desktop_mode = true
+	# ★ 登录后加载用户全局收件箱
+	if mail_sys != null:
+		mail_sys.load_global_inbox()
 	disc_mgr.scan_stories(true)
 	_update_status_bar()
 	disc_mgr.show_desktop_welcome(true)
 	_request_scroll()
+
+
+# ══════════════════════════════════════════
+#  输入框文本变化 → 按键音效
+# ══════════════════════════════════════════
+var _last_input_length: int = 0  # 追踪输入长度变化方向
+
+func _on_input_text_changed(new_text: String) -> void:
+	if ui_sound == null:
+		return
+	var new_len: int = new_text.length()
+	if new_len > _last_input_length:
+		# 文本变长 → 输入字符
+		ui_sound.play_keystroke()
+	elif new_len < _last_input_length:
+		# 文本变短 → 退格删除
+		ui_sound.play_backspace()
+	_last_input_length = new_len
+
+
 
 # ══════════════════════════════════════════
 #  输入框焦点控制 placeholder 显示
@@ -316,8 +471,23 @@ func _on_input_submitted(_text: String) -> void:
 	var raw: String = input_field.text.strip_edges()
 	input_field.text = ""
 	input_field.clear()
+	_last_input_length = 0  # 重置长度追踪，避免下次输入触发误判
 	input_field.grab_focus()
 
+	if disc_mgr and disc_mgr.loading_screen and disc_mgr.loading_screen.is_active():
+		return
+	# ★ 全屏文章模式下不接受终端输入
+	if article_viewer and article_viewer.is_active:
+		return
+	# ★ 聊天查看器模式下不接受终端输入
+	if chat_viewer and chat_viewer.is_active:
+		return
+	# ★ 邮件查看器模式下不接受终端输入
+	if email_viewer and email_viewer.is_active:
+		return
+	# ★ 双页查看器模式下不接受终端输入
+	if two_page_viewer and two_page_viewer.is_active:
+		return
 	# ★ 文档查看器模式下不接受终端输入
 	if doc_viewer and doc_viewer.is_active:
 		return
@@ -420,6 +590,10 @@ func _on_input_submitted(_text: String) -> void:
 		_request_scroll()
 		return
 
+	# ★ 任何输入都重置空闲计时器
+	if trigger_sys:
+		trigger_sys.reset_idle()
+
 	# 正常命令执行
 	append_output("> " + raw + "\n", false)
 	_request_scroll()
@@ -442,7 +616,8 @@ func _handle_login_input(raw: String) -> void:
 				_start_register_flow()
 				return
 			if raw.to_lower() == "exit" or raw.to_lower() == "quit":
-				get_tree().quit()
+				output_text.append_text(raw + "\n")
+				_perform_shutdown()
 				return
 			if not user_mgr.user_exists(raw):
 				output_text.append_text("[color=" + e + "]未找到用户 \"" + raw + "\"。[/color]\n")
@@ -644,6 +819,19 @@ func start_delete_user_flow(username: String) -> void:
 	_delete_user_target = username
 	_request_scroll()
 
+## 统一关机流程（登录界面和桌面命令都可调用）
+func _perform_shutdown() -> void:
+	if user_mgr.is_logged_in:
+		user_mgr.logout()
+	if boot_sequence:
+		await get_tree().create_timer(0.3).timeout
+		output_text.text = ""
+		boot_sequence.play_shutdown()
+	else:
+		await get_tree().create_timer(0.5).timeout
+		get_tree().quit()
+
+
 func perform_logout() -> void:
 	var m: String = T.muted_hex
 	user_mgr.logout()
@@ -695,9 +883,34 @@ func _input(event: InputEvent) -> void:
 		if decode_viewer.handle_input(event):
 			get_viewport().set_input_as_handled()
 			return
+	# ★ 全屏模板模式优先处理输入
+	if article_viewer and article_viewer.is_active:
+		if article_viewer.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
+	# ★ 聊天模板模式优先处理输入
+	if chat_viewer and chat_viewer.is_active:
+		if chat_viewer.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
+	# ★ 邮件查看器模式优先处理输入
+	if email_viewer and email_viewer.is_active:
+		if email_viewer.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
+	# ★ 双页查看器模式优先处理输入
+	if two_page_viewer and two_page_viewer.is_active:
+		if two_page_viewer.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
 	# ★ 文档查看器优先处理输入
 	if doc_viewer and doc_viewer.is_active:
 		if doc_viewer.handle_input(event):
+			get_viewport().set_input_as_handled()
+			return
+	# ★ 探索进度查看器
+	if explore_viewer and explore_viewer.is_active:
+		if explore_viewer.handle_input(event):
 			get_viewport().set_input_as_handled()
 			return
 	# --- 鼠标按下事件 ---
@@ -722,6 +935,12 @@ func _input(event: InputEvent) -> void:
 				return
 			MOUSE_BUTTON_LEFT:
 				var mouse_pos: Vector2 = event.position
+				# ★ 检测邮件图标点击
+				if mail_icon != null and mail_icon.get_global_rect().has_point(mouse_pos):
+					if user_mgr != null and user_mgr.is_logged_in and mail_sys != null:
+						mail_sys.handle_mail_command([])
+					get_viewport().set_input_as_handled()
+					return
 				var output_rect: Rect2 = output_text.get_global_rect()
 				if not output_rect.has_point(mouse_pos):
 					input_field.grab_focus()
@@ -739,6 +958,21 @@ func _input(event: InputEvent) -> void:
 		return
 	if not input_field.has_focus():
 		input_field.grab_focus()
+
+	# 开关机序列中：按任意键跳过
+	if boot_sequence and boot_sequence.is_active():
+		if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_ESCAPE]:
+			boot_sequence.skip()
+			get_viewport().set_input_as_handled()
+			return
+
+# 载入画面跳过（按任意键）
+	if disc_mgr and disc_mgr.loading_screen and disc_mgr.loading_screen.is_active():
+		if event is InputEventKey and event.pressed:
+			disc_mgr.loading_screen.skip()
+			get_viewport().set_input_as_handled()
+		return
+
 	# 打字机播放中：空格或ESC跳过
 	if tw.is_typing and event.keycode in [KEY_SPACE, KEY_ESCAPE]:
 		tw.skip()
@@ -763,8 +997,18 @@ func _input(event: InputEvent) -> void:
 			scroll_container.scroll_vertical += 100
 			get_viewport().set_input_as_handled()
 		KEY_TAB:
-			_handle_tab_complete()
-			get_viewport().set_input_as_handled()
+			# ★ 磁盘模式下空输入 Tab 切换探索视图
+			if not _desktop_mode and input_field.text.strip_edges().is_empty():
+				if explore_viewer:
+					explore_viewer.toggle()
+				if ui_sound:
+					ui_sound.play_click()
+				get_viewport().set_input_as_handled()
+			else:
+				if ui_sound:
+					ui_sound.play_click()
+				_handle_tab_complete()
+				get_viewport().set_input_as_handled()
 
 
 
@@ -1063,7 +1307,26 @@ func _process(delta: float) -> void:
 		video_player_viewer.process_frame(delta)
 	# ★ 视频播放器状态栏进度更新
 	_update_inline_video_status(delta)
-
+	# ★ 双页模板更新
+	if two_page_viewer and two_page_viewer.is_active:
+		two_page_viewer.process_typing(delta)
+		# ★ 触发器和邮件系统每帧更新
+	# 开关机序列驱动
+	if boot_sequence and boot_sequence.is_active():
+		boot_sequence.process(delta)
+	# ★ 载入画面驱动
+	if disc_mgr and disc_mgr.loading_screen and disc_mgr.loading_screen.is_active():
+		disc_mgr.loading_screen.process(delta)
+	# 效果系统每帧驱动
+	if effect_sys:
+		effect_sys.process(delta)
+	if trigger_sys:
+		trigger_sys.process(delta)
+	if mail_sys:
+		mail_sys.process(delta)
+	# ★ 邮件模板更新
+	if email_viewer and email_viewer.is_active:
+		email_viewer.process_typing(delta)
 
 
 
@@ -1095,30 +1358,46 @@ func _on_meta_clicked(meta: Variant) -> void:
 		_stop_inline_video()
 		return
 
+	# ★ 命令链接：执行前关闭活动 viewer（two_page/doc）
 	if meta_str.begins_with("cmd://"):
 		var cmd: String = meta_str.substr(6)
-		# ★ 如果在文档查看器中点击了 cmd:// 链接，先关闭文档查看器再执行
+		if email_viewer and email_viewer.is_active:
+			email_viewer.close()
+		if chat_viewer and chat_viewer.is_active:
+			chat_viewer.close()
+		if two_page_viewer and two_page_viewer.is_active:
+			two_page_viewer.close()
 		if doc_viewer and doc_viewer.is_active:
 			doc_viewer.close()
+		if article_viewer and article_viewer.is_active:
+			article_viewer.close()
 		output_text.append_text("\n> " + cmd + "\n")
 		_run_command(cmd)
 		return
 
+	# ★ 剧透文本（在任何模式下都追加到当前输出目标）
 	if meta_str.begins_with("spoiler://"):
 		var decoded_text: String = meta_str.substr(10).uri_decode()
-		# ★ spoiler 在文档查看器中也要正确显示
 		_audio_status_output("\n[color=" + T.muted_hex + "][已揭示] " + decoded_text + "[/color]\n")
 		_request_scroll()
 		return
 
+	# ★ 文件链接：执行前关闭活动 viewer（two_page/doc）
 	if meta_str.begins_with("file://"):
 		var file_path: String = meta_str.substr(7)
+		if email_viewer and email_viewer.is_active:
+			email_viewer.close()
+		if chat_viewer and chat_viewer.is_active:
+			chat_viewer.close()
+		if two_page_viewer and two_page_viewer.is_active:
+			two_page_viewer.close()
 		if doc_viewer and doc_viewer.is_active:
 			doc_viewer.close()
+		if article_viewer and article_viewer.is_active:
+			article_viewer.close()
 		output_text.append_text("\n> open " + file_path + "\n")
 		_run_command("open " + file_path)
 		return
-
 
 
 # ============================================================
@@ -1240,6 +1519,26 @@ func _stop_inline_video() -> void:
 
 ## ★ 输出媒体状态信息（通用：自动判断输出目标）
 func _media_status_output(text: String) -> void:
+	if email_viewer != null and email_viewer.is_active:
+		var rtl: RichTextLabel = email_viewer.get_active_page_rtl()
+		if rtl != null:
+			rtl.append_text("\n" + text)
+		return
+	if chat_viewer != null and chat_viewer.is_active and chat_viewer.has_method("get_active_page_rtl"):
+		var rtl: RichTextLabel = chat_viewer.get_active_page_rtl()
+		if rtl != null:
+			rtl.append_text("\n" + text)
+		return
+	if article_viewer != null and article_viewer.is_active and article_viewer.has_method("get_active_page_rtl"):
+		var rtl: RichTextLabel = article_viewer.get_active_page_rtl()
+		if rtl != null:
+			rtl.append_text("\n" + text)
+		return
+	if two_page_viewer != null and two_page_viewer.is_active and two_page_viewer.has_method("get_active_page_rtl"):
+		var rtl: RichTextLabel = two_page_viewer.get_active_page_rtl()
+		if rtl != null:
+			rtl.append_text("\n" + text)
+		return
 	if doc_viewer != null and doc_viewer.is_active:
 		var active_rtl: RichTextLabel = doc_viewer.get_active_page_rtl()
 		if active_rtl != null:
@@ -1249,16 +1548,44 @@ func _media_status_output(text: String) -> void:
 	append_output(text, false, false)
 
 
-## ★ 输出音频状态信息（自动判断输出目标：终端 or 文档查看器）
+
+
+## ★ 输出音频状态信息（自动判断输出目标：two_page / document / 终端）
 func _audio_status_output(text: String) -> void:
+	# email_viewer 模式
+	if email_viewer != null and email_viewer.is_active:
+		var rtl: RichTextLabel = email_viewer.get_active_page_rtl()
+		if rtl != null:
+			rtl.append_text("\n" + text)
+			return
+	# chat_viewer 模式
+	if chat_viewer != null and chat_viewer.is_active and chat_viewer.has_method("get_active_page_rtl"):
+		var rtl: RichTextLabel = chat_viewer.get_active_page_rtl()
+		if rtl != null:
+			rtl.append_text("\n" + text)
+			return
+	# article_viewer 模式
+	if article_viewer != null and article_viewer.is_active and article_viewer.has_method("get_active_page_rtl"):
+		var rtl: RichTextLabel = article_viewer.get_active_page_rtl()
+		if rtl != null:
+			rtl.append_text("\n" + text)
+			return
+	# two_page_viewer 模式
+	if two_page_viewer != null and two_page_viewer.is_active and two_page_viewer.has_method("get_active_page_rtl"):
+		var rtl_b: RichTextLabel = two_page_viewer.get_active_page_rtl()
+		if rtl_b != null:
+			rtl_b.append_text("\n" + text)
+			return
+	# document_viewer 模式
 	if doc_viewer != null and doc_viewer.is_active:
-		# 文档查看器模式：在当前活动页面追加
 		var active_rtl: RichTextLabel = doc_viewer.get_active_page_rtl()
 		if active_rtl != null:
 			active_rtl.append_text("\n" + text)
 			return
 	# 终端模式
 	append_output(text, false, false)
+
+
 
 ## ★ 格式化时间 秒 → MM:SS
 func _format_audio_time(seconds: float) -> String:
@@ -1374,14 +1701,114 @@ func _update_status_bar() -> void:
 		var title: String = str(story_dict.get("title", "未知"))
 		path_label.text = "磁盘: " + title + " | 路径: " + current_path + " | 等级: " + str(fs.player_clearance)
 
-	if has_new_mail:
-		mail_icon.text = "[Mail NEW]"
+	# 邮件图标：始终只显示 [Mail]，有未读邮件时由 mail_sys._tick_blink 控制闪烁
+	if mail_sys != null and mail_sys._blink_active:
+		pass  # 闪烁中，由 _tick_blink 控制透明度
 	else:
 		mail_icon.text = "[Mail]"
 
 func _update_status_bar_login() -> void:
 	path_label.text = "SCP TERMINAL | 身份验证"
 	mail_icon.text = ""
+
+
+## 加载故事包时同步初始化效果系统（由 disc_manager 调用）
+func load_effects_from_manifest(manifest: Dictionary) -> void:
+	if effect_sys:
+		effect_sys.load_from_manifest(manifest)
+		# 更新效果系统的主题引用
+		effect_sys.T = T
+		effect_sys.crt_shader = crt_shader
+
+
+## 效果强度设置命令处理
+## 用法: fx_level [full|mild|off]
+## 用法: fx_safe [on|off]
+func handle_fx_command(cmd: String, args: Array) -> bool:
+	if effect_settings == null:
+		return false
+	match cmd:
+		"fx_level":
+			if args.is_empty():
+				var current: String = effect_settings.get_level_name()
+				append_output("[color=" + T.primary_hex + "]当前效果等级: " + current + "[/color]\n", false)
+				append_output("[color=" + T.muted_hex + "]可选: full (完整) | mild (温和) | off (关闭)[/color]\n", false)
+				return true
+			var level_str: String = str(args[0]).to_lower()
+			match level_str:
+				"full":
+					effect_settings.set_level(EffectSettings.Level.FULL)
+					append_output("[color=" + T.success_hex + "]效果等级已设为: 完整[/color]\n", false)
+				"mild":
+					effect_settings.set_level(EffectSettings.Level.MILD)
+					append_output("[color=" + T.warning_hex + "]效果等级已设为: 温和 (强度降低50%)[/color]\n", false)
+				"off":
+					effect_settings.set_level(EffectSettings.Level.OFF)
+					append_output("[color=" + T.muted_hex + "]所有动态效果已关闭[/color]\n", false)
+				_:
+					append_output("[color=" + T.error_hex + "]无效选项: " + level_str + " (可选: full/mild/off)[/color]\n", false)
+			return true
+		"fx_safe":
+			if args.is_empty():
+				var status: String = "开启" if effect_settings.photosensitive_mode else "关闭"
+				append_output("[color=" + T.primary_hex + "]光敏安全模式: " + status + "[/color]\n", false)
+				append_output("[color=" + T.muted_hex + "]用法: fx_safe on/off[/color]\n", false)
+				return true
+			var val: String = str(args[0]).to_lower()
+			if val == "on" or val == "true" or val == "1":
+				effect_settings.set_photosensitive(true)
+				append_output("[color=" + T.success_hex + "]光敏安全模式已开启 — 已禁用闪烁、强故障、jumpscare[/color]\n", false)
+			else:
+				effect_settings.set_photosensitive(false)
+				append_output("[color=" + T.warning_hex + "]光敏安全模式已关闭[/color]\n", false)
+			return true
+	return false
+
+
+
+# ── Shader uniform 辅助方法 ──
+
+## 设置背景图(TextureRect)的 shader uniform
+func _set_background_shader_value(uniform_name: String, value: float) -> void:
+	if background == null:
+		return
+	var mat: ShaderMaterial = background.material as ShaderMaterial
+	if mat:
+		mat.set_shader_parameter(uniform_name, value)
+
+## 设置 logo(TextureRect)的 shader uniform
+func _set_logo_shader_value(uniform_name: String, value: float) -> void:
+	if background_logo == null:
+		return
+	var mat: ShaderMaterial = background_logo.material as ShaderMaterial
+	if mat:
+		mat.set_shader_parameter(uniform_name, value)
+
+## Tween 方式渐变 shader uniform
+func _tween_background_shader(uniform_name: String, from: float, to: float, duration: float) -> Tween:
+	if background == null:
+		return null
+	var mat: ShaderMaterial = background.material as ShaderMaterial
+	if mat == null:
+		return null
+	mat.set_shader_parameter(uniform_name, from)
+	var tw_shader: Tween = create_tween()
+	tw_shader.tween_method(func(v: float): mat.set_shader_parameter(uniform_name, v), from, to, duration)
+	return tw_shader
+
+func _tween_logo_shader(uniform_name: String, from: float, to: float, duration: float) -> Tween:
+	if background_logo == null:
+		return null
+	var mat: ShaderMaterial = background_logo.material as ShaderMaterial
+	if mat == null:
+		return null
+	mat.set_shader_parameter(uniform_name, from)
+	var tw_shader: Tween = create_tween()
+	tw_shader.tween_method(func(v: float): mat.set_shader_parameter(uniform_name, v), from, to, duration)
+	return tw_shader
+
+
+
 
 # ══════════════════════════════════════════
 #  欢迎信息（磁盘加载后调用）
@@ -1398,3 +1825,114 @@ func _show_welcome_message() -> void:
 	var box: String = fs.build_box([welcome_title, title] as Array[String], p)
 	append_output(box + "\n\n", false)
 	append_output("[color=" + m + "]输入 help 查看可用命令。[/color]\n\n", false)
+
+
+# ============================================================
+# 触发器系统动作接口（由 trigger_system.gd / typewriter.gd 调用）
+# ★ 所有效果都经过 effect_settings 强度衰减
+# ============================================================
+
+func trigger_glitch(intensity: float = 0.5, duration: float = 1.0, preset: String = "custom") -> void:
+	if effect_settings and effect_settings.is_off():
+		return
+	if effect_settings:
+		intensity = effect_settings.apply_intensity(intensity)
+		if duration < 90.0:
+			duration = effect_settings.apply_duration(duration)
+		preset = effect_settings.downgrade_preset(preset)
+	if crt_shader and crt_shader.has_method("play_glitch"):
+		crt_shader.play_glitch(intensity, duration, preset)
+
+func trigger_screen_off(duration: float = 2.0) -> void:
+	if effect_settings and not effect_settings.is_effect_allowed("blackout"):
+		return
+	if effect_settings and effect_settings.is_mild():
+		duration = duration * 0.5  # 温和模式缩短黑屏
+	if crt_shader and crt_shader.has_method("play_blackout"):
+		crt_shader.play_blackout(duration)
+
+func trigger_reboot() -> void:
+	if effect_settings and effect_settings.is_off():
+		output_text.text = ""
+		_show_welcome_message()
+		return
+	if crt_shader and crt_shader.has_method("play_reboot"):
+		output_text.text = ""
+		if not crt_shader.boot_completed.is_connected(_on_reboot_boot_done):
+			crt_shader.boot_completed.connect(_on_reboot_boot_done, CONNECT_ONE_SHOT)
+		crt_shader.play_reboot()
+	else:
+		output_text.text = ""
+		_show_welcome_message()
+
+func _on_reboot_boot_done() -> void:
+	_show_welcome_message()
+
+func trigger_shake(intensity: float = 0.01, duration: float = 0.5) -> void:
+	if effect_settings:
+		intensity = effect_settings.apply_shake_intensity(intensity)
+		if duration < 90.0:
+			duration = effect_settings.apply_duration(duration)
+	if intensity <= 0.001:
+		if crt_shader and crt_shader.has_method("play_shake"):
+			crt_shader.play_shake(0.0, 0.05)
+		return
+	if crt_shader and crt_shader.has_method("play_shake"):
+		crt_shader.play_shake(intensity, duration)
+
+func trigger_tear(strength: float = 0.08, duration: float = 0.5) -> void:
+	if effect_settings:
+		strength = effect_settings.apply_intensity(strength)
+		if duration < 90.0:
+			duration = effect_settings.apply_duration(duration)
+	if strength <= 0.001:
+		if crt_shader and crt_shader.has_method("play_tear"):
+			crt_shader.play_tear(0.0, -1.0, 0.05)
+		return
+	if crt_shader and crt_shader.has_method("play_tear"):
+		crt_shader.play_tear(strength, -1.0, duration)
+
+func trigger_noise_burst(intensity: float = 0.8, duration: float = 0.3) -> void:
+	if effect_settings and not effect_settings.is_effect_allowed("noise_burst"):
+		return
+	if effect_settings:
+		intensity = effect_settings.apply_intensity(intensity)
+		if duration < 90.0:
+			duration = effect_settings.apply_duration(duration)
+	if crt_shader and crt_shader.has_method("play_noise_burst"):
+		crt_shader.play_noise_burst(intensity, duration)
+
+func trigger_effect(effect_id: String) -> void:
+	if effect_settings and effect_settings.is_off():
+		return
+	if effect_sys:
+		effect_sys.play(effect_id)
+
+func trigger_preset_effect(preset_name: String, duration: float = 2.0) -> void:
+	if effect_settings and not effect_settings.is_effect_allowed(preset_name):
+		# 被光敏模式阻止的预设降级为温和效果
+		if effect_settings.is_effect_allowed("disturb"):
+			preset_name = "unease"
+		else:
+			return
+	if effect_settings:
+		duration = effect_settings.apply_duration(duration)
+	if effect_sys == null:
+		return
+	match preset_name:
+		"unease":
+			effect_sys.play_unease(duration)
+		"disturb":
+			effect_sys.play_disturb(duration)
+		"jumpscare":
+			effect_sys.play_jumpscare_base(duration)
+		"crash":
+			effect_sys.play_system_crash(duration)
+		_:
+			push_warning("[Main] 未知预设效果: " + preset_name)
+
+
+
+
+
+	
