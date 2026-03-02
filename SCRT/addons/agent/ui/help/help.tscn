@@ -1,0 +1,263 @@
+[gd_scene load_steps=2 format=3 uid="uid://b83qwags1ffo8"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_tof6w"]
+font_size = 40
+
+[node name="Help" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="TitleBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 20
+alignment = 1
+
+[node name="Label" type="Label" parent="MarginContainer/VBoxContainer/TitleBar"]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "α"
+label_settings = SubResource("LabelSettings_tof6w")
+
+[node name="Label2" type="Label" parent="MarginContainer/VBoxContainer/TitleBar"]
+layout_mode = 2
+text = "Alpha Godot Agent 使用说明"
+vertical_alignment = 1
+
+[node name="TabContainer" type="TabContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+current_tab = 4
+
+[node name="设计哲学" type="ScrollContainer" parent="MarginContainer/VBoxContainer/TabContainer"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+metadata/_tab_index = 0
+
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer/TabContainer/设计哲学"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 50
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TabContainer/设计哲学/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RichTextLabel" type="RichTextLabel" parent="MarginContainer/VBoxContainer/TabContainer/设计哲学/MarginContainer/VBoxContainer"]
+layout_mode = 2
+bbcode_enabled = true
+text = "[b][font_size=18][color=#FF6B35]α - 始于初心，无限可能[/color][/font_size][/b]
+[color=#666666]在希腊字母中，α是开始；在AI时代，α是无限[/color]
+
+[b][font_size=16][color=#4A90E2]🌌 α的哲学[/color][/font_size][/b]
+
+[b]α，不仅是开始，更是无限可能的起点[/b]
+就像宇宙大爆炸的奇点，α为你的创意提供了无限膨胀的空间
+每一个想法都是新的α，每一次实现都是新的宇宙
+
+[b][font_size=16][color=#4A90E2]✨ 为什么α与众不同？[/color][/font_size][/b]
+
+[b]从\"开始\"到\"无限\"的进化之路[/b]
+[ul]
+[b]α起点[/b]：零基础也能快速上手，让每个想法都有开始的机会
+[b]α进化[/b]：AI智能随你成长，从简单脚本到复杂系统，全程陪伴
+[b]α无限[/b]：没有边界，没有限制，你的想象力就是唯一的约束
+[/ul]
+
+[b][font_size=16][color=#4A90E2]🎯 α的使命[/color][/font_size][/b]
+
+[b]我们不做工具，我们创造可能[/b]
+α不是另一个插件，而是你创意宇宙的奇点
+在这里，每个\"开始\"都孕育着无限\"可能\"
+每个想法都能找到实现的路径
+
+[b][font_size=16][color=#4A90E2]💫 开发者说[/color][/font_size][/b]
+
+\"选择α，就是选择相信：
+相信每个伟大的游戏都始于一个简单的想法
+相信技术不应该成为创意的障碍
+相信AI可以成为最懂你的开发伙伴\"
+
+[b][font_size=16][color=#4A90E2]🚀 加入α宇宙[/color][/font_size][/b]
+
+[b]从今天开始，让你的游戏开发之旅：
+始于α，行于无限[/b]
+
+[center][i][color=#FF6B35]\"α - 你的创意，从这里开始，向无限延伸\"[/color][/i][/center]
+"
+fit_content = true
+
+[node name="对话" type="ScrollContainer" parent="MarginContainer/VBoxContainer/TabContainer"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+metadata/_tab_index = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer/TabContainer/对话"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 50
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TabContainer/对话/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RichTextLabel" type="RichTextLabel" parent="MarginContainer/VBoxContainer/TabContainer/对话/MarginContainer/VBoxContainer"]
+layout_mode = 2
+bbcode_enabled = true
+text = "[b][font_size=16][color=#4A90E2]🎇 使用[/color][/font_size][/b]
+激活插件后，即可在右侧侧边栏中发现Alpha。
+
+[b][font_size=16][color=#4A90E2]🗨 对话[/color][/font_size][/b]
+
+在Alpha下方的输入框中输入问题，点击发送即可与AI对话。
+
+[b][font_size=16][color=#4A90E2]✨ 角色[/color][/font_size][/b]
+Alpha支持角色功能，可以选择一个角色进行对话。
+
+[b][font_size=16][color=#4A90E2]✨ 模型[/color][/font_size][/b]
+Alpha支持多供应商配置，可以在多个供应商和模型中选择一个进行对话。
+
+[b][font_size=16][color=#4A90E2]🧲 引用[/color][/font_size][/b]
+如果你想要引用某一个文件，可以将它从编辑器中拖动到输入框内。
+目前你可以从文件系统侧边栏、场景树、脚本编辑器侧边栏中拖入文件、文件夹或节点。
+
+发送了引用的文件后，Alpha会优先读取其文件内容。回答的内容更加准确。
+"
+fit_content = true
+
+[node name="历史记录" type="ScrollContainer" parent="MarginContainer/VBoxContainer/TabContainer"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+metadata/_tab_index = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer/TabContainer/历史记录"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 50
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TabContainer/历史记录/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RichTextLabel" type="RichTextLabel" parent="MarginContainer/VBoxContainer/TabContainer/历史记录/MarginContainer/VBoxContainer"]
+layout_mode = 2
+bbcode_enabled = true
+text = "Alpha会记录每一次对话的内容，只需要在左上角点击历史记录，即可查看对话的记录。
+
+点击历史记录可以恢复这次对话，并继续对话。
+
+点击删除按钮可以删除这条对话记录。无法撤销。
+
+历史记录保存在项目配置下，如果需要查询，可以点击godot的项目>打开\"用户数据\"文件夹
+
+在打开的文件夹中可以找到.alpha文件夹，其中history.json文件就是历史记录。"
+fit_content = true
+
+[node name="记忆" type="ScrollContainer" parent="MarginContainer/VBoxContainer/TabContainer"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+metadata/_tab_index = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer/TabContainer/记忆"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 50
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TabContainer/记忆/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RichTextLabel" type="RichTextLabel" parent="MarginContainer/VBoxContainer/TabContainer/记忆/MarginContainer/VBoxContainer"]
+layout_mode = 2
+bbcode_enabled = true
+text = "Alpha有可以记录用户输入的记忆的功能。
+
+只需要在输入框内键入 [code]/memory[/code]，并指定存储的位置（[code]global[/code]或[code]project[/code]）。然后再输入要保存的记忆。
+
+发送后即可保存。
+
+尝试一下，在命令行中输入 [code]/memory project 我是xxx[/code]，保存成功后，向Alpha提问”我是谁？“
+
+也可以在设置面板中在右上角选择记忆。然后输入要保存的记忆。
+
+注意：如果要删除记忆，可以在设置面板中在右上角选择记忆。然后删除相关记忆。"
+fit_content = true
+
+[node name="关于" type="ScrollContainer" parent="MarginContainer/VBoxContainer/TabContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+metadata/_tab_index = 4
+
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer/TabContainer/关于"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 50
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TabContainer/关于/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RichTextLabel" type="RichTextLabel" parent="MarginContainer/VBoxContainer/TabContainer/关于/MarginContainer/VBoxContainer"]
+layout_mode = 2
+bbcode_enabled = true
+text = "Alpha为开源项目，项目地址： https://github.com/925236118/GodotAiAgent
+
+项目使用MIT开源协议
+
+作者：陌上竹（925236118）
+
+贡献者：
+[ul]
+艾可可（3111749871）
+上杉炎（1225257993）
+斓（1712384230）
+Valar（1294579729）
+Jaxson（1253318213）
+老白（724064465）
+饿了（1042278557）
+[/ul]
+
+社区：Godot新手村
+
+PR贡献者：
+[ul]
+TonyZhao（https://github.com/tonyzhao-jt）
+[/ul]"
+fit_content = true

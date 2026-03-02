@@ -1,0 +1,142 @@
+{
+	"comm_characters": {
+		"ava": {
+			"id": "ava",
+			"name": "A.V.A.",
+			"title": "Automated Virtual Assistant",
+			"portrait_position": "left",
+			"sprite_mode": "static",
+			"sprite_dir": "",
+			"default_expression": "neutral",
+			"voice": {
+				"tone": "sine",
+				"base_pitch": 1.35,
+				"pitch_variance": 0.1,
+				"speed": "fast",
+				"char_sound_duration": 40,
+				"vowel_pitch_boost": 0.15,
+				"punctuation_pause": 180
+			}
+		},
+		"researcher": {
+			"id": "researcher",
+			"name": "Dr. Zhang",
+			"title": "Senior Researcher",
+			"sprite_mode": "static",
+			"sprite_dir": "",
+			"default_expression": "neutral",
+			"voice": {
+				"tone": "square",
+				"base_pitch": 0.85,
+				"pitch_variance": 0.12,
+				"speed": "normal",
+				"char_sound_duration": 55,
+				"vowel_pitch_boost": 0.08,
+				"punctuation_pause": 250
+			}
+		}
+	},
+	"comm_dialogues": {
+		"tutorial_ask": {
+			"skippable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "你好，操作员 [b]{username}[/b]。我是 [b]A.V.A.[/b]——基金会自动化虚拟助手。\n欢迎接入 SCP 基金会安全终端系统。",
+					"auto_next": 0.3
+				},
+				{
+					"character": "ava",
+					"text": "检测到你的账户刚刚完成注册。需要我为你进行终端操作指导吗？\n\n  [color=#ffcc00][1][/color] 是，请指导我\n  [color=#ffcc00][2][/color] 不用了，我已经了解",
+					"wait_for": "choice:tutorial_ask"
+				}
+			]
+		},
+		"tutorial_skip": {
+			"skippable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "了解。如有需要，随时输入 [b]help[/b] 查看可用命令。\n祝你好运，操作员。[b]控制，收容，保护。[/b]"
+				}
+			]
+		},
+		"tutorial_main": {
+			"skippable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "很好，让我们开始。\n这个终端完全通过[b]命令行[/b]操作——你在下方输入框中输入指令，按回车执行。"
+				},
+				{
+					"character": "ava",
+					"text": "我们从最基本的命令开始。\n请在下方输入 [b]help[/b] 并按回车，查看所有可用命令。",
+					"wait_for": "command:help"
+				},
+				{
+					"character": "ava",
+					"text": "做得好。你看到的就是当前桌面模式下所有可用的命令。\n不同的操作模式下，可用命令会有所不同。"
+				},
+				{
+					"character": "ava",
+					"text": "终端中的数据以[b]磁盘[/b]形式组织。每张磁盘包含一组独立的档案文件。\n你需要先加载一张磁盘，才能浏览其中的内容。"
+				},
+				{
+					"character": "ava",
+					"text": "现在输入 [b]scan[/b] 扫描可用的磁盘列表。",
+					"wait_for": "command:scan"
+				},
+				{
+					"character": "ava",
+					"text": "如果列表中有磁盘，可以用 [b]load 编号[/b] 来加载。\n加载后终端会切换到[b]磁盘模式[/b]，届时你将获得更多文件操作命令。"
+				},
+				{
+					"character": "ava",
+					"text": "在磁盘模式中，常用的导航命令有：\n  [b]ls[/b]  —— 列出当前目录的文件和文件夹\n  [b]cd 目录名[/b]  —— 进入子目录\n  [b]back[/b]  —— 返回上级目录"
+				},
+				{
+					"character": "ava",
+					"text": "找到文件后，用 [b]open 文件名[/b] 打开它。\n终端支持多种文件类型——文本文档、图片、音频甚至视频，会以不同方式呈现。"
+				},
+				{
+					"character": "ava",
+					"text": "其他实用命令：\n  [b]status[/b]  —— 查看当前状态和进度\n  [b]mail[/b]  —— 查看站内通讯\n  [b]clear[/b]  —— 清空终端屏幕"
+				},
+				{
+					"character": "ava",
+					"text": "通讯系统使用[b]拨号[/b]方式联络。\n  [b]dial 号码[/b]  —— 拨号呼叫（如 [b]dial 1001-0001[/b]）\n  [b]phonebook[/b]  —— 查看号码簿\n  [b]comm[/b]  —— 查看通讯状态 / 接听来电"
+				},
+				{
+					"character": "ava",
+					"text": "更多功能：\n  [b]theme 主题名[/b]  —— 切换终端配色方案\n  [b]Tab[/b] 键  —— 命令自动补全\n  [b]ESC[/b]  —— 随时跳过对话"
+				},
+				{
+					"character": "researcher",
+					"text": "……这里是 [b]Dr. Zhang[/b]，高级研究员。抱歉打断，A.V.A.。",
+					"screen_effect": "glitch"
+				},
+				{
+					"character": "researcher",
+					"text": "操作员 [b]{username}[/b]，欢迎加入。我被分配负责你的研究协调工作。\n之后有任务和资料需要传达，我会通过通讯频道联络你。"
+				},
+				{
+					"character": "ava",
+					"text": "已识别 Dr. Zhang 的通讯签名。多人通讯已建立。\n如你所见，通讯系统支持多位联络人同时接入。"
+				},
+				{
+					"character": "ava",
+					"text": "联络人的号码会自动加入你的号码簿。\n你随时可以通过 [b]phonebook[/b] 查看已知号码，用 [b]dial 号码[/b] 发起联络。\n如果有人呼叫你，终端会显示来电提示，输入 [b]comm answer[/b] 接听。"
+				},
+				{
+					"character": "researcher",
+					"text": "那我就先退出了。有进展再联系。\n……祝你好运，新人。",
+					"action": "look_away"
+				},
+				{
+					"character": "ava",
+					"text": "基础操作介绍完毕。终端中可能藏有更多秘密——等待你自己去发现。\n\n祝你好运，操作员 [b]{username}[/b]。\n[b]控制。收容。保护。[/b]"
+				}
+			]
+		}
+	}
+}

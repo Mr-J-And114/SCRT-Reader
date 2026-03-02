@@ -1,0 +1,44 @@
+[gd_scene load_steps=3 format=3 uid="uid://cr2sav6by4tal"]
+
+[ext_resource type="Theme" uid="uid://dwqhs78076qut" path="res://addons/agent/ui/resource/AgentTheme.tres" id="1_ls7f3"]
+[ext_resource type="Script" uid="uid://bbtkl1gjy6vnx" path="res://addons/agent/ui/memory/memory_item.gd" id="1_n2hbk"]
+
+[node name="MemoryItem" type="HBoxContainer"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 31.0
+grow_horizontal = 2
+size_flags_horizontal = 3
+theme = ExtResource("1_ls7f3")
+script = ExtResource("1_n2hbk")
+
+[node name="TextEdit" type="TextEdit" parent="."]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 2
+
+[node name="FinishEditButton" type="Button" parent="."]
+visible = false
+layout_mode = 2
+tooltip_text = "结束编辑"
+mouse_default_cursor_shape = 2
+theme_type_variation = &"PrimaryButton"
+text = "完成"
+
+[node name="EditButton" type="Button" parent="."]
+layout_mode = 2
+tooltip_text = "编辑"
+mouse_default_cursor_shape = 2
+theme_type_variation = &"SecondaryButton"
+text = " 编辑 "
+
+[node name="RemoveButton" type="Button" parent="."]
+layout_mode = 2
+tooltip_text = "删除记忆"
+mouse_default_cursor_shape = 2
+theme_type_variation = &"DangerButton"
+text = " 删除 "

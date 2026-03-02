@@ -1,0 +1,18 @@
+{
+	"settings": {
+		"audio.ambient_volume": 0.7,
+		"audio.master_volume": 0.8,
+		"audio.media_volume": 0.8,
+		"audio.sfx_volume": 0.8,
+		"audio.sound_enabled": true,
+		"display.cursor_blink_speed": 0.5,
+		"display.theme": "phosphor_green",
+		"effect.level": "full",
+		"effect.photosensitive": false,
+		"terminal.progress_speed": 1.0,
+		"terminal.typing_pause_chance": 0.08,
+		"terminal.typing_speed": 0.008
+	},
+	"timestamp": "2026-02-28T12:49:03",
+	"version": 1
+}

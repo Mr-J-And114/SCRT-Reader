@@ -32,6 +32,7 @@
 #   lock_folder:/path               锁定目录
 #   unlock_folder:/path             解锁目录
 #   delay:2000:其它动作             延迟后执行
+#   comm:dialogue_id                触发通讯对话
 # ============================================================
 class_name TriggerSystem
 extends RefCounted
@@ -291,6 +292,7 @@ func _exec_single(raw: String, ctx: Dictionary) -> void:
 		"lock_folder":  _act_lock_folder(param)
 		"unlock_folder": _act_unlock_folder(param)
 		"color_scheme": _act_color_scheme(param)
+		"comm":         _act_comm(param)
 		_:
 			push_warning("[TriggerSystem] 未知动作: " + raw)
 
@@ -487,6 +489,21 @@ func _act_color_scheme(param: String) -> void:
 	# 与 command_handler.gd 保持一致：直接调用 ThemeManager 的静态方法
 	ThemeManager.request_theme_change(theme_name, main)
 
+
+## ★ 触发通讯对话
+## 格式: comm:dialogue_id
+func _act_comm(param: String) -> void:
+	var dialogue_id: String = param.strip_edges()
+	if dialogue_id.is_empty():
+		push_warning("[TriggerSystem] comm 动作缺少 dialogue_id")
+		return
+	if main.comm_mgr == null:
+		push_warning("[TriggerSystem] 通讯系统未初始化，无法触发: " + dialogue_id)
+		return
+	print("[TriggerSystem] _act_comm: ", dialogue_id)
+	main.comm_mgr.trigger_dialogue(dialogue_id)
+
+
 # ============================================================
 # ── .meta.cfg 解析与缓存 ──
 # ============================================================
@@ -571,6 +588,9 @@ func _replace_vars(text: String) -> String:
 		text = text.replace("{username}", main.user_mgr.get_username())
 	text = text.replace("{level}", str(fs.player_clearance))
 	text = text.replace("{path}", main.current_path)
+		# ★ 通讯系统状态变量
+	if main.comm_mgr != null:
+		text = text.replace("{comm_active}", "true" if main.comm_mgr.is_active else "false")
 	return text
 
 

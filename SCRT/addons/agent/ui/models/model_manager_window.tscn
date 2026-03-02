@@ -1,0 +1,217 @@
+[gd_scene load_steps=5 format=3 uid="uid://dr7g6mrkb8u3e"]
+
+[ext_resource type="Theme" uid="uid://dwqhs78076qut" path="res://addons/agent/ui/resource/AgentTheme.tres" id="1_a1aws"]
+[ext_resource type="Script" uid="uid://cw7dsan8l0cfv" path="res://addons/agent/ui/models/model_manager_window.gd" id="1_ww8v3"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_overlay"]
+bg_color = Color(0, 0, 0, 0.7)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_35oay"]
+content_margin_left = 8.0
+content_margin_right = 8.0
+bg_color = Color(0.92156863, 0.4392157, 0.27058825, 1)
+border_width_top = 3
+border_width_bottom = 3
+border_color = Color(0.8, 0.8, 0.8, 0)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="ModelManagerWindow" type="Window"]
+oversampling_override = 1.0
+title = "管理模型"
+initial_position = 2
+size = Vector2i(600, 500)
+theme = ExtResource("1_a1aws")
+script = ExtResource("1_ww8v3")
+
+[node name="MainContainer" type="MarginContainer" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TopBar" type="HBoxContainer" parent="MainContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="MainContainer/VBoxContainer/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "已配置的模型"
+
+[node name="AddModelButton" type="Button" parent="MainContainer/VBoxContainer/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "添加模型"
+text = "添加模型"
+
+[node name="HSeparator" type="HSeparator" parent="MainContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MainContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ModelList" type="VBoxContainer" parent="MainContainer/VBoxContainer/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="EditPanel" type="Panel" parent="."]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_overlay")
+
+[node name="MarginContainer" type="MarginContainer" parent="EditPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="EditPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="EditPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "编辑模型配置"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="EditPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="EditPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="FormContainer" type="VBoxContainer" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ModelNameLabel" type="Label" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+layout_mode = 2
+text = "模型名称："
+
+[node name="ModelNameEdit" type="LineEdit" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "例如: GPT-4, Claude, DeepSeek"
+
+[node name="ModelIdLabel" type="Label" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+layout_mode = 2
+text = "模型ID："
+
+[node name="HBoxContainer" type="HBoxContainer" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+layout_mode = 2
+
+[node name="ModelIdEdit" type="LineEdit" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "例如: gpt-4, deepseek-chat"
+
+[node name="RemoteGetModelsButton" type="Button" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "远程获取所有可用的模型，时间可能较久"
+theme_type_variation = &"SecondaryButton"
+text = "远程获取"
+
+[node name="RemoteGetModelsPopupMenu" type="PopupMenu" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer/HBoxContainer/RemoteGetModelsButton"]
+unique_name_in_owner = true
+max_size = Vector2i(500, 500)
+
+[node name="MaxTokensLabel" type="Label" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+layout_mode = 2
+text = "最大 Tokens："
+
+[node name="MaxTokensEdit" type="SpinBox" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1024.0
+max_value = 131072.0
+step = 1024.0
+value = 8192.0
+
+[node name="ThinkingLabel" type="Label" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+layout_mode = 2
+text = "支持 Thinking："
+
+[node name="ThinkingCheckBox" type="CheckBox" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "支持思考"
+
+[node name="ToolLabal" type="Label" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+visible = false
+layout_mode = 2
+text = "支持工具调用："
+
+[node name="ToolCheckBox" type="CheckBox" parent="EditPanel/MarginContainer/VBoxContainer/ScrollContainer/FormContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="HSeparator2" type="HSeparator" parent="EditPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ButtonContainer" type="HBoxContainer" parent="EditPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+alignment = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="EditPanel/MarginContainer/VBoxContainer/ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RemoveButton" type="Button" parent="EditPanel/MarginContainer/VBoxContainer/ButtonContainer/HBoxContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+tooltip_text = "删除模型"
+mouse_default_cursor_shape = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_35oay")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_35oay")
+theme_override_styles/hover = SubResource("StyleBoxFlat_35oay")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_35oay")
+text = "删除模型"
+
+[node name="CancelButton" type="Button" parent="EditPanel/MarginContainer/VBoxContainer/ButtonContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "取消编辑"
+mouse_default_cursor_shape = 2
+theme_type_variation = &"SecondaryButton"
+text = "取消"
+
+[node name="SaveButton" type="Button" parent="EditPanel/MarginContainer/VBoxContainer/ButtonContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "保存编辑"
+mouse_default_cursor_shape = 2
+theme_type_variation = &"PrimaryButton"
+text = "保存"
+
+[node name="RemoteGetModelsRequest" type="HTTPRequest" parent="."]
+unique_name_in_owner = true

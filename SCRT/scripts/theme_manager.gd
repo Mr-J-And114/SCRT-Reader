@@ -311,10 +311,19 @@ static func confirm_and_apply(main_node: Node) -> void:
 	var p: String = current.primary_hex
 	main_node.append_output("[color=" + p + "]主题已切换为: " + new_name + "[/color]\n", false)
 	main_node.append_output("[color=" + current.muted_hex + "]正在重启终端...[/color]\n", false)
+	# ★ 通知设置系统主题已确认
+	if "settings_mgr" in main_node and main_node.settings_mgr != null:
+		main_node.settings_mgr.on_theme_confirmed(new_name)
+
+
 
 static func cancel_theme_change(main_node: Node) -> void:
 	_pending_theme_name = ""
 	main_node.append_output("[color=" + current.muted_hex + "]已取消主题切换。[/color]\n", false)
+	# ★ 通知设置系统主题取消
+	if "settings_mgr" in main_node and main_node.settings_mgr != null:
+		main_node.settings_mgr.on_theme_cancelled()
+
 
 static func get_pending_theme() -> String:
 	return _pending_theme_name
@@ -335,7 +344,8 @@ static func _refresh_all_ui(main_node: Node) -> void:
 	if main_node.tw != null:
 		main_node.tw.T = current
 	if main_node.decode_viewer != null:
-		main_node.decode_viewer.T = current
+		if "settings_mgr" in main_node and main_node.settings_mgr != null:
+			main_node.settings_mgr.T = current
 
 	# 重新应用 UI 样式
 	UIManager.setup_all_styles(

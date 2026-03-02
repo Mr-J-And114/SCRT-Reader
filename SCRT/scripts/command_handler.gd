@@ -66,6 +66,15 @@ func _register_commands() -> void:
 		"fx_level": _cmd_fx_level,
 		"fx_safe": _cmd_fx_safe,
 		"sound": _cmd_sound,
+		"packages": _cmd_packages,
+		"pkg": _cmd_packages,
+		"uninstall": _cmd_uninstall,
+		"comm": _cmd_comm,		   # ★ 通讯系统
+		"dial": _cmd_dial,		   # ★ 拨号命令
+		"phonebook": _cmd_phonebook, # ★ 号码簿（独立命令）
+		"pb": _cmd_phonebook,		# ★ 号码簿（简写）
+		"settings": _cmd_settings,   # ★ 设置系统
+		"set": _cmd_settings,        # ★ 设置系统（简写）
 	}
 
 	# ── 桌面模式专用命令 ──
@@ -75,6 +84,7 @@ func _register_commands() -> void:
 		"vdisc": _cmd_vdisc,
 		"deluser": _cmd_deluser,
 		"explore": _cmd_explore,
+		"install": _cmd_install,
 	}
 
 	# ── 磁盘模式专用命令 ──
@@ -269,6 +279,32 @@ func get_completions(current_text: String) -> Array[String]:
 				var idx_str: String = str(i + 1)
 				if idx_str.begins_with(arg_prefix):
 					results.append(cmd + " " + idx_str)
+		elif cmd == "install":
+			for i in range(disc_mgr.available_stories.size()):
+				var idx_str: String = str(i + 1)
+				if idx_str.begins_with(arg_prefix):
+					results.append(cmd + " " + idx_str)
+		elif cmd == "uninstall":
+			if main.pkg_mgr:
+				for pkg_id in main.pkg_mgr.installed_mods.keys():
+					if str(pkg_id).to_lower().begins_with(arg_prefix.to_lower()):
+						results.append(cmd + " " + pkg_id)
+		elif cmd == "comm":
+			# comm 只补全子命令
+			var comm_options: Array[String] = ["answer", "phonebook", "pb"]
+			for opt in comm_options:
+				if opt.to_lower().begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + opt)
+		elif cmd == "dial":
+			# dial 补全号码簿中的号码
+			if main.dial_mgr:
+				var all_numbers: Array[String] = main.dial_mgr.get_all_numbers()
+				for num in all_numbers:
+					if num.begins_with(arg_prefix):
+						results.append(cmd + " " + num)
+
+
+
 		elif cmd == "theme":
 			var themes: Array[String] = ThemeManager.get_available_themes()
 			for t_name in themes:
@@ -289,6 +325,20 @@ func get_completions(current_text: String) -> Array[String]:
 			for opt in safe_options:
 				if opt.begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + opt)
+
+		elif cmd == "settings" or cmd == "set":
+			# 补全设置键名和子命令
+			if main.settings_mgr and main.settings_mgr.has_method("get_all_keys"):
+				var all_keys: Array[String] = main.settings_mgr.get_all_keys()
+				for skey in all_keys:
+					if skey.to_lower().begins_with(arg_prefix.to_lower()):
+						results.append(cmd + " " + skey)
+			# 也补全 "list" 和 "reset" 子命令
+			for sub_cmd in ["list", "reset"]:
+				if sub_cmd.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + sub_cmd)
+
+
 		elif cmd == "profile":
 			for page in ["1", "2"]:
 				if page.begins_with(arg_prefix):
@@ -321,6 +371,11 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]vdisc[/color]         查看磁盘信息")
 		lines.append("  [color=" + p + "]explore[/color]       查看探索进度")
 		lines.append("")
+		lines.append("[color=" + p + "]  ── 软件包管理 ──[/color]")
+		lines.append("  [color=" + p + "]install <编号>[/color] 安装内部软件包")
+		lines.append("  [color=" + p + "]uninstall <名称>[/color] 卸载已安装的软件包")
+		lines.append("  [color=" + p + "]packages[/color]	  查看已安装的软件包")
+		lines.append("")
 		lines.append("[color=" + p + "]  ── 用户管理 ──[/color]")
 		lines.append("  [color=" + p + "]profile [1|2][/color] 查看个人档案 (第1/2页)")
 		lines.append("  [color=" + p + "]whoami[/color]        显示当前用户信息")
@@ -333,7 +388,11 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("[color=" + p + "]  ── 系统 ──[/color]")
 		lines.append("  [color=" + p + "]status[/color]        查看系统状态")
 		lines.append("  [color=" + p + "]mail[/color]          查看邮件")
+		lines.append("  [color=" + p + "]comm[/color]		  通讯系统状态 / 接听来电")
+		lines.append("  [color=" + p + "]dial <号码>[/color]	拨号呼叫")
+		lines.append("  [color=" + p + "]phonebook[/color]	  查看号码簿")
 		lines.append("  [color=" + p + "]theme <名称>[/color]  切换主题配色")
+		lines.append("  [color=" + p + "]settings[/color]      查看/修改终端设置")
 		lines.append("  [color=" + p + "]volume[/color]        查看/设置音量")
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
@@ -343,6 +402,22 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
 		lines.append("  [color=" + p + "]fx_safe[/color]	   光敏安全模式 (on/off)")
 		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
+		# ★ 显示已安装软件包提供的动态命令
+		if main.pkg_mgr and not main.pkg_mgr.mod_commands.is_empty():
+			lines.append("")
+			lines.append("[color=" + p + "]  ── 软件包命令 ──[/color]")
+			var shown_pkgs: Dictionary = {}
+			for dyn_cmd_name in main.pkg_mgr.mod_commands.keys():
+				var dyn_info: Dictionary = main.pkg_mgr.mod_commands[dyn_cmd_name]
+				var dyn_desc: String = str(dyn_info.get("description", ""))
+				var dyn_mod_id: String = str(dyn_info.get("mod_id", ""))
+				var dyn_pkg_title: String = dyn_mod_id
+				if main.pkg_mgr.installed_mods.has(dyn_mod_id):
+					dyn_pkg_title = str(main.pkg_mgr.installed_mods[dyn_mod_id].get("title", dyn_mod_id))
+				if not shown_pkgs.has(dyn_pkg_title):
+					shown_pkgs[dyn_pkg_title] = true
+					lines.append("  [color=" + m + "][ " + dyn_pkg_title + " ][/color]")
+				lines.append("  [color=" + p + "]" + dyn_cmd_name + "[/color]" + "  ".repeat(maxi(1, 12 - dyn_cmd_name.length())) + "[color=" + m + "]" + dyn_desc + "[/color]")
 		lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 补全[/color]")
 	else:
 		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
@@ -358,6 +433,10 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]radio[/color]         打开无线电接收器")
 		lines.append("  [color=" + p + "]decode[/color]       [color=" + m + "]密码解码器[/color]")
 		lines.append("")
+		lines.append("[color=" + p + "]  ── 软件包 ──[/color]")
+		lines.append("  [color=" + p + "]packages[/color]	  查看已安装的软件包")
+		lines.append("  [color=" + p + "]uninstall <名称>[/color] 卸载已安装的软件包")
+		lines.append("")
 		lines.append("[color=" + p + "]  ── 磁盘管理 ──[/color]")
 		lines.append("  [color=" + p + "]eject[/color]         弹出当前磁盘")
 		lines.append("  [color=" + p + "]save[/color]          手动保存进度")
@@ -371,8 +450,12 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 系统 ──[/color]")
 		lines.append("  [color=" + p + "]status[/color]        查看系统状态")
-		lines.append("  [color=" + p + "]mail[/color]          查看邮件")
+		lines.append("  [color=" + p + "]mail[/color]		  查看邮件")
+		lines.append("  [color=" + p + "]comm[/color]		  通讯系统状态 / 接听来电")
+		lines.append("  [color=" + p + "]dial <号码>[/color]	拨号呼叫")
+		lines.append("  [color=" + p + "]phonebook[/color]	  查看号码簿")
 		lines.append("  [color=" + p + "]theme <名称>[/color]  切换主题配色")
+		lines.append("  [color=" + p + "]settings[/color]      查看/修改终端设置")
 		lines.append("  [color=" + p + "]volume[/color]        查看/设置音量")
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
@@ -382,6 +465,22 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
 		lines.append("  [color=" + p + "]fx_safe[/color]	   光敏安全模式 (on/off)")
 		lines.append("[color=" + p + "]═══════════════════════════════════════════════[/color]")
+		# ★ 显示已安装软件包提供的动态命令
+		if main.pkg_mgr and not main.pkg_mgr.mod_commands.is_empty():
+			lines.append("")
+			lines.append("[color=" + p + "]  ── 软件包命令 ──[/color]")
+			var shown_pkgs: Dictionary = {}
+			for dyn_cmd_name in main.pkg_mgr.mod_commands.keys():
+				var dyn_info: Dictionary = main.pkg_mgr.mod_commands[dyn_cmd_name]
+				var dyn_desc: String = str(dyn_info.get("description", ""))
+				var dyn_mod_id: String = str(dyn_info.get("mod_id", ""))
+				var dyn_pkg_title: String = dyn_mod_id
+				if main.pkg_mgr.installed_mods.has(dyn_mod_id):
+					dyn_pkg_title = str(main.pkg_mgr.installed_mods[dyn_mod_id].get("title", dyn_mod_id))
+				if not shown_pkgs.has(dyn_pkg_title):
+					shown_pkgs[dyn_pkg_title] = true
+					lines.append("  [color=" + m + "][ " + dyn_pkg_title + " ][/color]")
+				lines.append("  [color=" + p + "]" + dyn_cmd_name + "[/color]" + "  ".repeat(maxi(1, 12 - dyn_cmd_name.length())) + "[color=" + m + "]" + dyn_desc + "[/color]")
 		lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 补全[/color]")
 
 	main.append_output("\n".join(lines) + "\n", false)
@@ -422,6 +521,54 @@ func _cmd_status(_args: Array = []) -> void:
 
 	main.append_output("\n".join(lines) + "\n", false)
 
+
+func _cmd_settings(args: Array = []) -> void:
+	if main.settings_mgr == null:
+		main.append_output("[color=" + T.error_hex + "]设置系统未初始化。[/color]\n", false)
+		return
+	main.settings_mgr.handle_command(args)
+
+
+func _cmd_phonebook(_args: Array = []) -> void:
+	if main.dial_mgr:
+		var text: String = main.dial_mgr.get_phonebook_text()
+		main.append_output(text, false)
+	else:
+		main.append_output("[color=" + T.muted_hex + "]拨号系统未初始化。[/color]\n", false)
+
+
+func _cmd_dial(args: Array = []) -> void:
+	if main.dial_mgr == null:
+		main.append_output("[color=" + T.error_hex + "]拨号系统未初始化。[/color]\n", false)
+		return
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var e: String = T.error_hex
+	if args.is_empty():
+		main.append_output("[color=" + e + "]用法: dial <号码>[/color]\n", false)
+		main.append_output("[color=" + m + "]示例: dial 1001-0001[/color]\n", false)
+		main.append_output("[color=" + m + "]输入 phonebook 查看已知号码。[/color]\n", false)
+		return
+	var number: String = str(args[0]).strip_edges()
+	# 检查通讯系统是否忙
+	if main.comm_mgr and main.comm_mgr.is_active:
+		main.append_output("[color=" + m + "]通讯频道正在使用中，请稍后再试。[/color]\n", false)
+		return
+	if main.dial_mgr.is_active():
+		main.append_output("[color=" + m + "]线路忙，请稍后再试。[/color]\n", false)
+		return
+	# 验证号码格式
+	if not main.dial_mgr.is_number_format(number):
+		main.append_output("[color=" + e + "]无效的号码格式: " + number + "[/color]\n", false)
+		main.append_output("[color=" + m + "]号码格式: 数字和连字符组成 (如 1001-0001)[/color]\n", false)
+		return
+	main.dial_mgr.dial(number)
+
+func _cmd_comm(args: Array = []) -> void:
+	if main.comm_mgr == null:
+		main.append_output("[color=" + T.error_hex + "]通讯系统未初始化。[/color]\n", false)
+		return
+	main.comm_mgr.handle_comm_command(args)
 
 func _cmd_mail(args: Array = []) -> void:
 	if not user_mgr.is_logged_in:
@@ -683,6 +830,66 @@ func _cmd_explore(args: Array = []) -> void:
 		return
 	# 磁盘模式下直接切换
 	main.explore_viewer.toggle()
+
+func _cmd_install(args: Array = []) -> void:
+	if main.pkg_mgr == null:
+		main.append_output("[color=" + T.error_hex + "]软件包管理器未初始化。[/color]\n", false)
+		return
+
+	if args.is_empty():
+		main.append_output("[color=" + T.error_hex + "]用法: install <磁盘编号>[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]输入 scan 查看可安装的软件包。[/color]\n", false)
+		return
+
+	var index_str: String = str(args[0])
+	if not index_str.is_valid_int():
+		main.append_output("[color=" + T.error_hex + "]请输入有效的编号。[/color]\n", false)
+		return
+
+	var index: int = int(index_str) - 1
+	if index < 0 or index >= disc_mgr.available_stories.size():
+		main.append_output("[color=" + T.error_hex + "]编号超出范围。可用: 1-" + str(disc_mgr.available_stories.size()) + "[/color]\n", false)
+		return
+
+	# 显示安装进度
+	main.append_output("[color=" + T.muted_hex + "]正在安装软件包...[/color]\n", false)
+	await tw.show_progress_bar(500)
+
+	var result: Dictionary = main.pkg_mgr.install_package(index)
+	if result["success"]:
+		main.append_output("[color=" + T.success_hex + "]" + str(result["message"]) + "[/color]\n", false)
+	else:
+		main.append_output("[color=" + T.error_hex + "]" + str(result["message"]) + "[/color]\n", false)
+
+func _cmd_uninstall(args: Array = []) -> void:
+	if main.pkg_mgr == null:
+		main.append_output("[color=" + T.error_hex + "]软件包管理器未初始化。[/color]\n", false)
+		return
+
+	if args.is_empty():
+		main.append_output("[color=" + T.error_hex + "]用法: uninstall <包名或ID>[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]输入 packages 查看已安装的软件包。[/color]\n", false)
+		return
+
+	# 支持多个单词组成的包名
+	var pkg_name: String = " ".join(args)
+
+	main.append_output("[color=" + T.muted_hex + "]正在卸载...[/color]\n", false)
+	await tw.show_progress_bar(300)
+
+	var result: Dictionary = main.pkg_mgr.uninstall_package(pkg_name)
+	if result["success"]:
+		main.append_output("[color=" + T.success_hex + "]" + str(result["message"]) + "[/color]\n", false)
+	else:
+		main.append_output("[color=" + T.error_hex + "]" + str(result["message"]) + "[/color]\n", false)
+
+func _cmd_packages(_args: Array = []) -> void:
+	if main.pkg_mgr == null:
+		main.append_output("[color=" + T.error_hex + "]软件包管理器未初始化。[/color]\n", false)
+		return
+	main.append_output(main.pkg_mgr.get_installed_list_text(), false)
+
+
 # ══════════════════════════════════════════════════════════════
 #  磁盘模式命令
 # ══════════════════════════════════════════════════════════════

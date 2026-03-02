@@ -430,6 +430,8 @@ func get_profile_data() -> Dictionary:
 		"login_fail_count": int(current_user.get("login_fail_count", 0)),
 		"discs_loaded_count": int(current_user.get("discs_loaded_count", 0)),
 		"system_notes": get_system_notes(),
+		"installed_packages_count": int(current_user.get("installed_packages", {}).size()),
+		"packages_installed_count": int(current_user.get("packages_installed_count", 0)),
 	}
 
 
@@ -619,6 +621,7 @@ func _create_default_profile(username: String, password: String) -> Dictionary:
 		"discs_loaded_count": 0,
 		"system_notes": [],
 		"achievements": [],
+		"installed_packages": {},
 		"preferences": {
 			"theme": "",
 			"typing_speed": 1.0

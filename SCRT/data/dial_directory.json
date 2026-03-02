@@ -1,0 +1,11 @@
+{
+	"voice": {},
+	"modem": {
+		"9900-0001": {
+			"label": "SCP Foundation Archive Server",
+			"speed_display": "9600 bps",
+			"filename": "upload_test.scp",
+			"url": "https://scpsandboxcn.wikidot.com/local--files/jand-test/upload_test.scp"
+		}
+	}
+}

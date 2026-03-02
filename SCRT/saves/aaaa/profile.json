@@ -1,0 +1,35 @@
+{
+	"achievements": [],
+	"avatar": "",
+	"badge": "",
+	"birthday": "",
+	"command_count": 66.0,
+	"created_at": "2026-02-27 16:18:20",
+	"discs_loaded_count": 15.0,
+	"files_read_count": 2.0,
+	"installed_packages": {
+
+	},
+	"last_fail_time": "2026-02-27 18:49:31",
+	"last_login": "2026-03-03 01:54:45",
+	"login_count": 29,
+	"login_fail_count": 0,
+	"password": "aaaa",
+	"preferences": {
+		"theme": "",
+		"typing_speed": 1.0
+	},
+	"role": "user",
+	"session_count": 0.0,
+	"system_notes": [
+		{
+			"content": "新操作员档案已建立。等待安全审查。",
+			"date": "2026-02-27 16:18:20",
+			"from": "SYSTEM",
+			"tone": "neutral"
+		}
+	],
+	"title": "",
+	"total_time_seconds": 0.0,
+	"username": "aaaa"
+}

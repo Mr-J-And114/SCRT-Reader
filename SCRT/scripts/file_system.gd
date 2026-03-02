@@ -112,6 +112,26 @@ func get_children_at_path(path: String) -> Array[String]:
 	children.sort()
 	return children
 
+
+## 获取指定路径的文件/文件夹数据字典，不存在返回空字典
+func get_file_data(path: String) -> Dictionary:
+	var norm: String = normalize_path(path)
+	var node = get_node_at_path(norm)
+	if node == null:
+		return {}
+	if node is Dictionary:
+		return node
+	# 如果 node 是自定义对象，尝试转成字典
+	var result: Dictionary = {}
+	if "type" in node:
+		result["type"] = node.type
+	if "name" in node:
+		result["name"] = node.name
+	if "content" in node:
+		result["content"] = node.content
+	return result
+
+
 # ============================================================
 # 权限检查
 # ============================================================

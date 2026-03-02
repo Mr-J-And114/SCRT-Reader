@@ -1,8 +1,12 @@
 res://scenes/main.tscn
+res://addons/agent/ui/resource/AgentTheme.tres
+res://addons/agent/agent.gd
 res://shaders/background_vignette.gdshader
 res://shaders/background_logo.gdshader
-res://scripts/main.gd
-res://scripts/boot_sequence.gd
+res://comm_system/comm_manager.gd
 res://scripts/command_handler.gd
-res://scripts/loading_screen.gd
-res://scripts/disc_manager.gd
+res://data/tutorial.json
+res://comm_system/dial_tone_generator.gd
+res://comm_system/dial_manager.gd
+res://comm_system/comm_dialogue_player.gd
+res://data/dial_directory.json

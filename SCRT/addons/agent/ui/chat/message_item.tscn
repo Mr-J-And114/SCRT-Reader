@@ -1,0 +1,307 @@
+[gd_scene load_steps=28 format=3 uid="uid://cjytvn2j0yi3s"]
+
+[ext_resource type="Script" uid="uid://b2ia356h5kd7m" path="res://addons/agent/ui/chat/message_item.gd" id="1_kn78a"]
+[ext_resource type="Script" uid="uid://ddyk6f1xy0q5e" path="res://addons/agent/ui/richtext_effects/agent_thinking_text_effect.gd" id="2_q4qcv"]
+[ext_resource type="Texture2D" uid="uid://btnh1plrm3etf" path="res://addons/agent/icons/newicon/Icon_arrowdown.svg" id="2_rqoyl"]
+[ext_resource type="Texture2D" uid="uid://bju45nukrqniq" path="res://addons/agent/icons/newicon/icon_refresh.svg" id="4_ckm2q"]
+[ext_resource type="Texture2D" uid="uid://c7k1lmqcefawo" path="res://addons/agent/icons/newicon/Icon_done.svg" id="4_r6uvy"]
+[ext_resource type="Texture2D" uid="uid://b0w6w8e7xvlb3" path="res://addons/agent/icons/newicon/icon_copy1.svg" id="5_4ud0n"]
+[ext_resource type="Texture2D" uid="uid://ba3i6c5vgyrb" path="res://addons/agent/icons/newicon/Icon_minusfill.svg" id="5_hhdjy"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_rqoyl"]
+bg_color = Color(0.15686275, 0.15686275, 0.15686275, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_nnls0"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_q4qcv"]
+content_margin_left = 20.0
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_width_left = 4
+border_color = Color(0.2, 0.2, 0.2, 1)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_kn78a"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_q4qcv"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_tt4f8"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_p3yum"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fsx2h"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_u11mo"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_dfcb6"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_njs72"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ckm2q"]
+content_margin_left = 12.0
+content_margin_top = 6.0
+content_margin_bottom = 6.0
+bg_color = Color(0.14901961, 0.1764706, 0.22745098, 1)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_rqoyl"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ckm2q"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_r6uvy"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_4ud0n"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kn78a"]
+bg_color = Color(0.1254902, 0.1254902, 0.1254902, 1)
+
+[sub_resource type="RichTextEffect" id="RichTextEffect_q4qcv"]
+script = ExtResource("2_q4qcv")
+metadata/_custom_type_script = "uid://ddyk6f1xy0q5e"
+
+[sub_resource type="LabelSettings" id="LabelSettings_hhdjy"]
+font_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hhdjy"]
+
+[node name="MessageItem" type="MarginContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_right = 10
+script = ExtResource("1_kn78a")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="ContentContainer" type="VBoxContainer" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ThinkContainer" type="VBoxContainer" parent="VBoxContainer/ContentContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="ThinkTimePanel" type="PanelContainer" parent="VBoxContainer/ContentContainer/ThinkContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_rqoyl")
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/ContentContainer/ThinkContainer/ThinkTimePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 2
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/ContentContainer/ThinkContainer/ThinkTimePanel/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 4
+theme_override_constants/separation = 4
+
+[node name="ThinkingLabel" type="Label" parent="VBoxContainer/ContentContainer/ThinkContainer/ThinkTimePanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "思考中"
+
+[node name="ThinkingTimeLabel" type="Label" parent="VBoxContainer/ContentContainer/ThinkContainer/ThinkTimePanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0.0 s"
+
+[node name="ExpandIcon" type="TextureRect" parent="VBoxContainer/ContentContainer/ThinkContainer/ThinkTimePanel/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(15, 10)
+layout_mode = 2
+texture = ExtResource("2_rqoyl")
+expand_mode = 1
+stretch_mode = 5
+flip_v = true
+
+[node name="ExpandButton" type="Button" parent="VBoxContainer/ContentContainer/ThinkContainer/ThinkTimePanel"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "展开"
+mouse_default_cursor_shape = 2
+theme_override_styles/focus = SubResource("StyleBoxEmpty_nnls0")
+toggle_mode = true
+button_pressed = true
+flat = true
+
+[node name="PanelContainer" type="PanelContainer" parent="VBoxContainer/ContentContainer/ThinkContainer"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_q4qcv")
+
+[node name="ThinkContent" type="RichTextLabel" parent="VBoxContainer/ContentContainer/ThinkContainer/PanelContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+theme_override_colors/default_color = Color(0.46666667, 0.46666667, 0.46666667, 1)
+theme_override_font_sizes/normal_font_size = 12
+theme_override_styles/normal = SubResource("StyleBoxEmpty_kn78a")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_q4qcv")
+theme_override_styles/background = SubResource("StyleBoxEmpty_tt4f8")
+theme_override_styles/fill = SubResource("StyleBoxEmpty_p3yum")
+fit_content = true
+scroll_active = false
+
+[node name="MessageContainer" type="VBoxContainer" parent="VBoxContainer/ContentContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="MessageContent" type="RichTextLabel" parent="VBoxContainer/ContentContainer/MessageContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+focus_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxEmpty_fsx2h")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_u11mo")
+theme_override_styles/background = SubResource("StyleBoxEmpty_dfcb6")
+theme_override_styles/fill = SubResource("StyleBoxEmpty_njs72")
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+selection_enabled = true
+
+[node name="UserMessageContainer" type="PanelContainer" parent="VBoxContainer/ContentContainer"]
+unique_name_in_owner = true
+visible = false
+clip_contents = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_ckm2q")
+
+[node name="UserMessageContent" type="RichTextLabel" parent="VBoxContainer/ContentContainer/UserMessageContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+focus_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxEmpty_rqoyl")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_ckm2q")
+theme_override_styles/background = SubResource("StyleBoxEmpty_r6uvy")
+theme_override_styles/fill = SubResource("StyleBoxEmpty_4ud0n")
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+autowrap_mode = 1
+selection_enabled = true
+text_direction = 3
+
+[node name="WaitUsingTool" type="PanelContainer" parent="VBoxContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_kn78a")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="VBoxContainer/WaitUsingTool"]
+layout_mode = 2
+bbcode_enabled = true
+text = "[agent_thinking freq=5.0 span=5.0]测试文本[/agent_thinking]"
+fit_content = true
+custom_effects = [SubResource("RichTextEffect_q4qcv")]
+
+[node name="UseToolContainer" type="VBoxContainer" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ErrorMessageContainer" type="VBoxContainer" parent="VBoxContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="ErrorMessageLabel" type="RichTextLabel" parent="VBoxContainer/ErrorMessageContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+bbcode_enabled = true
+text = "[color=red]%s[/color]"
+fit_content = true
+
+[node name="FinishMessage" type="HBoxContainer" parent="VBoxContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="SuccessMessage" type="HBoxContainer" parent="VBoxContainer/FinishMessage"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="TextureRect" type="TextureRect" parent="VBoxContainer/FinishMessage/SuccessMessage"]
+self_modulate = Color(0.13725491, 0.8156863, 0.6313726, 1)
+custom_minimum_size = Vector2(16, 0)
+layout_mode = 2
+texture = ExtResource("4_r6uvy")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Label" type="Label" parent="VBoxContainer/FinishMessage/SuccessMessage"]
+layout_mode = 2
+text = "对话已完成"
+label_settings = SubResource("LabelSettings_hhdjy")
+
+[node name="StopMessage" type="HBoxContainer" parent="VBoxContainer/FinishMessage"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="TextureRect" type="TextureRect" parent="VBoxContainer/FinishMessage/StopMessage"]
+self_modulate = Color(0.46666667, 0.46666667, 0.46666667, 1)
+custom_minimum_size = Vector2(16, 0)
+layout_mode = 2
+texture = ExtResource("5_hhdjy")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Label" type="Label" parent="VBoxContainer/FinishMessage/StopMessage"]
+layout_mode = 2
+text = "对话已终止"
+label_settings = SubResource("LabelSettings_hhdjy")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/FinishMessage"]
+layout_mode = 2
+size_flags_horizontal = 10
+
+[node name="CopyButton" type="Button" parent="VBoxContainer/FinishMessage/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 20)
+layout_mode = 2
+tooltip_text = "复制到剪切板"
+mouse_default_cursor_shape = 2
+theme_override_colors/icon_normal_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_colors/icon_focus_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_colors/icon_pressed_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_colors/icon_hover_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_colors/icon_hover_pressed_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_styles/focus = SubResource("StyleBoxEmpty_hhdjy")
+icon = ExtResource("5_4ud0n")
+flat = true
+expand_icon = true
+
+[node name="ReSendButton" type="Button" parent="VBoxContainer/FinishMessage/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 20)
+layout_mode = 2
+tooltip_text = "重新发送"
+mouse_default_cursor_shape = 2
+theme_override_colors/icon_normal_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_colors/icon_focus_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_colors/icon_pressed_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_colors/icon_hover_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_colors/icon_hover_pressed_color = Color(0.5568628, 0.5568628, 0.5568628, 1)
+theme_override_styles/focus = SubResource("StyleBoxEmpty_hhdjy")
+icon = ExtResource("4_ckm2q")
+flat = true
+expand_icon = true
