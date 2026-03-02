@@ -75,6 +75,8 @@ func _register_commands() -> void:
 		"pb": _cmd_phonebook,		# ★ 号码簿（简写）
 		"settings": _cmd_settings,   # ★ 设置系统
 		"set": _cmd_settings,        # ★ 设置系统（简写）
+		"env": _cmd_env,             # ★ 环境监测系统
+		"monitor": _cmd_env,         # ★ 环境监测（别名）
 	}
 
 	# ── 桌面模式专用命令 ──
@@ -398,6 +400,9 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
 		lines.append("")
+		lines.append("[color=" + p + "]  ── 环境监测 ──[/color]")
+		lines.append("  [color=" + p + "]env[/color]           环境监测系统 (env help 查看子命令)")
+		lines.append("")
 		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
 		lines.append("  [color=" + p + "]fx_safe[/color]	   光敏安全模式 (on/off)")
@@ -460,6 +465,9 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
 		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
 		lines.append("  [color=" + p + "]exit[/color]          退出终端")
+		lines.append("")
+		lines.append("[color=" + p + "]  ── 环境监测 ──[/color]")
+		lines.append("  [color=" + p + "]env[/color]           环境监测系统 (env help 查看子命令)")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
@@ -1671,3 +1679,341 @@ func _cmd_decode(args: Array = []) -> void:
 	# 传递参数给 decode_viewer 打开
 	main.append_output("[color=" + T.muted_hex + "]正在启动密码解码器...[/color]\n", false)
 	main.open_decode_viewer(args)
+
+# ══════════════════════════════════════════
+#  ★ 环境监测系统命令
+# ══════════════════════════════════════════
+func _cmd_env(args: Array = []) -> void:
+	if main.env_monitor == null or main.env_task_mgr == null:
+		main.append_output("[color=" + T.error_hex + "]环境监测系统未初始化。[/color]\n", false)
+		return
+	var em: EnvMonitor = main.env_monitor
+	var tm: EnvTaskManager = main.env_task_mgr
+	var colors: Dictionary = {"primary": T.primary_hex, "muted": T.muted_hex, "success": T.success_hex, "warning": T.warning_hex, "error": T.error_hex}
+	if args.is_empty():
+		_cmd_env_help()
+		return
+	var sub: String = str(args[0]).to_lower()
+	var sub_args: Array = args.slice(1)
+	match sub:
+		"help", "?":
+			_cmd_env_help()
+		"status", "s":
+			_cmd_env_status(em, colors)
+		"view", "panel", "v":
+			_cmd_env_view()
+		"tasks", "t":
+			_cmd_env_tasks(tm, colors)
+		"check":
+			_cmd_env_exec_task("equipment_check", tm, colors)
+		"read":
+			if sub_args.is_empty():
+				_cmd_env_exec_task("weather_reading", tm, colors)
+			else:
+				var category: String = str(sub_args[0]).to_lower()
+				match category:
+					"atmosphere", "atmo", "weather", "wx":
+						_cmd_env_exec_task("weather_reading", tm, colors)
+					"ocean", "sea":
+						_cmd_env_exec_task("ocean_reading", tm, colors)
+					"geophysics", "geo", "geophys":
+						_cmd_env_exec_task("geophysics_reading", tm, colors)
+					"composition", "comp", "gas":
+						_cmd_env_exec_task("composition_reading", tm, colors)
+					_:
+						main.append_output("[color=" + T.error_hex + "]未知分类: " + category + "[/color]\n", false)
+						main.append_output("[color=" + T.muted_hex + "]可选: atmosphere, ocean, geophysics, composition[/color]\n", false)
+		"calibrate", "cal":
+			_cmd_env_exec_task("calibration", tm, colors)
+		"anomaly", "anom":
+			_cmd_env_exec_task("anomaly_check", tm, colors)
+		"report":
+			_cmd_env_exec_task("daily_report", tm, colors)
+		"repair":
+			_cmd_env_repair(em, sub_args, colors)
+		"advance", "next":
+			_cmd_env_advance(em, tm, colors)
+		"sensor":
+			_cmd_env_sensor(em, sub_args, colors)
+		"weather", "wx":
+			_cmd_env_weather(em, colors)
+		"events":
+			_cmd_env_events(em, colors)
+		_:
+			main.append_output("[color=" + T.error_hex + "]未知子命令: " + sub + "[/color]\n", false)
+			_cmd_env_help()
+
+func _cmd_env_help() -> void:
+	var lines: Array = [
+		"[color=" + T.primary_hex + "]═══ 环境监测系统 (ENV) ═══[/color]",
+		"",
+		"[color=" + T.muted_hex + "]信息查看:[/color]",
+		"  [color=" + T.primary_hex + "]env status[/color]          — 环境概览（当前所有读数）",
+		"  [color=" + T.primary_hex + "]env view[/color]            — 打开监测仪表盘面板",
+		"  [color=" + T.primary_hex + "]env tasks[/color]           — 查看今日任务清单",
+		"  [color=" + T.primary_hex + "]env weather[/color]         — 当前天气详情",
+		"  [color=" + T.primary_hex + "]env events[/color]          — 查看活跃事件",
+		"  [color=" + T.primary_hex + "]env sensor <id>[/color]     — 查看指定传感器详情",
+		"",
+		"[color=" + T.muted_hex + "]日常任务:[/color]",
+		"  [color=" + T.primary_hex + "]env check[/color]           — 设备状态检查",
+		"  [color=" + T.primary_hex + "]env read <分类>[/color]     — 记录环境数据",
+		"  [color=" + T.muted_hex + "]    分类: atmosphere | ocean | geophysics | composition[/color]",
+		"  [color=" + T.primary_hex + "]env calibrate[/color]       — 仪器校准",
+		"  [color=" + T.primary_hex + "]env anomaly[/color]         — 异常检查与确认",
+		"  [color=" + T.primary_hex + "]env report[/color]          — 提交日报",
+		"",
+		"[color=" + T.muted_hex + "]维护与推进:[/color]",
+		"  [color=" + T.primary_hex + "]env repair <传感器>[/color]  — 修复离线传感器",
+		"  [color=" + T.primary_hex + "]env advance[/color]         — 进入下一天（需完成所有任务）",
+		"",
+	]
+	main.append_output("\n".join(lines) + "\n", false)
+
+func _cmd_env_status(em: EnvMonitor, colors: Dictionary) -> void:
+	var p: String = str(colors.get("primary", "#00ff00"))
+	var m: String = str(colors.get("muted", "#666666"))
+	var w: String = str(colors.get("warning", "#ffcc00"))
+	var lines: Array = []
+	lines.append("[color=%s]═══ 环境状态概览 (%s %s) ═══[/color]" % [p, em.get_day_display(), em.get_current_hour_display()])
+	lines.append("[color=%s]天气: %s  风向: %s  云量: %d/8[/color]\n" % [m, em.get_weather_name(), em.get_wind_direction_name(), roundi(em.get_reading("cloud_cover"))])
+	# 按分类输出
+	var categories: Array = ["atmosphere", "ocean", "geophysics", "composition"]
+	var cat_names: Dictionary = {"atmosphere": "大气", "ocean": "海洋", "geophysics": "地球物理", "composition": "大气成分"}
+	for cat in categories:
+		lines.append("[color=%s]【%s】[/color]" % [p, str(cat_names.get(cat, cat))])
+		var sensor_ids: Array = em.get_sensors_by_category(cat)
+		for sid in sensor_ids:
+			var cfg: Dictionary = em.get_sensor_config(sid)
+			var val: float = em.get_reading(sid)
+			var status: String = em.sensor_status.get(sid, "online")
+			var trend: String = em.get_sensor_trend(sid)
+			var name: String = str(cfg.get("name", sid))
+			var unit: String = str(cfg.get("unit", ""))
+			var val_str: String
+			if is_nan(val) or status == "offline":
+				val_str = "---"
+			elif absf(val) >= 1000:
+				val_str = "%d" % roundi(val)
+			else:
+				val_str = "%.1f" % val
+			var trend_sym: String = ""
+			match trend:
+				"rising": trend_sym = "↑"
+				"falling": trend_sym = "↓"
+				"stable": trend_sym = "→"
+			var status_tag: String = ""
+			var col: String = m
+			if status == "offline":
+				status_tag = " [离线]"
+				col = str(colors.get("error", "#ff4444"))
+			elif status == "degraded":
+				status_tag = " [退化]"
+				col = w
+			lines.append("[color=%s]  %-12s %s %s %s%s[/color]" % [col, name, val_str, unit, trend_sym, status_tag])
+		lines.append("")
+	# 事件
+	var events: Dictionary = em.get_active_events()
+	if events.size() > 0:
+		lines.append("[color=%s]活跃事件:[/color]" % w)
+		for eid in events.keys():
+			var evt: Dictionary = events[eid]
+			lines.append("[color=%s]  • %s (至第%d天)[/color]" % [w, str(evt.get("name", eid)), int(evt.get("end_day", 0))])
+		lines.append("")
+	main.append_output("\n".join(lines) + "\n", false)
+
+func _cmd_env_view() -> void:
+	if main.env_viewer:
+		main.env_viewer.open()
+		main._env_viewer_mode = true
+		main.append_output("[color=" + T.muted_hex + "]环境监测面板已打开。[/color]\n", false)
+
+func _cmd_env_tasks(tm: EnvTaskManager, colors: Dictionary) -> void:
+	main.append_output("\n" + tm.format_task_checklist(colors) + "\n", false)
+
+func _cmd_env_exec_task(task_id: String, tm: EnvTaskManager, colors: Dictionary) -> void:
+	var result: Dictionary = tm.begin_task(task_id)
+	if not result.get("success", false):
+		main.append_output("[color=" + T.error_hex + "]" + str(result.get("message", "任务执行失败")) + "[/color]\n", false)
+		return
+	var data: Dictionary = result.get("data", {})
+	var tdef: Dictionary = tm.task_definitions.get(task_id, {})
+	var task_type: String = str(tdef.get("type", ""))
+	# 根据任务类型格式化输出
+	match task_type:
+		"inspection":
+			main.append_output("\n" + tm.format_inspection_result(data, colors) + "\n\n", false)
+		"recording":
+			main.append_output("\n" + tm.format_recording_result(data, colors) + "\n\n", false)
+		"maintenance":
+			main.append_output("\n" + tm.format_calibration_result(data, colors) + "\n\n", false)
+		"analysis":
+			main.append_output("\n" + tm.format_anomaly_result(data, colors) + "\n\n", false)
+		"report":
+			main.append_output("\n" + tm.format_daily_report(data, colors) + "\n\n", false)
+		_:
+			main.append_output("[color=" + T.success_hex + "]任务完成: " + str(tdef.get("name", task_id)) + "[/color]\n", false)
+	# 检查是否所有任务完成
+	if tm.is_all_required_completed():
+		main.append_output("[color=" + T.success_hex + "]所有必要任务已完成！输入 env advance 进入下一天。[/color]\n", false)
+
+func _cmd_env_repair(em: EnvMonitor, sub_args: Array, colors: Dictionary) -> void:
+	if sub_args.is_empty():
+		# 列出所有非在线传感器
+		var offline: Array = []
+		for sid in em.sensors.keys():
+			if em.sensor_status.get(sid, "online") != "online":
+				var cfg: Dictionary = em.get_sensor_config(sid)
+				offline.append({"id": sid, "name": str(cfg.get("name", sid)), "status": em.sensor_status[sid]})
+		if offline.is_empty():
+			main.append_output("[color=" + str(colors.get("success", "")) + "]所有传感器运行正常，无需修复。[/color]\n", false)
+		else:
+			main.append_output("[color=" + str(colors.get("warning", "")) + "]需要修复的传感器:[/color]\n", false)
+			for s in offline:
+				main.append_output("[color=" + str(colors.get("muted", "")) + "]  %s (%s) — %s[/color]\n" % [str(s["name"]), str(s["id"]), str(s["status"])], false)
+			main.append_output("[color=" + str(colors.get("muted", "")) + "]使用: env repair <传感器id>[/color]\n", false)
+		return
+	var sid: String = str(sub_args[0])
+	if not em.sensors.has(sid):
+		main.append_output("[color=" + T.error_hex + "]未知传感器: " + sid + "[/color]\n", false)
+		return
+	if em.repair_sensor(sid):
+		var cfg: Dictionary = em.get_sensor_config(sid)
+		main.append_output("[color=" + T.success_hex + "]传感器 " + str(cfg.get("name", sid)) + " 已修复并重新上线。[/color]\n", false)
+	else:
+		main.append_output("[color=" + T.muted_hex + "]传感器已在线，无需修复。[/color]\n", false)
+
+func _cmd_env_advance(em: EnvMonitor, tm: EnvTaskManager, _colors: Dictionary) -> void:
+	if not tm.can_advance_day():
+		var progress: Dictionary = tm.get_progress()
+		main.append_output("[color=" + T.error_hex + "]无法推进：请先完成所有必要任务并提交日报。[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]当前进度: %d/%d[/color]\n" % [int(progress["completed"]), int(progress["total"])], false)
+		return
+	em.advance_day()
+	tm.reset_for_new_day()
+	main.append_output("\n[color=" + T.primary_hex + "]═══════════════════════════════════════[/color]\n", false)
+	main.append_output("[color=" + T.primary_hex + "]  %s 开始  —  %s[/color]\n" % [em.get_day_display(), em.get_weather_name()], false)
+	main.append_output("[color=" + T.primary_hex + "]═══════════════════════════════════════[/color]\n\n", false)
+	# 通知当天天气
+	main.append_output("[color=" + T.muted_hex + "]今日天气预报: %s，风向 %s，气温 %.1f°C[/color]\n" % [
+		em.get_weather_name(), em.get_wind_direction_name(), em.get_reading("air_temp")], false)
+	# 活跃事件提醒
+	var events: Dictionary = em.get_active_events()
+	if events.size() > 0:
+		for eid in events.keys():
+			var evt: Dictionary = events[eid]
+			var col: String = T.error_hex if evt.get("scp_related", false) else T.warning_hex
+			main.append_output("[color=" + col + "]! 事件进行中: %s[/color]\n" % str(evt.get("name", eid)), false)
+	main.append_output("[color=" + T.muted_hex + "]\n输入 env tasks 查看今日任务清单。[/color]\n", false)
+
+func _cmd_env_sensor(em: EnvMonitor, sub_args: Array, colors: Dictionary) -> void:
+	if sub_args.is_empty():
+		main.append_output("[color=" + T.muted_hex + "]用法: env sensor <传感器id>[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]可用传感器:[/color]\n", false)
+		for sid in em.sensors.keys():
+			var cfg: Dictionary = em.get_sensor_config(sid)
+			main.append_output("[color=" + T.muted_hex + "]  %-16s %s[/color]\n" % [sid, str(cfg.get("name", ""))], false)
+		return
+	var sid: String = str(sub_args[0])
+	if not em.sensors.has(sid):
+		main.append_output("[color=" + T.error_hex + "]未知传感器: " + sid + "[/color]\n", false)
+		return
+	var cfg: Dictionary = em.get_sensor_config(sid)
+	var val: float = em.get_reading(sid)
+	var status: String = em.sensor_status.get(sid, "unknown")
+	var trend: String = em.get_sensor_trend(sid)
+	var offset: float = em.calibration_offsets.get(sid, 0.0)
+	var p: String = str(colors.get("primary", ""))
+	var m: String = str(colors.get("muted", ""))
+	var lines: Array = [
+		"[color=%s]── 传感器详情: %s ──[/color]" % [p, str(cfg.get("name", sid))],
+		"[color=%s]  ID:       %s[/color]" % [m, sid],
+		"[color=%s]  型号:     %s[/color]" % [m, str(cfg.get("description", ""))],
+		"[color=%s]  分类:     %s[/color]" % [m, str(cfg.get("category", ""))],
+		"[color=%s]  当前值:   %s %s[/color]" % [p, "%.1f" % val if not is_nan(val) else "N/A", str(cfg.get("unit", ""))],
+		"[color=%s]  状态:     %s[/color]" % [p if status == "online" else str(colors.get("error", "")), status],
+		"[color=%s]  趋势:     %s[/color]" % [m, trend],
+		"[color=%s]  校准偏移: %.3f[/color]" % [m, offset],
+		"[color=%s]  量程:     %s[/color]" % [m, str(cfg.get("range", []))],
+	]
+	# 历史
+	var history: Array = em.reading_history.get(sid, [])
+	if history.size() > 0:
+		lines.append("[color=%s]  最近读数:[/color]" % m)
+		var show: int = mini(history.size(), 8)
+		for i in range(history.size() - show, history.size()):
+			var h: Dictionary = history[i]
+			lines.append("[color=%s]    %05.1fh → %.1f[/color]" % [m, float(h.get("hour", 0)), float(h.get("value", 0))])
+	main.append_output("\n".join(lines) + "\n\n", false)
+
+func _cmd_env_weather(em: EnvMonitor, colors: Dictionary) -> void:
+	var p: String = str(colors.get("primary", ""))
+	var m: String = str(colors.get("muted", ""))
+	var lines: Array = [
+		"[color=%s]── 天气状况 ──[/color]" % p,
+		"[color=%s]  当前天气: %s[/color]" % [p, em.get_weather_name()],
+		"[color=%s]  气温:     %.1f°C[/color]" % [m, em.get_reading("air_temp")],
+		"[color=%s]  体感温度: %.1f°C (风寒)[/color]" % [m, _calc_wind_chill(em.get_reading("air_temp"), em.get_reading("wind_speed"))],
+		"[color=%s]  湿度:     %.0f%%[/color]" % [m, em.get_reading("humidity")],
+		"[color=%s]  气压:     %.1f hPa (%s)[/color]" % [m, em.get_reading("pressure"), em.get_sensor_trend("pressure")],
+		"[color=%s]  风速:     %.1f m/s[/color]" % [m, em.get_reading("wind_speed")],
+		"[color=%s]  风向:     %s (%.0f°)[/color]" % [m, em.get_wind_direction_name(), em.current_wind_dir],
+		"[color=%s]  能见度:   %.1f km[/color]" % [m, em.get_reading("visibility")],
+		"[color=%s]  云量:     %d/8[/color]" % [m, roundi(em.get_reading("cloud_cover"))],
+		"[color=%s]  降水:     %.1f mm/h[/color]" % [m, em.get_reading("precipitation")],
+		"[color=%s]  光照:     %d lux[/color]" % [m, roundi(em.get_reading("light_level"))],
+		"[color=%s]  紫外线:   %d[/color]" % [m, roundi(em.get_reading("uv_index"))],
+	]
+	# 蒲福风级
+	var bft: int = _beaufort_scale(em.get_reading("wind_speed"))
+	lines.append("[color=%s]  蒲福风级: %d 级[/color]" % [m, bft])
+	main.append_output("\n".join(lines) + "\n\n", false)
+
+func _cmd_env_events(em: EnvMonitor, colors: Dictionary) -> void:
+	var p: String = str(colors.get("primary", ""))
+	var m: String = str(colors.get("muted", ""))
+	var w: String = str(colors.get("warning", ""))
+	var e: String = str(colors.get("error", ""))
+	var lines: Array = ["[color=%s]── 活跃事件 ──[/color]" % p]
+	var events: Dictionary = em.get_active_events()
+	if events.is_empty():
+		lines.append("[color=%s]当前无活跃事件。[/color]" % m)
+	else:
+		for eid in events.keys():
+			var evt: Dictionary = events[eid]
+			var col: String = e if evt.get("scp_related", false) else w
+			lines.append("[color=%s]  • %s[/color]" % [col, str(evt.get("name", eid))])
+			lines.append("[color=%s]    持续: 第%d天 - 第%d天[/color]" % [m, int(evt.get("start_day", 0)), int(evt.get("end_day", 0))])
+			if evt.get("scp_related", false):
+				lines.append("[color=%s]    [SCP 相关事件][/color]" % e)
+	# 待确认异常
+	lines.append("\n[color=%s]── 异常记录 ──[/color]" % p)
+	var anomalies: Array[Dictionary] = em.get_detected_anomalies()
+	var pending: Array[Dictionary] = em.get_pending_anomalies()
+	lines.append("[color=%s]  待确认: %d  已记录: %d[/color]" % [m, pending.size(), anomalies.size()])
+	if pending.size() > 0:
+		lines.append("[color=%s]  使用 env anomaly 进行异常检查。[/color]" % m)
+	main.append_output("\n".join(lines) + "\n\n", false)
+
+## 风寒温度计算 (Wind Chill Index)
+func _calc_wind_chill(temp: float, wind: float) -> float:
+	if temp > 10.0 or wind < 1.3:
+		return temp
+	var v: float = pow(wind * 3.6, 0.16)  # km/h 转换
+	return 13.12 + 0.6215 * temp - 11.37 * v + 0.3965 * temp * v
+
+## 蒲福风级
+func _beaufort_scale(wind_speed: float) -> int:
+	if wind_speed < 0.3: return 0
+	if wind_speed < 1.6: return 1
+	if wind_speed < 3.4: return 2
+	if wind_speed < 5.5: return 3
+	if wind_speed < 8.0: return 4
+	if wind_speed < 10.8: return 5
+	if wind_speed < 13.9: return 6
+	if wind_speed < 17.2: return 7
+	if wind_speed < 20.8: return 8
+	if wind_speed < 24.5: return 9
+	if wind_speed < 28.5: return 10
+	if wind_speed < 32.7: return 11
+	return 12

@@ -1,0 +1,681 @@
+{
+	"location": {
+		"name": "Site-██ 前哨观测站",
+		"code": "OB-7K",
+		"latitude": 50.5,
+		"longitude": 143.0,
+		"altitude_m": 15,
+		"timezone_offset": 11,
+		"description": "萨哈林岛东南海岸监测哨所"
+	},
+
+	"time": {
+		"day_duration_seconds": 600,
+		"time_scale": 144.0,
+		"update_interval_seconds": 5.0,
+		"hours_per_reading": 1
+	},
+
+	"sensors": {
+		"air_temp": {
+			"name": "气温",
+			"name_en": "Air Temperature",
+			"unit": "°C",
+			"precision": 1,
+			"range": [-45.0, 40.0],
+			"calibration_drift_max": 0.5,
+			"failure_rate": 0.01,
+			"category": "atmosphere",
+			"icon": "T",
+			"description": "大气温度传感器 (PT100)"
+		},
+		"humidity": {
+			"name": "相对湿度",
+			"name_en": "Relative Humidity",
+			"unit": "%",
+			"precision": 0,
+			"range": [0, 100],
+			"calibration_drift_max": 2.0,
+			"failure_rate": 0.015,
+			"category": "atmosphere",
+			"icon": "H",
+			"description": "电容式湿度传感器"
+		},
+		"pressure": {
+			"name": "气压",
+			"name_en": "Barometric Pressure",
+			"unit": "hPa",
+			"precision": 1,
+			"range": [940.0, 1060.0],
+			"calibration_drift_max": 0.3,
+			"failure_rate": 0.005,
+			"category": "atmosphere",
+			"icon": "P",
+			"description": "数字气压计 (MEMS)"
+		},
+		"wind_speed": {
+			"name": "风速",
+			"name_en": "Wind Speed",
+			"unit": "m/s",
+			"precision": 1,
+			"range": [0.0, 60.0],
+			"calibration_drift_max": 0.3,
+			"failure_rate": 0.02,
+			"category": "atmosphere",
+			"icon": "W",
+			"description": "三杯式风速仪"
+		},
+		"wind_dir": {
+			"name": "风向",
+			"name_en": "Wind Direction",
+			"unit": "°",
+			"precision": 0,
+			"range": [0, 360],
+			"calibration_drift_max": 3.0,
+			"failure_rate": 0.02,
+			"category": "atmosphere",
+			"icon": "D",
+			"description": "风向标传感器"
+		},
+		"precipitation": {
+			"name": "降水量",
+			"name_en": "Precipitation",
+			"unit": "mm/h",
+			"precision": 1,
+			"range": [0.0, 80.0],
+			"calibration_drift_max": 0.2,
+			"failure_rate": 0.01,
+			"category": "atmosphere",
+			"icon": "R",
+			"description": "翻斗式雨量计"
+		},
+		"visibility": {
+			"name": "能见度",
+			"name_en": "Visibility",
+			"unit": "km",
+			"precision": 1,
+			"range": [0.0, 50.0],
+			"calibration_drift_max": 0.5,
+			"failure_rate": 0.01,
+			"category": "atmosphere",
+			"icon": "V",
+			"description": "前向散射能见度仪"
+		},
+		"cloud_cover": {
+			"name": "云量",
+			"name_en": "Cloud Cover",
+			"unit": "oktas",
+			"precision": 0,
+			"range": [0, 8],
+			"calibration_drift_max": 0,
+			"failure_rate": 0.0,
+			"category": "atmosphere",
+			"icon": "C",
+			"description": "目视观测 (人工)"
+		},
+		"sea_temp": {
+			"name": "海水温度",
+			"name_en": "Sea Surface Temperature",
+			"unit": "°C",
+			"precision": 1,
+			"range": [-2.0, 25.0],
+			"calibration_drift_max": 0.2,
+			"failure_rate": 0.02,
+			"category": "ocean",
+			"icon": "S",
+			"description": "热电偶海水温度探头"
+		},
+		"tide_level": {
+			"name": "潮位",
+			"name_en": "Tide Level",
+			"unit": "m",
+			"precision": 2,
+			"range": [-2.0, 3.0],
+			"calibration_drift_max": 0.02,
+			"failure_rate": 0.01,
+			"category": "ocean",
+			"icon": "L",
+			"description": "压力式潮位计"
+		},
+		"wave_height": {
+			"name": "浪高",
+			"name_en": "Wave Height",
+			"unit": "m",
+			"precision": 1,
+			"range": [0.0, 15.0],
+			"calibration_drift_max": 0.1,
+			"failure_rate": 0.02,
+			"category": "ocean",
+			"icon": "Wv",
+			"description": "超声波测波仪"
+		},
+		"salinity": {
+			"name": "盐度",
+			"name_en": "Salinity",
+			"unit": "PSU",
+			"precision": 1,
+			"range": [28.0, 36.0],
+			"calibration_drift_max": 0.3,
+			"failure_rate": 0.02,
+			"category": "ocean",
+			"icon": "Sa",
+			"description": "CTD 盐度传感器"
+		},
+		"mag_field": {
+			"name": "磁场强度",
+			"name_en": "Magnetic Field",
+			"unit": "nT",
+			"precision": 0,
+			"range": [45000, 65000],
+			"calibration_drift_max": 5.0,
+			"failure_rate": 0.005,
+			"category": "geophysics",
+			"icon": "M",
+			"description": "三轴磁力计 (磁通门)"
+		},
+		"mag_declination": {
+			"name": "磁偏角",
+			"name_en": "Magnetic Declination",
+			"unit": "°",
+			"precision": 1,
+			"range": [-15.0, 15.0],
+			"calibration_drift_max": 0.1,
+			"failure_rate": 0.005,
+			"category": "geophysics",
+			"icon": "Md",
+			"description": "磁力计偏角分量"
+		},
+		"radiation": {
+			"name": "辐射水平",
+			"name_en": "Radiation Level",
+			"unit": "μSv/h",
+			"precision": 2,
+			"range": [0.0, 100.0],
+			"calibration_drift_max": 0.01,
+			"failure_rate": 0.005,
+			"category": "geophysics",
+			"icon": "Rad",
+			"description": "盖格-穆勒计数管"
+		},
+		"seismic": {
+			"name": "地震活动",
+			"name_en": "Seismic Activity",
+			"unit": "mg",
+			"precision": 1,
+			"range": [0.0, 500.0],
+			"calibration_drift_max": 0.0,
+			"failure_rate": 0.005,
+			"category": "geophysics",
+			"icon": "Sei",
+			"description": "宽频带地震仪"
+		},
+		"light_level": {
+			"name": "光照强度",
+			"name_en": "Light Level",
+			"unit": "lux",
+			"precision": 0,
+			"range": [0, 120000],
+			"calibration_drift_max": 50,
+			"failure_rate": 0.01,
+			"category": "atmosphere",
+			"icon": "Lx",
+			"description": "硅光电二极管照度计"
+		},
+		"uv_index": {
+			"name": "紫外线指数",
+			"name_en": "UV Index",
+			"unit": "",
+			"precision": 0,
+			"range": [0, 11],
+			"calibration_drift_max": 0,
+			"failure_rate": 0.01,
+			"category": "atmosphere",
+			"icon": "UV",
+			"description": "紫外辐射传感器"
+		},
+		"soil_temp": {
+			"name": "地温",
+			"name_en": "Soil Temperature",
+			"unit": "°C",
+			"precision": 1,
+			"range": [-20.0, 30.0],
+			"calibration_drift_max": 0.2,
+			"failure_rate": 0.005,
+			"category": "geophysics",
+			"icon": "Tg",
+			"description": "地温传感器 (-10cm)"
+		},
+		"o2_concentration": {
+			"name": "氧气浓度",
+			"name_en": "O2 Concentration",
+			"unit": "%",
+			"precision": 1,
+			"range": [18.0, 23.0],
+			"calibration_drift_max": 0.1,
+			"failure_rate": 0.01,
+			"category": "composition",
+			"icon": "O2",
+			"description": "电化学氧气传感器"
+		},
+		"co2_concentration": {
+			"name": "二氧化碳浓度",
+			"name_en": "CO2 Concentration",
+			"unit": "ppm",
+			"precision": 0,
+			"range": [350, 2000],
+			"calibration_drift_max": 5,
+			"failure_rate": 0.01,
+			"category": "composition",
+			"icon": "CO2",
+			"description": "NDIR 红外CO2分析仪"
+		}
+	},
+
+	"baselines": {
+		"_comment": "萨哈林岛参考月均值 [1月..12月]",
+		"air_temp":        [-15.0, -14.0, -8.0, -1.0,  5.0, 10.0, 15.0, 17.0, 12.0,  5.0, -3.0, -12.0],
+		"humidity":        [  75,    73,   72,   75,   78,   82,   85,   86,   82,   78,   76,    75],
+		"pressure":        [1020, 1018, 1015, 1012, 1010, 1008, 1006, 1008, 1012, 1016, 1018,  1020],
+		"wind_speed":      [  8.0,  9.0,  8.0,  7.0,  6.0,  5.0,  5.0,  5.0,  6.0,  7.0,  8.0,   9.0],
+		"sea_temp":        [ -1.8, -1.8, -1.0,  1.0,  5.0,  9.0, 14.0, 16.0, 13.0,  8.0,  3.0,   0.0],
+		"tide_amplitude":  [ 0.8,  0.8,  0.9,  1.0,  1.1,  1.2,  1.2,  1.1,  1.0,  0.9,  0.8,   0.8],
+		"wave_height":     [ 2.5,  2.8,  2.2,  1.5,  1.0,  0.8,  0.6,  0.7,  1.2,  1.8,  2.3,   2.6],
+		"salinity":        [32.5, 32.5, 32.3, 32.0, 31.8, 31.5, 31.2, 31.0, 31.5, 32.0, 32.3,  32.5],
+		"precipitation":   [ 3.0,  2.5,  2.0,  2.5,  3.0,  3.5,  4.0,  5.0,  4.5,  4.0,  3.5,   3.0],
+		"visibility":      [10.0, 12.0, 15.0, 18.0, 20.0, 15.0, 12.0, 14.0, 18.0, 20.0, 15.0,  10.0],
+		"cloud_cover":     [  6,    6,    5,    5,    5,    6,    6,    6,    5,    5,    6,     6],
+		"mag_field":       [54500,54500,54500,54500,54500,54500,54500,54500,54500,54500,54500, 54500],
+		"mag_declination": [ -9.5, -9.5, -9.5, -9.5, -9.5, -9.5, -9.5, -9.5, -9.5, -9.5, -9.5,  -9.5],
+		"radiation":       [0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08,  0.08],
+		"seismic":         [ 0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,  0.5,   0.5],
+		"soil_temp":       [ -5.0, -5.5, -3.0,  0.0,  4.0,  9.0, 14.0, 15.0, 10.0,  4.0, -1.0,  -4.0],
+		"o2_concentration":[20.9, 20.9, 20.9, 20.9, 20.9, 20.9, 20.9, 20.9, 20.9, 20.9, 20.9,  20.9],
+		"co2_concentration":[415,  415,  415,  415,  418,  420,  418,  416,  415,  414,  414,   415],
+		"light_max":       [8000,15000,30000,50000,70000,80000,85000,75000,55000,30000,12000,  6000],
+		"uv_max":          [  1,    1,    2,    3,    5,    6,    7,    6,    4,    2,    1,     1],
+		"daylight_hours":  [ 7.0,  9.0, 11.5, 14.0, 16.0, 17.5, 17.0, 15.0, 13.0, 10.5,  8.0,   6.5]
+	},
+
+	"variation": {
+		"_comment": "各参数的日内/日间标准差，用于随机波动",
+		"air_temp_daily": 4.0,
+		"air_temp_hourly": 1.5,
+		"humidity_daily": 8.0,
+		"humidity_hourly": 3.0,
+		"pressure_daily": 5.0,
+		"pressure_hourly": 0.8,
+		"wind_speed_daily": 3.0,
+		"wind_speed_hourly": 1.5,
+		"wind_dir_daily": 60,
+		"sea_temp_daily": 1.0,
+		"precipitation_hourly": 2.0,
+		"visibility_hourly": 3.0,
+		"mag_field_daily": 30,
+		"mag_field_hourly": 10,
+		"radiation_daily": 0.01,
+		"seismic_hourly": 0.3
+	},
+
+	"weather_patterns": {
+		"clear": {
+			"name": "晴朗",
+			"probability_weight": 25,
+			"modifiers": {
+				"cloud_cover_mult": 0.2,
+				"precipitation_mult": 0.0,
+				"visibility_mult": 1.5,
+				"wind_speed_mult": 0.7,
+				"humidity_add": -10
+			}
+		},
+		"partly_cloudy": {
+			"name": "多云",
+			"probability_weight": 30,
+			"modifiers": {
+				"cloud_cover_mult": 0.6,
+				"precipitation_mult": 0.1,
+				"visibility_mult": 1.0,
+				"wind_speed_mult": 0.9,
+				"humidity_add": 0
+			}
+		},
+		"overcast": {
+			"name": "阴天",
+			"probability_weight": 20,
+			"modifiers": {
+				"cloud_cover_mult": 1.0,
+				"precipitation_mult": 0.3,
+				"visibility_mult": 0.7,
+				"wind_speed_mult": 1.0,
+				"humidity_add": 5
+			}
+		},
+		"rain": {
+			"name": "降雨",
+			"probability_weight": 10,
+			"modifiers": {
+				"cloud_cover_mult": 1.0,
+				"precipitation_mult": 1.5,
+				"visibility_mult": 0.4,
+				"wind_speed_mult": 1.2,
+				"humidity_add": 15
+			}
+		},
+		"storm": {
+			"name": "风暴",
+			"probability_weight": 5,
+			"modifiers": {
+				"cloud_cover_mult": 1.0,
+				"precipitation_mult": 3.0,
+				"visibility_mult": 0.15,
+				"wind_speed_mult": 2.5,
+				"humidity_add": 20
+			}
+		},
+		"snow": {
+			"name": "降雪",
+			"probability_weight": 8,
+			"season_months": [11, 12, 1, 2, 3],
+			"modifiers": {
+				"cloud_cover_mult": 1.0,
+				"precipitation_mult": 1.0,
+				"visibility_mult": 0.3,
+				"wind_speed_mult": 1.3,
+				"humidity_add": 10
+			}
+		},
+		"fog": {
+			"name": "浓雾",
+			"probability_weight": 8,
+			"modifiers": {
+				"cloud_cover_mult": 0.8,
+				"precipitation_mult": 0.0,
+				"visibility_mult": 0.05,
+				"wind_speed_mult": 0.3,
+				"humidity_add": 20
+			}
+		},
+		"blizzard": {
+			"name": "暴风雪",
+			"probability_weight": 3,
+			"season_months": [12, 1, 2],
+			"modifiers": {
+				"cloud_cover_mult": 1.0,
+				"precipitation_mult": 4.0,
+				"visibility_mult": 0.02,
+				"wind_speed_mult": 3.0,
+				"humidity_add": 15,
+				"air_temp_add": -8
+			}
+		}
+	},
+
+	"tasks": {
+		"equipment_check": {
+			"name": "设备状态检查",
+			"description": "检查所有环境监测传感器的运行状态和供电情况",
+			"command": "env check",
+			"type": "inspection",
+			"required": true,
+			"order": 1,
+			"time_estimate_min": 3,
+			"sensors_to_check": ["air_temp", "humidity", "pressure", "wind_speed", "mag_field", "radiation"]
+		},
+		"weather_reading": {
+			"name": "气象数据记录",
+			"description": "记录主要气象参数：气温、湿度、气压、风速风向、云量",
+			"command": "env read atmosphere",
+			"type": "recording",
+			"required": true,
+			"order": 2,
+			"time_estimate_min": 5,
+			"sensors": ["air_temp", "humidity", "pressure", "wind_speed", "wind_dir", "cloud_cover", "visibility", "precipitation"]
+		},
+		"ocean_reading": {
+			"name": "海洋数据记录",
+			"description": "记录海水温度、潮位、浪高、盐度等海洋参数",
+			"command": "env read ocean",
+			"type": "recording",
+			"required": true,
+			"order": 3,
+			"time_estimate_min": 5,
+			"sensors": ["sea_temp", "tide_level", "wave_height", "salinity"]
+		},
+		"geophysics_reading": {
+			"name": "地球物理数据记录",
+			"description": "记录磁场、辐射、地震活动、地温等地球物理参数",
+			"command": "env read geophysics",
+			"type": "recording",
+			"required": true,
+			"order": 4,
+			"time_estimate_min": 4,
+			"sensors": ["mag_field", "mag_declination", "radiation", "seismic", "soil_temp"]
+		},
+		"composition_reading": {
+			"name": "大气成分分析",
+			"description": "读取大气成分分析仪数据，记录O2/CO2浓度",
+			"command": "env read composition",
+			"type": "recording",
+			"required": true,
+			"order": 5,
+			"time_estimate_min": 3,
+			"sensors": ["o2_concentration", "co2_concentration"]
+		},
+		"calibration": {
+			"name": "仪器校准",
+			"description": "对气压计和磁力计进行日常校准，检查偏移量",
+			"command": "env calibrate",
+			"type": "maintenance",
+			"required": true,
+			"order": 6,
+			"time_estimate_min": 4,
+			"sensors_to_calibrate": ["pressure", "mag_field"]
+		},
+		"anomaly_check": {
+			"name": "异常检查",
+			"description": "审查所有参数是否在正常范围内，标记异常值",
+			"command": "env anomaly",
+			"type": "analysis",
+			"required": true,
+			"order": 7,
+			"time_estimate_min": 3
+		},
+		"daily_report": {
+			"name": "日报提交",
+			"description": "编译当日所有数据并提交日报给总部",
+			"command": "env report",
+			"type": "report",
+			"required": true,
+			"order": 8,
+			"time_estimate_min": 3,
+			"requires_tasks": ["weather_reading", "ocean_reading", "geophysics_reading", "composition_reading", "anomaly_check"]
+		}
+	},
+
+	"anomaly_types": {
+		"magnetic_spike": {
+			"name": "磁场异常尖峰",
+			"description": "磁场强度突然偏离正常值 ±500nT 以上",
+			"severity": "warning",
+			"sensor": "mag_field",
+			"threshold_deviation": 500,
+			"scp_related": true,
+			"report_template": "检测到磁场异常波动。峰值偏差：{deviation}nT。持续时间：{duration}。建议启动 Epsilon 协议。"
+		},
+		"radiation_elevation": {
+			"name": "辐射水平升高",
+			"description": "背景辐射超过 0.3 μSv/h",
+			"severity": "caution",
+			"sensor": "radiation",
+			"threshold_absolute": 0.3,
+			"scp_related": false,
+			"report_template": "背景辐射读数异常：{value} μSv/h（基线 {baseline} μSv/h）。已记录。"
+		},
+		"pressure_drop": {
+			"name": "气压骤降",
+			"description": "气压在 3 小时内下降超过 10 hPa",
+			"severity": "warning",
+			"sensor": "pressure",
+			"threshold_rate": -3.33,
+			"scp_related": false,
+			"report_template": "气压快速下降中：当前 {value} hPa，3h变化 {delta} hPa。可能有强风暴接近。"
+		},
+		"temperature_inversion": {
+			"name": "温度逆转",
+			"description": "气温在短时间内出现 10°C 以上异常波动",
+			"severity": "anomalous",
+			"sensor": "air_temp",
+			"threshold_deviation": 10.0,
+			"scp_related": true,
+			"report_template": "[异常] 气温读数出现无法解释的变化：{value}°C（预期 {expected}°C）。偏差：{deviation}°C。"
+		},
+		"composition_shift": {
+			"name": "大气成分异常",
+			"description": "O2 浓度偏离正常值 0.5% 以上或出现未知气体",
+			"severity": "anomalous",
+			"sensor": "o2_concentration",
+			"threshold_deviation": 0.5,
+			"scp_related": true,
+			"report_template": "[异常] 大气成分分析显示异常：O2={o2}%，CO2={co2}ppm。检测到未编目气体成分。"
+		},
+		"seismic_event": {
+			"name": "地震活动",
+			"description": "地震传感器记录到超过 10mg 的震动",
+			"severity": "caution",
+			"sensor": "seismic",
+			"threshold_absolute": 10.0,
+			"scp_related": false,
+			"report_template": "记录到地震活动：{value}mg。震源方位待定。"
+		},
+		"tide_anomaly": {
+			"name": "潮汐异常",
+			"description": "潮位偏离预测值 0.5m 以上",
+			"severity": "warning",
+			"sensor": "tide_level",
+			"threshold_deviation": 0.5,
+			"scp_related": true,
+			"report_template": "[异常] 潮汐行为异常：实测 {value}m，预测 {expected}m，偏差 {deviation}m。无已知天文因素可解释。"
+		},
+		"magnetic_null": {
+			"name": "磁场消失",
+			"description": "磁场强度降至 10000nT 以下",
+			"severity": "critical",
+			"sensor": "mag_field",
+			"threshold_absolute_below": 10000,
+			"scp_related": true,
+			"report_template": "[紧急] 磁场强度降至危险水平：{value}nT。所有指南针失效。立即启动 Keter 应急协议。"
+		}
+	},
+
+	"events": {
+		"typhoon_approach": {
+			"name": "台风接近",
+			"description": "远洋台风外围环流影响",
+			"probability_base": 0.02,
+			"season_months": [7, 8, 9, 10],
+			"duration_days": [2, 4],
+			"effects": {
+				"pressure_add": -25,
+				"wind_speed_mult": 2.5,
+				"precipitation_mult": 4.0,
+				"wave_height_mult": 3.0,
+				"visibility_mult": 0.1
+			},
+			"triggers_mail": true,
+			"mail_subject": "气象预警：台风 {name} 接近中",
+			"comm_dialogue": "weather_typhoon_warning"
+		},
+		"magnetic_storm": {
+			"name": "地磁暴",
+			"description": "太阳活动引起的地磁扰动",
+			"probability_base": 0.03,
+			"duration_days": [1, 3],
+			"effects": {
+				"mag_field_add": [-800, 800],
+				"mag_declination_add": [-3.0, 3.0]
+			},
+			"triggers_mail": true,
+			"mail_subject": "地磁扰动警报 - Kp={kp_index}",
+			"radio_interference": true,
+			"scp_related": true
+		},
+		"cold_snap": {
+			"name": "寒潮",
+			"description": "极地冷空气大规模南下",
+			"probability_base": 0.04,
+			"season_months": [11, 12, 1, 2, 3],
+			"duration_days": [2, 5],
+			"effects": {
+				"air_temp_add": -15,
+				"wind_speed_mult": 1.8,
+				"pressure_add": 15,
+				"humidity_add": -15
+			},
+			"triggers_mail": true
+		},
+		"dense_fog": {
+			"name": "辐射雾",
+			"description": "海面辐射冷却形成的浓雾",
+			"probability_base": 0.06,
+			"season_months": [5, 6, 7, 8],
+			"duration_days": [1, 2],
+			"effects": {
+				"visibility_mult": 0.02,
+				"humidity_add": 25,
+				"wind_speed_mult": 0.2
+			}
+		},
+		"scp_event_alpha": {
+			"name": "Alpha 级环境事件",
+			"description": "原因不明的多参数异常联动",
+			"probability_base": 0.01,
+			"duration_days": [1, 1],
+			"effects": {
+				"mag_field_add": [-2000, 2000],
+				"radiation_add": 0.5,
+				"air_temp_add": [-12, 12],
+				"seismic_add": 50,
+				"o2_concentration_add": -0.8
+			},
+			"scp_related": true,
+			"triggers_mail": true,
+			"mail_subject": "[机密] 环境异常事件 Alpha-{code}",
+			"comm_dialogue": "scp_alpha_event",
+			"triggers_effect": "unease"
+		}
+	},
+
+	"daily_summary_template": [
+		"╔══════════════════════════════════════════════╗",
+		"║  Site-██ 环境监测日报  第 {day} 天           ║",
+		"║  日期: {date}  天气: {weather}               ║",
+		"╠══════════════════════════════════════════════╣",
+		"║ 【大气参数】                                  ║",
+		"║  气温: {air_temp}°C  湿度: {humidity}%       ║",
+		"║  气压: {pressure}hPa  风速: {wind_speed}m/s  ║",
+		"║  风向: {wind_dir_name}  能见度: {visibility}km║",
+		"║  云量: {cloud_cover}/8  降水: {precip}mm/h   ║",
+		"╠══════════════════════════════════════════════╣",
+		"║ 【海洋参数】                                  ║",
+		"║  海温: {sea_temp}°C  潮位: {tide}m           ║",
+		"║  浪高: {wave}m  盐度: {salinity}PSU          ║",
+		"╠══════════════════════════════════════════════╣",
+		"║ 【地球物理】                                  ║",
+		"║  磁场: {mag}nT  偏角: {mag_dec}°             ║",
+		"║  辐射: {rad}μSv/h  地震: {seismic}mg         ║",
+		"║  地温: {soil_temp}°C                         ║",
+		"╠══════════════════════════════════════════════╣",
+		"║ 【大气成分】                                  ║",
+		"║  O2: {o2}%  CO2: {co2}ppm                    ║",
+		"╠══════════════════════════════════════════════╣",
+		"║  异常事件: {anomaly_count}                    ║",
+		"║  任务完成: {tasks_done}/{tasks_total}         ║",
+		"║  操作员: {operator}                           ║",
+		"╚══════════════════════════════════════════════╝"
+	],
+
+	"wind_direction_names": {
+		"0": "北", "45": "东北", "90": "东", "135": "东南",
+		"180": "南", "225": "西南", "270": "西", "315": "西北"
+	}
+}
