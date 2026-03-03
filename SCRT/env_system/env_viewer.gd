@@ -110,28 +110,39 @@ func process(delta: float) -> void:
 func _create_overlay() -> void:
 	if main == null:
 		return
-	# 获取 OutputArea ScrollContainer
-	var scroll: ScrollContainer = main.scroll_container
-	if scroll == null:
-		return
-	# 创建覆盖 Panel
+	# 创建覆盖 Panel（挂载到 main 根节点，与 RadioReceiver 相同模式）
 	overlay_panel = Panel.new()
 	overlay_panel.name = "EnvViewerOverlay"
-	overlay_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0, 0, 0, 0.95)
 	overlay_panel.add_theme_stylebox_override("panel", sb)
-	scroll.add_child(overlay_panel)
+
+	var root_control: Control = main as Control
+	root_control.add_child(overlay_panel)
+	# 放在 CRTEffect 之前，确保 CRT 着色器仍覆盖在上面
+	var crt_node: Node = root_control.get_node_or_null("CRTEffect")
+	if crt_node:
+		root_control.move_child(overlay_panel, crt_node.get_index())
+
+	overlay_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay_panel.offset_left = 0
+	overlay_panel.offset_top = 0
+	overlay_panel.offset_right = 0
+	overlay_panel.offset_bottom = 0
+
 	# 创建绘制画布
 	canvas = _EnvCanvas.new()
 	canvas.viewer = self
 	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay_panel.add_child(canvas)
-	# 隐藏输入栏
+	# 缓存并隐藏输入栏
 	if main.input_frame:
 		main.input_frame.visible = false
 	if main.prompt_label:
 		main.prompt_label.visible = false
+	# 更新路径栏提示
+	if main.path_label:
+		main.path_label.text = "ENV MONITOR | ←/→ 切换  TAB 下一页  Q/ESC 关闭"
 
 func _destroy_overlay() -> void:
 	if overlay_panel and is_instance_valid(overlay_panel):
@@ -145,6 +156,9 @@ func _destroy_overlay() -> void:
 		main.prompt_label.visible = true
 	if main and main.input_field:
 		main.input_field.grab_focus()
+	# 恢复路径栏
+	if main and main.has_method("_update_status_bar"):
+		main._update_status_bar()
 
 # ══════════════════════════════════════════
 #  内部画布类

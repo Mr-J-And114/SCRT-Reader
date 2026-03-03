@@ -1,0 +1,186 @@
+{
+    "_comment": "主线剧情清单 —— 定义每日对话、角色、事件触发等。可由 .scp 故事包覆盖或扩展。",
+    "story": {
+        "id": "main_storyline",
+        "title": "OB-7K 观测站",
+        "description": "萨哈林岛 Site-██ 环境监测前哨站日常运营主线剧情",
+        "version": "0.1.0"
+    },
+
+    "daily_dialogues": {
+        "_comment": "每日对话触发配置。day 编号对应 env_monitor.current_day。可通过 .scp 故事包追加。",
+        "1": {
+            "on_start": ["day1_briefing"],
+            "on_scan_complete": ["day1_scan_done"],
+            "on_anomaly": []
+        },
+        "2": {
+            "on_start": ["day2_morning"],
+            "on_scan_complete": [],
+            "on_anomaly": ["day2_anomaly_reaction"]
+        },
+        "3": {
+            "on_start": ["day3_morning"],
+            "on_scan_complete": [],
+            "on_anomaly": []
+        },
+        "default": {
+            "_comment": "没有特定定义的天数使用此默认配置",
+            "on_start": ["daily_routine_greeting"],
+            "on_scan_complete": [],
+            "on_anomaly": []
+        }
+    },
+
+    "comm_characters": {
+        "hq_control": {
+            "id": "hq_control",
+            "name": "总部管控",
+            "title": "HQ-CONTROL",
+            "voice": {
+                "tone": "square",
+                "base_pitch": 0.7,
+                "pitch_variance": 0.05,
+                "speed": "normal"
+            }
+        }
+    },
+
+    "comm_dialogues": {
+        "day1_briefing": {
+            "title": "第一天 — 到岗报告",
+            "description": "新操作员到岗的欢迎通讯",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "操作员，欢迎抵达 OB-7K 观测站。我是你的联络 AI，代号 AVA。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "从今天起，你将负责这座前哨站的日常环境监测工作。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "每天的流程很简单：输入 [color=#ffaa00]env scan[/color] 执行自动检测。系统会依次完成设备检查、数据采集、校准和报告。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "如果发现异常读数，请务必手动查看 [color=#ffaa00]env view[/color] 仪表盘确认详情。某些异常……不是自然现象。",
+                    "speed": 28,
+                    "action": "glitch"
+                },
+                {
+                    "character": "ava",
+                    "text": "完成工作后你可以自由浏览文件系统。有新内容时我会通知你。祝你工作顺利。",
+                    "speed": 30
+                }
+            ]
+        },
+        "day1_scan_done": {
+            "title": "第一天 — 扫描完成",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "第一次自动扫描已完成。数据已上传至总部服务器。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "你现在可以自由探索终端功能。试试 [color=#ffaa00]ls[/color]、[color=#ffaa00]mail[/color]、[color=#ffaa00]env view[/color] 等命令。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "关闭终端后，下次启动将自动进入新的一天。期待明天的报告。",
+                    "speed": 30
+                }
+            ]
+        },
+        "day2_morning": {
+            "title": "第二天 — 晨间通讯",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "早安，操作员。新的一天开始了。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "昨晚自动气象站记录到一些微弱的信号波动。可能是风暴前兆，也可能是……其他什么。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "建议你尽快执行 [color=#ffaa00]env scan[/color] 确认所有传感器状态。",
+                    "speed": 30
+                }
+            ]
+        },
+        "day2_anomaly_reaction": {
+            "title": "第二天 — 异常反应",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "注意——刚才的扫描结果中检测到异常数据。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "这类偏差在往年记录中没有出现过。我已经标记并上报总部。",
+                    "speed": 28,
+                    "action": "glitch"
+                },
+                {
+                    "character": "ava",
+                    "text": "请保持关注。如果情况恶化，总部会发送进一步指令。",
+                    "speed": 30
+                }
+            ]
+        },
+        "day3_morning": {
+            "title": "第三天 — 例行通讯",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "第三天。一切……看起来还算正常。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "总部尚未对之前的异常报告做出回应。这在协议范围内——他们通常需要 48 小时评估。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "请继续执行日常检测。如有新邮件我会提醒你。",
+                    "speed": 30
+                }
+            ]
+        },
+        "daily_routine_greeting": {
+            "title": "日常晨间通讯",
+            "callable": false,
+            "repeatable": true,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "新的一天，操作员。系统状态正常。请执行日常检测。",
+                    "speed": 30
+                }
+            ]
+        }
+    }
+}

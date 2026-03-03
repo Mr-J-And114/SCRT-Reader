@@ -1,0 +1,188 @@
+{
+    "_comment": "第 4-7 天剧情对话扩展。将由 DailyDialogueManager 在未来版本中支持分文件加载。当前作为范例和备用数据。",
+
+    "daily_dialogues": {
+        "4": {
+            "on_start": ["day4_morning"],
+            "on_scan_complete": [],
+            "on_anomaly": ["day4_anomaly"]
+        },
+        "5": {
+            "on_start": ["day5_morning"],
+            "on_scan_complete": ["day5_discovery"],
+            "on_anomaly": []
+        },
+        "6": {
+            "on_start": ["day6_tension"],
+            "on_scan_complete": [],
+            "on_anomaly": ["day6_warning"]
+        },
+        "7": {
+            "on_start": ["day7_calm"],
+            "on_scan_complete": ["day7_report"],
+            "on_anomaly": []
+        }
+    },
+
+    "comm_dialogues": {
+        "day4_morning": {
+            "title": "第四天 — 总部回复",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "操作员，总部终于回复了之前的异常报告。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "他们说……需要更多数据。标准回应。请继续监测，我会把每日报告同步上传。",
+                    "speed": 28
+                }
+            ]
+        },
+        "day4_anomaly": {
+            "title": "第四天 — 重复异常",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "又检测到异常。这已经是连续第二次了。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "模式……看起来不是随机的。我正在分析是否存在周期性。",
+                    "speed": 28,
+                    "action": "glitch"
+                }
+            ]
+        },
+        "day5_morning": {
+            "title": "第五天 — 安静的早晨",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "早安。今天的大气状况看起来很稳定。也许会是平静的一天。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "……话说回来，在这种地方，'平静'往往只是暴风雨前的宁静。",
+                    "speed": 28
+                }
+            ]
+        },
+        "day5_discovery": {
+            "title": "第五天 — 数据中的模式",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "扫描数据汇总完成。我在过去几天的数据中发现了一些有趣的东西。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "磁场读数和海温之间存在一种异常的相关性。这在普通气象学中是不应该出现的。",
+                    "speed": 26,
+                    "action": "glitch"
+                },
+                {
+                    "character": "ava",
+                    "text": "我已经将分析报告附在今天的邮件中。请查收。",
+                    "speed": 30
+                }
+            ]
+        },
+        "day6_tension": {
+            "title": "第六天 — 紧张气氛",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "操作员……今天的情况有些不同。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "凌晨 03:17，自动监测系统记录到一次短暂但剧烈的磁场脉冲。持续了 0.7 秒。",
+                    "speed": 26
+                },
+                {
+                    "character": "ava",
+                    "text": "我无法确定这是自然现象还是……设备故障。请特别注意今天的扫描结果。",
+                    "speed": 28,
+                    "action": "glitch"
+                }
+            ]
+        },
+        "day6_warning": {
+            "title": "第六天 — 异常警告",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "确认——异常读数与凌晨的脉冲事件存在关联。",
+                    "speed": 26
+                },
+                {
+                    "character": "ava",
+                    "text": "我已向总部发送紧急标记的报告。建议你查看邮件等待进一步指令。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "操作员……注意安全。",
+                    "speed": 30
+                }
+            ]
+        },
+        "day7_calm": {
+            "title": "第七天 — 一周回顾",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "恭喜你完成了第一周的值守工作，操作员。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "虽然出现了一些意料之外的状况，但你的工作表现令人满意。总部已确认收到所有报告。",
+                    "speed": 28
+                },
+                {
+                    "character": "ava",
+                    "text": "新的一周即将开始。如果你注意到任何……不寻常的事情，请不要犹豫，立即联系我。",
+                    "speed": 28
+                }
+            ]
+        },
+        "day7_report": {
+            "title": "第七天 — 周报",
+            "callable": false,
+            "repeatable": false,
+            "lines": [
+                {
+                    "character": "ava",
+                    "text": "一周的数据汇总已完成。所有读数已编入周报。",
+                    "speed": 30
+                },
+                {
+                    "character": "ava",
+                    "text": "总部应该会在 48 小时内给出本周的综合评估。有任何新指令我会第一时间转达。",
+                    "speed": 28
+                }
+            ]
+        }
+    }
+}

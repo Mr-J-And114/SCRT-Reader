@@ -1704,6 +1704,8 @@ func _cmd_env(args: Array = []) -> void:
 			_cmd_env_view()
 		"tasks", "t":
 			_cmd_env_tasks(tm, colors)
+		"scan", "auto":
+			await _cmd_env_scan(em, tm, colors)
 		"check":
 			_cmd_env_exec_task("equipment_check", tm, colors)
 		"read":
@@ -1756,6 +1758,7 @@ func _cmd_env_help() -> void:
 		"  [color=" + T.primary_hex + "]env sensor <id>[/color]     — 查看指定传感器详情",
 		"",
 		"[color=" + T.muted_hex + "]日常任务:[/color]",
+		"  [color=" + T.primary_hex + "]env scan[/color]            — ★ 自动执行全部检测（推荐）",
 		"  [color=" + T.primary_hex + "]env check[/color]           — 设备状态检查",
 		"  [color=" + T.primary_hex + "]env read <分类>[/color]     — 记录环境数据",
 		"  [color=" + T.muted_hex + "]    分类: atmosphere | ocean | geophysics | composition[/color]",
@@ -1765,7 +1768,7 @@ func _cmd_env_help() -> void:
 		"",
 		"[color=" + T.muted_hex + "]维护与推进:[/color]",
 		"  [color=" + T.primary_hex + "]env repair <传感器>[/color]  — 修复离线传感器",
-		"  [color=" + T.primary_hex + "]env advance[/color]         — 进入下一天（需完成所有任务）",
+		"  [color=" + T.muted_hex + "]  (完成任务后自由探索，关闭软件后再次启动自动进入下一天)[/color]",
 		"",
 	]
 	main.append_output("\n".join(lines) + "\n", false)
@@ -1827,6 +1830,116 @@ func _cmd_env_view() -> void:
 		main.env_viewer.open()
 		main._env_viewer_mode = true
 		main.append_output("[color=" + T.muted_hex + "]环境监测面板已打开。[/color]\n", false)
+
+func _cmd_env_scan(em: EnvMonitor, tm: EnvTaskManager, colors: Dictionary) -> void:
+	## 自动按顺序执行所有日常检测任务，带进度条和动画衔接
+	var p: String = str(colors.get("primary", "#00ff00"))
+	var m: String = str(colors.get("muted", "#666666"))
+	var s: String = str(colors.get("success", "#00ff00"))
+	var w: String = str(colors.get("warning", "#ffcc00"))
+	var e: String = str(colors.get("error", "#ff4444"))
+
+	main.append_output("\n[color=%s]╔══════════════════════════════════════════════╗[/color]\n" % p, false)
+	main.append_output("[color=%s]║  环境监测自动扫描程序 v2.1                  ║[/color]\n" % p, false)
+	main.append_output("[color=%s]║  %s  %s                           ║[/color]\n" % [p, em.get_day_display(), em.get_current_hour_display()], false)
+	main.append_output("[color=%s]╚══════════════════════════════════════════════╝[/color]\n\n" % p, false)
+
+	# 定义自动执行的任务序列
+	var scan_sequence: Array = [
+		{"id": "equipment_check", "label": "设备状态自检", "icon": "SYS"},
+		{"id": "weather_reading", "label": "大气参数采集", "icon": "ATM"},
+		{"id": "ocean_reading", "label": "海洋参数采集", "icon": "OCN"},
+		{"id": "geophysics_reading", "label": "地球物理采集", "icon": "GEO"},
+		{"id": "composition_reading", "label": "大气成分分析", "icon": "CMP"},
+		{"id": "calibration", "label": "仪器校准检查", "icon": "CAL"},
+		{"id": "anomaly_check", "label": "异常检测扫描", "icon": "ANM"},
+		{"id": "daily_report", "label": "日报数据编译", "icon": "RPT"},
+	]
+
+	var total_steps: int = scan_sequence.size()
+	var completed_count: int = 0
+	var anomalies_found: Array = []
+	var issues_found: int = 0
+
+	for step_idx in range(total_steps):
+		var step: Dictionary = scan_sequence[step_idx]
+		var task_id: String = step["id"]
+		var label: String = step["label"]
+		var icon: String = step["icon"]
+
+		# 检查是否已完成
+		if tm.is_task_completed(task_id):
+			main.append_output("[color=%s]  [%s] %s ... 已完成 ✓[/color]\n" % [m, icon, label], false)
+			completed_count += 1
+			continue
+
+		# 显示当前步骤
+		var progress_pct: String = "%d/%d" % [step_idx + 1, total_steps]
+		main.append_output("[color=%s]  [%s] %s (%s)[/color]\n" % [p, icon, label, progress_pct], false)
+
+		# 进度条动画
+		await main.tw.show_progress_bar(100 + step_idx * 30, 4.0)
+		await main.get_tree().create_timer(0.15).timeout
+
+		# 执行任务
+		var result: Dictionary = tm.begin_task(task_id)
+		if result.get("success", false):
+			completed_count += 1
+			var data: Dictionary = result.get("data", {})
+			# 根据任务类型输出简洁结果
+			match task_id:
+				"equipment_check":
+					var issue_cnt: int = int(data.get("issues_found", 0))
+					if issue_cnt > 0:
+						issues_found += issue_cnt
+						main.append_output("[color=%s]        → 发现 %d 个传感器异常[/color]\n" % [w, issue_cnt], false)
+					else:
+						main.append_output("[color=%s]        → 所有传感器正常[/color]\n" % s, false)
+				"anomaly_check":
+					var confirmed: Array = data.get("confirmed_anomalies", [])
+					if confirmed.size() > 0:
+						anomalies_found.append_array(confirmed)
+						main.append_output("[color=%s]        → 检测到 %d 项异常！[/color]\n" % [e, confirmed.size()], false)
+					else:
+						main.append_output("[color=%s]        → 未检测到异常[/color]\n" % s, false)
+				"daily_report":
+					main.append_output("[color=%s]        → 日报已编译并提交至总部[/color]\n" % s, false)
+				_:
+					# 数据记录和校准任务
+					var task_anomalies: Array = data.get("anomalies_found", [])
+					if task_anomalies.size() > 0:
+						main.append_output("[color=%s]        → 完成，%d 项读数偏离基线[/color]\n" % [w, task_anomalies.size()], false)
+					else:
+						main.append_output("[color=%s]        → 完成[/color]\n" % s, false)
+		else:
+			main.append_output("[color=%s]        → %s[/color]\n" % [e, str(result.get("message", "失败"))], false)
+
+	# 总结报告
+	main.append_output("\n[color=%s]════════════════════════════════════════════════[/color]\n" % p, false)
+	main.append_output("[color=%s]  扫描完成: %d/%d 项任务已执行[/color]\n" % [s, completed_count, total_steps], false)
+	if issues_found > 0:
+		main.append_output("[color=%s]  ⚠ 传感器问题: %d 个（使用 env repair <id> 修复）[/color]\n" % [w, issues_found], false)
+	if anomalies_found.size() > 0:
+		main.append_output("[color=%s]  ！发现 %d 项异常，请手动查看并记录:[/color]\n" % [e, anomalies_found.size()], false)
+		for a in anomalies_found:
+			main.append_output("[color=%s]    • [%s] %s[/color]\n" % [w, str(a.get("severity", "info")).to_upper(), str(a.get("name", "未知"))], false)
+			main.append_output("[color=%s]      %s[/color]\n" % [m, str(a.get("report", ""))], false)
+		main.append_output("\n[color=%s]  请使用 env view 打开仪表盘查看详细数据。[/color]\n" % p, false)
+	else:
+		main.append_output("[color=%s]  所有参数在正常范围内。[/color]\n" % s, false)
+	main.append_output("[color=%s]════════════════════════════════════════════════[/color]\n\n" % p, false)
+
+	# 检查是否所有任务完成
+	if tm.is_all_required_completed():
+		main.append_output("[color=%s]所有必要任务已完成。你可以自由探索，关闭软件后再次启动将自动进入下一天。[/color]\n" % s, false)
+
+	# ★ 触发每日剧情对话
+	if main.daily_dialogue_mgr:
+		# 扫描完成触发
+		main.daily_dialogue_mgr.trigger_scan_complete(em.current_day)
+		# 异常触发
+		if anomalies_found.size() > 0:
+			main.daily_dialogue_mgr.trigger_anomaly(em.current_day)
 
 func _cmd_env_tasks(tm: EnvTaskManager, colors: Dictionary) -> void:
 	main.append_output("\n" + tm.format_task_checklist(colors) + "\n", false)
