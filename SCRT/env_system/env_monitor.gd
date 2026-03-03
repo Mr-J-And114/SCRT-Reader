@@ -234,7 +234,8 @@ func process(delta: float) -> void:
 		_record_history()
 		_check_anomalies()
 	# 检查事件结束
-	_update_events()
+	_check_events()
+
 
 # ══════════════════════════════════════════
 #  天气生成
@@ -609,16 +610,26 @@ func _activate_event(eid: String, edef: Dictionary) -> void:
 		subject = subject.replace("{kp_index}", str(_day_rng.randi_range(4, 9)))
 		subject = subject.replace("{code}", "%04d" % _day_rng.randi_range(1000, 9999))
 		var body: String = "操作员，\n\n" + str(edef.get("description", "")) + "\n预计持续 " + str(dur) + " 天。\n请密切监控相关参数。\n\n—— 总部气象处"
-		var mail_data: Dictionary = {
+		var mail_entry: Dictionary = {
 			"from": "HQ-MET",
 			"subject": subject,
 			"body": body,
 			"priority": "high" if edef.get("scp_related", false) else "normal",
+			"timestamp": Time.get_datetime_string_from_system(),
+			"read": false,
 		}
-		main.mail_sys.deliver_system_mail(mail_data)
+		if "inbox" in main.mail_sys:
+			main.mail_sys.inbox.append(mail_entry)
+			if "has_new_mail" in main:
+				main.has_new_mail = true
+
 	# 触发特效
-	if edef.has("triggers_effect") and main and main.get("effect_sys"):
-		main.effect_sys.play_preset(str(edef["triggers_effect"]))
+	if edef.has("triggers_effect") and main:
+		var fx_id: String = str(edef["triggers_effect"])
+		if main.has_method("trigger_preset_effect"):
+			main.trigger_preset_effect(fx_id)
+		elif main.has_method("trigger_effect"):
+			main.trigger_effect(fx_id)
 
 func inject_event(event_id: String, event_config: Dictionary) -> void:
 	## 外部注入事件（由 .scp 故事包或 mod 调用）

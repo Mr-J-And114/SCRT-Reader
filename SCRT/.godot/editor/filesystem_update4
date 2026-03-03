@@ -3,10 +3,4 @@ res://addons/agent/ui/resource/AgentTheme.tres
 res://addons/agent/agent.gd
 res://shaders/background_vignette.gdshader
 res://shaders/background_logo.gdshader
-res://comm_system/comm_manager.gd
-res://scripts/command_handler.gd
-res://data/tutorial.json
-res://comm_system/dial_tone_generator.gd
-res://comm_system/dial_manager.gd
-res://comm_system/comm_dialogue_player.gd
-res://data/dial_directory.json
+res://env_system/env_monitor.gd

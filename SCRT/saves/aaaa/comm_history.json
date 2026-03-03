@@ -814,5 +814,17 @@
 		"name": "A.V.A.",
 		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
 		"time": "2026-03-03 01:54:50"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-03 17:19:20"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-03 17:19:21"
 	}
 ]
