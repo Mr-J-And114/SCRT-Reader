@@ -99,6 +99,11 @@ var _radio_mode: bool = false
 # 密码解码器
 var decode_viewer: DecodeViewer = null
 var _decode_mode: bool = false
+# ★ 环境监测系统
+var env_monitor: EnvMonitor = null
+var env_task_mgr: EnvTaskManager = null
+var env_viewer: EnvViewer = null
+var _env_viewer_mode: bool = false
 # ★ 内联音频播放系统
 var _inline_audio_path: String = ""
 var _inline_audio_timer: float = 0.0
@@ -226,6 +231,16 @@ func _ready() -> void:
 	effect_sys = EffectSystem.new()
 	effect_sys.setup(self, fs, T, audio_manager, crt_shader)
 	print("[Main] 效果编排系统已初始化")
+	# ★ 环境监测系统初始化
+	env_monitor = EnvMonitor.new()
+	env_monitor.setup(self, T)
+	env_task_mgr = EnvTaskManager.new()
+	env_task_mgr.setup(self, env_monitor, T)
+	env_viewer = EnvViewer.new()
+	env_viewer.setup(self, env_monitor, T)
+	env_monitor.start_new_game()
+	env_task_mgr.reset_for_new_day()
+	print("[Main] 环境监测系统已初始化")
 	
 	UIManager.setup_custom_cursor(self)
 	# 提示符颜色跟随主题
@@ -994,6 +1009,12 @@ func _input(event: InputEvent) -> void:
 		if radio_receiver.handle_input(event):
 			get_viewport().set_input_as_handled()
 			return
+	# ★ 环境监测查看器模式优先处理输入
+	if _env_viewer_mode and env_viewer and env_viewer.is_active:
+		if env_viewer.handle_input(event):
+			_env_viewer_mode = false if not env_viewer.is_active else true
+			get_viewport().set_input_as_handled()
+			return
 	# ★ 密码解码器模式优先处理输入
 	if _decode_mode and decode_viewer and decode_viewer.is_active:
 		if decode_viewer.handle_input(event):
@@ -1421,6 +1442,11 @@ func _process(delta: float) -> void:
 	# ★ 邮件模板更新
 	if email_viewer and email_viewer.is_active:
 		email_viewer.process_typing(delta)
+	# ★ 环境监测系统每帧更新
+	if env_monitor:
+		env_monitor.process(delta)
+	if env_viewer and env_viewer.is_active:
+		env_viewer.process(delta)
 
 # ══════════════════════════════════════════
 #  超链接处理

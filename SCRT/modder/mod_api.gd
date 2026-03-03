@@ -994,3 +994,82 @@ func comm_get_dialogues() -> Array[String]:
 func comm_set_default_portrait(texture: ImageTexture) -> void:
 	if _main and _main.comm_mgr:
 		_main.comm_mgr.set_default_portrait(texture)
+
+# ══════════════════════════════════════════════════════════════
+#  十六、环境监测系统
+# ══════════════════════════════════════════════════════════════
+
+## 获取传感器读数
+func env_get_reading(sensor_id: String) -> float:
+	if _main and _main.env_monitor:
+		return _main.env_monitor.get_reading(sensor_id)
+	return NAN
+
+## 获取所有传感器读数
+func env_get_all_readings() -> Dictionary:
+	if _main and _main.env_monitor:
+		return _main.env_monitor.get_all_readings()
+	return {}
+
+## 获取当前天气名称
+func env_get_weather() -> String:
+	if _main and _main.env_monitor:
+		return _main.env_monitor.get_weather_name()
+	return ""
+
+## 获取当前天数
+func env_get_day() -> int:
+	if _main and _main.env_monitor:
+		return _main.env_monitor.current_day
+	return 0
+
+## 获取当前游戏小时
+func env_get_hour() -> float:
+	if _main and _main.env_monitor:
+		return _main.env_monitor.current_hour
+	return 0.0
+
+## 获取传感器状态
+func env_get_sensor_status(sensor_id: String) -> String:
+	if _main and _main.env_monitor:
+		return _main.env_monitor.sensor_status.get(sensor_id, "unknown")
+	return "unknown"
+
+## 获取活跃事件
+func env_get_active_events() -> Dictionary:
+	if _main and _main.env_monitor:
+		return _main.env_monitor.get_active_events()
+	return {}
+
+## 注入自定义事件定义
+func env_inject_event(event_id: String, event_config: Dictionary) -> void:
+	if _main and _main.env_monitor:
+		_main.env_monitor.inject_event(event_id, event_config)
+
+## 强制启动事件
+func env_force_event(event_id: String) -> void:
+	if _main and _main.env_monitor:
+		_main.env_monitor.force_start_event(event_id)
+
+## 添加特殊任务
+func env_add_task(task_id: String, task_data: Dictionary) -> void:
+	if _main and _main.env_task_mgr:
+		_main.env_task_mgr.add_special_task(task_id, task_data)
+
+## 获取任务进度
+func env_get_progress() -> Dictionary:
+	if _main and _main.env_task_mgr:
+		return _main.env_task_mgr.get_progress()
+	return {}
+
+## 检查是否可以推进天数
+func env_can_advance() -> bool:
+	if _main and _main.env_task_mgr:
+		return _main.env_task_mgr.can_advance_day()
+	return false
+
+## 获取待确认异常列表
+func env_get_anomalies() -> Array:
+	if _main and _main.env_monitor:
+		return _main.env_monitor.get_pending_anomalies()
+	return []

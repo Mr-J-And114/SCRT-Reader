@@ -120,6 +120,8 @@ Main (Control, fullrect) [main.gd]
 | ui_sound.gd | UiSound | 201 | Procedural SFX: keystroke, enter, backspace, HDD read, click |
 | profile_builder.gd | ProfileBuilder | 219 | Build 3-page profile card for doc_viewer |
 | video_player.gd | VideoPlayerViewer | 737 | Video overlay with controls, ffmpeg fallback support |
+| env_monitor.gd | EnvMonitor | ~550 | Environmental simulation: sensors, weather, events, anomalies, daily seed |
+| env_task_manager.gd | EnvTaskManager | ~450 | Daily task checklist: inspection, recording, calibration, reporting |
 
 ### §4.2 Viewer/Overlay Scripts
 | File | Class | Lines | Purpose |
@@ -130,6 +132,7 @@ Main (Control, fullrect) [main.gd]
 | oscilloscope.gd | Oscilloscope | 820 | Spectrum analyzer + Lissajous, _ScopeCanvas inner class |
 | radio_receiver.gd | RadioReceiver | ~1700 | Full radio UI: tuning, bands, morse decode, SSTV, audio station, hidden signals, waterfall, _RadioCanvas inner class |
 | decode_viewer.gd | DecodeViewer | 1457 | Cipher decode animation viewer, _DecodeCanvas inner class |
+| env_viewer.gd | EnvViewer | ~350 | Environmental data panel overlay, 6 pages, _EnvCanvas inner class |
 
 ### §4.3 Comm System (`res://comm_system/`)
 | File | Class | Purpose |
@@ -254,8 +257,9 @@ Format:
 
 ### §6.3 Commands (CommandHandler)
 
-**Desktop:** help, clear, status, whoami, settings, theme, volume, reboot, exit, logout, passwd, birthday, users, deluser, profile, comm, mail, scan, load, vdisc, explore, dial, phonebook
+**Desktop:** help, clear, status, whoami, settings, theme, volume, reboot, exit, logout, passwd, birthday, users, deluser, profile, comm, mail, scan, load, vdisc, explore, dial, phonebook, env
 **Disc (story loaded):** ls, cd, back, open, unlock, eject, save, clearsave, radio, fx, sound, decode, install, uninstall, packages
+**Global (env subcommands):** env status, env view, env tasks, env check, env read, env calibrate, env anomaly, env report, env repair, env advance, env sensor, env weather, env events
 
 ## §7 SHADERS
 
@@ -376,6 +380,103 @@ templates/article_viewer.gd|?  templates/chat_viewer.gd|?  templates/email_viewe
 | Viewers       | ✅ Complete | Image, audio, video, decode, explore                                                                           |
 | CRTML         | ✅ Complete | Full markup parser                                                                                             |
 | Dial System   | ✅ Complete | DTMF dialing, voice call routing, modem handshake + HTTP download, phonebook, preset + story directory loading |
+| Env Monitor   | ✅ Complete | Environmental simulation, daily seed, Sakhalin baselines, weather, anomalies, daily tasks, viewer overlay      |
+
+## §14 ENVIRONMENT MONITORING SYSTEM
+
+### §14.1 Overview
+Environmental monitoring simulation for the observation station. Generates realistic weather/ocean/geophysics data based on Sakhalin Island climate, driven by daily random seeds. Players perform routine inspection tasks to advance days.
+
+### §14.2 Architecture
+```
+env_monitor.gd (EnvMonitor) — Core simulation + data generation
+├─ 20+ sensors with Sakhalin baselines (monthly averages)
+├─ Weather pattern system (8 patterns, seasonal weighting)
+├─ Special event system (storms, magnetic anomalies, SCP events)
+├─ Anomaly detection engine (threshold + deviation checks)
+├─ Diurnal cycles, tidal model, wind direction simulation
+└─ Story pack overrides via manifest "env_config" section
+
+env_task_manager.gd (EnvTaskManager) — Daily task checklist
+├─ 8 required daily tasks (check → read → calibrate → report)
+├─ Task dependency system (report requires all readings)
+├─ Dynamic special tasks (injected by events/mods)
+├─ Formatted output generators for each task type
+└─ Day advancement gating (all tasks + report required)
+
+env_viewer.gd (EnvViewer) — CRT overlay panel
+├─ 6 pages: Overview, Atmosphere, Ocean, Geophysics, Composition, Events
+├─ Real-time sensor readings with trend indicators
+├─ Mini sparkline graphs from reading history
+├─ Anomaly blink indicators
+└─ Keyboard: ←/→ pages, TAB next, Q/ESC close
+```
+
+### §14.3 Sensors (21 parameters)
+| Category     | Sensors                                                                |
+|-------------|------------------------------------------------------------------------|
+| Atmosphere  | air_temp, humidity, pressure, wind_speed, wind_dir, precipitation, visibility, cloud_cover, light_level, uv_index |
+| Ocean       | sea_temp, tide_level, wave_height, salinity                            |
+| Geophysics  | mag_field, mag_declination, radiation, seismic, soil_temp              |
+| Composition | o2_concentration, co2_concentration                                    |
+
+### §14.4 Commands
+| Command | Description |
+|---------|-------------|
+| `env status` | Show all current readings |
+| `env view` | Open monitoring panel overlay |
+| `env tasks` | Show daily task checklist |
+| `env check` | Equipment status inspection |
+| `env read <category>` | Record sensor data (atmosphere/ocean/geophysics/composition) |
+| `env calibrate` | Calibrate instruments |
+| `env anomaly` | Check and confirm anomalies |
+| `env report` | Submit daily report |
+| `env repair <sensor>` | Repair offline sensor |
+| `env advance` | Advance to next day (requires all tasks) |
+| `env sensor <id>` | Detailed sensor info |
+| `env weather` | Current weather details |
+| `env events` | View active events/anomalies |
+
+### §14.5 Data Generation
+- Master seed per playthrough + day number → deterministic daily data
+- Monthly baselines interpolated with seasonal transitions
+- Diurnal curves (temperature peaks at 14h, humidity inverse)
+- Weather modifiers (8 patterns with seasonal restrictions)
+- Event modifiers (stackable, with duration)
+- Calibration drift simulation + sensor failure rates
+- Semi-diurnal tidal model (12.42h period)
+- Solar angle-based light/UV calculation
+
+### §14.6 Story Pack Integration
+Manifest key: `"env_config"` — supports overriding:
+- `location`: station name, coordinates
+- `sensors`: add/override sensor definitions
+- `baselines`: override monthly averages
+- `weather_patterns`: add custom weather types
+- `anomaly_types`: add SCP-specific anomaly definitions
+- `events`: add special events
+- `tasks`: add/override daily tasks
+- `master_seed`: force specific seed
+
+### §14.7 ModAPI Extensions
+```gdscript
+api.env_get_reading(sensor_id)       # Float reading
+api.env_get_all_readings()           # Dict of all readings
+api.env_get_weather()                # Weather name
+api.env_get_day()                    # Current day number
+api.env_get_hour()                   # Current game hour
+api.env_get_sensor_status(sensor_id) # "online"/"degraded"/"offline"
+api.env_get_active_events()          # Active events dict
+api.env_inject_event(id, config)     # Add event definition
+api.env_force_event(id)              # Force-start event
+api.env_add_task(id, data)           # Add special task
+api.env_get_progress()               # Task progress dict
+api.env_can_advance()                # Can advance day?
+api.env_get_anomalies()              # Pending anomalies
+```
+
+### §14.8 Save Data
+Stored in `extra["env_data"]` and `extra["env_task_data"]` within story save files.
 
 <!-- END OF HANDOFF DOCUMENT -->
 

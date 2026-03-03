@@ -480,6 +480,18 @@ func load_story(args: Array) -> void:
 			main.mail_sys.load_save_data(save_data["mail_data"])
 		print("[DiscManager] 邮件系统已加载")
 
+	# ── ★ 加载环境监测系统覆盖 ──
+	if main.env_monitor:
+		main.env_monitor.load_from_manifest(main.story_manifest)
+		if not save_data.is_empty() and save_data.has("env_data"):
+			main.env_monitor.load_save_data(save_data["env_data"])
+		print("[DiscManager] 环境监测系统已加载")
+	if main.env_task_mgr:
+		if not save_data.is_empty() and save_data.has("env_task_data"):
+			main.env_task_mgr.load_save_data(save_data["env_task_data"])
+		else:
+			main.env_task_mgr.reset_for_new_day()
+
 	main._update_status_bar()
 	main._show_welcome_message()
 	main.update_ambient_sound()
@@ -525,6 +537,11 @@ func _auto_save() -> void:
 	# 无线电信号状态
 	if main.radio_receiver and main.radio_receiver.signal_mgr:
 		extra["radio_data"] = main.radio_receiver.signal_mgr.get_save_data()
+	# ★ 环境监测系统状态
+	if main.env_monitor:
+		extra["env_data"] = main.env_monitor.get_save_data()
+	if main.env_task_mgr:
+		extra["env_task_data"] = main.env_task_mgr.get_save_data()
 	save_mgr.auto_save(
 		main.story_id,
 		fs.player_clearance,
