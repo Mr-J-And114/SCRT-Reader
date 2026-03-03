@@ -603,27 +603,34 @@ func _activate_event(eid: String, edef: Dictionary) -> void:
 	}
 	active_events[eid] = evt_data
 	event_started.emit(eid, evt_data)
-	# 触发邮件
+	# 触发邮件（通过直接注入 temp_inbox 实现，无需 mail 文件）
 	if edef.get("triggers_mail", false) and main and main.get("mail_sys"):
 		var subject: String = str(edef.get("mail_subject", "环境事件通知: " + str(edef.get("name", eid))))
 		subject = subject.replace("{name}", str(edef.get("name", "")))
 		subject = subject.replace("{kp_index}", str(_day_rng.randi_range(4, 9)))
 		subject = subject.replace("{code}", "%04d" % _day_rng.randi_range(1000, 9999))
 		var body: String = "操作员，\n\n" + str(edef.get("description", "")) + "\n预计持续 " + str(dur) + " 天。\n请密切监控相关参数。\n\n—— 总部气象处"
+		var mail_id: String = "env_event_" + eid + "_day" + str(current_day)
 		var mail_entry: Dictionary = {
+			"id": mail_id,
+			"title": subject,
 			"from": "HQ-MET",
-			"subject": subject,
-			"body": body,
+			"template": "email",
 			"priority": "high" if edef.get("scp_related", false) else "normal",
-			"timestamp": Time.get_datetime_string_from_system(),
 			"read": false,
+			"delivered_at": Time.get_datetime_string_from_system(),
+			"persistent": false,
+			"story_id": "",
+			"_body_text": body,
 		}
-		if "inbox" in main.mail_sys:
-			main.mail_sys.inbox.append(mail_entry)
+		if "_temp_inbox" in main.mail_sys:
+			main.mail_sys._temp_inbox.append(mail_entry)
+			if main.mail_sys.has_method("_rebuild_merged"):
+				main.mail_sys._rebuild_merged()
 			if "has_new_mail" in main:
 				main.has_new_mail = true
-
-	# 触发特效
+			main.mail_sys.start_blink()
+	# 触发特效（通过 main 的安全接口，自动处理预设和光敏降级）
 	if edef.has("triggers_effect") and main:
 		var fx_id: String = str(edef["triggers_effect"])
 		if main.has_method("trigger_preset_effect"):

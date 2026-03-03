@@ -104,6 +104,7 @@ var env_monitor: EnvMonitor = null
 var env_task_mgr: EnvTaskManager = null
 var env_viewer: EnvViewer = null
 var _env_viewer_mode: bool = false
+var daily_dialogue_mgr: DailyDialogueManager = null
 # ★ 内联音频播放系统
 var _inline_audio_path: String = ""
 var _inline_audio_timer: float = 0.0
@@ -240,6 +241,8 @@ func _ready() -> void:
 	env_viewer.setup(self, env_monitor, T)
 	env_monitor.start_new_game()
 	env_task_mgr.reset_for_new_day()
+	daily_dialogue_mgr = DailyDialogueManager.new()
+	daily_dialogue_mgr.setup(self)
 	print("[Main] 环境监测系统已初始化")
 	
 	UIManager.setup_custom_cursor(self)
@@ -1881,7 +1884,26 @@ func _show_welcome_message() -> void:
 		welcome_title = "ACCESS GRANTED"
 	var box: String = fs.build_box([welcome_title, title] as Array[String], p)
 	append_output(box + "\n\n", false)
-	append_output("[color=" + m + "]输入 help 查看可用命令。[/color]\n\n", false)
+	# ★ 环境监测日提示
+	if env_monitor:
+		append_output("[color=%s]═══════════════════════════════════════[/color]\n" % p, false)
+		append_output("[color=%s]  %s 开始  —  %s[/color]\n" % [p, env_monitor.get_day_display(), env_monitor.get_weather_name()], false)
+		append_output("[color=%s]═══════════════════════════════════════[/color]\n" % p, false)
+		append_output("[color=%s]今日天气: %s，风向 %s，气温 %.1f°C[/color]\n" % [
+			m, env_monitor.get_weather_name(), env_monitor.get_wind_direction_name(), env_monitor.get_reading("air_temp")], false)
+		# 活跃事件提醒
+		var events: Dictionary = env_monitor.get_active_events()
+		if events.size() > 0:
+			for eid in events.keys():
+				var evt: Dictionary = events[eid]
+				var col: String = T.error_hex if evt.get("scp_related", false) else T.warning_hex
+				append_output("[color=" + col + "]! 事件进行中: %s[/color]\n" % str(evt.get("name", eid)), false)
+		append_output("[color=%s]输入 env scan 执行自动检测，或 env help 查看所有命令。[/color]\n\n" % m, false)
+		# ★ 触发每日剧情对话
+		if daily_dialogue_mgr:
+			daily_dialogue_mgr.trigger_day_start(env_monitor.current_day)
+	else:
+		append_output("[color=" + m + "]输入 help 查看可用命令。[/color]\n\n", false)
 
 # ============================================================
 # 触发器系统动作接口（由 trigger_system.gd / typewriter.gd 调用）

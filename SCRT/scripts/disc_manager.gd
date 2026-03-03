@@ -487,10 +487,23 @@ func load_story(args: Array) -> void:
 			main.env_monitor.load_save_data(save_data["env_data"])
 		print("[DiscManager] 环境监测系统已加载")
 	if main.env_task_mgr:
+		var _env_should_advance: bool = false
 		if not save_data.is_empty() and save_data.has("env_task_data"):
 			main.env_task_mgr.load_save_data(save_data["env_task_data"])
+			# ★ 自动推进：如果上次会话所有任务已完成，自动进入下一天
+			if main.env_task_mgr.can_advance_day():
+				_env_should_advance = true
 		else:
 			main.env_task_mgr.reset_for_new_day()
+		if _env_should_advance and main.env_monitor:
+			main.env_monitor.advance_day()
+			main.env_task_mgr.reset_for_new_day()
+			print("[DiscManager] 自动推进至第 %d 天" % main.env_monitor.current_day)
+	# ── ★ 加载每日剧情对话覆盖 ──
+	if main.daily_dialogue_mgr:
+		main.daily_dialogue_mgr.load_from_manifest(main.story_manifest)
+		if not save_data.is_empty() and save_data.has("daily_dialogue_data"):
+			main.daily_dialogue_mgr.load_save_data(save_data["daily_dialogue_data"])
 
 	main._update_status_bar()
 	main._show_welcome_message()
@@ -542,6 +555,9 @@ func _auto_save() -> void:
 		extra["env_data"] = main.env_monitor.get_save_data()
 	if main.env_task_mgr:
 		extra["env_task_data"] = main.env_task_mgr.get_save_data()
+	# ★ 每日剧情对话状态
+	if main.daily_dialogue_mgr:
+		extra["daily_dialogue_data"] = main.daily_dialogue_mgr.get_save_data()
 	save_mgr.auto_save(
 		main.story_id,
 		fs.player_clearance,
