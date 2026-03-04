@@ -7,18 +7,29 @@
 #   2. .scp 故事包 manifest 中的 daily_dialogues 段（覆盖/追加）
 #
 # 触发时机：
-#   - on_start:        每天加载时自动触发
+#   - on_start:        每天登录后自动触发
 #   - on_scan_complete: env scan 完成后触发
 #   - on_anomaly:       检测到异常时触发
+#   - on_mail_read:     阅读特定邮件后触发
+#   - on_command:       执行特定命令后触发
+#
+# 存档位置：
+#   saves/{username}/story_progress.json（独立于磁盘存档）
 # ============================================================
 class_name DailyDialogueManager
 extends RefCounted
 
 var main = null
-var _daily_config: Dictionary = {}  # day_number(str) -> {on_start, on_scan_complete, on_anomaly}
+var _daily_config: Dictionary = {}  # day_number(str) -> {on_start, on_scan_complete, on_anomaly, ...}
 var _dialogues: Dictionary = {}     # dialogue_id -> dialogue_data
 var _characters: Dictionary = {}    # character_id -> character_config
 var _triggered_today: Dictionary = {} # 记录今天已触发的事件类型，防止重复
+
+# ★ 主线剧情进度（独立存档，不绑定磁盘）
+var _story_day: int = 1             # 当前主线天数
+var _completed_dialogues: Array[String] = []  # 已完成的对话 ID 列表
+var _story_choices: Dictionary = {} # 关键剧情选项记录 {choice_id: selected_option}
+var _story_flags: Dictionary = {}   # 剧情标记 {flag_name: value}
 
 # ══════════════════════════════════════════
 #  初始化
@@ -125,7 +136,8 @@ func register_dialogues_to_comm() -> void:
 #  触发接口
 # ══════════════════════════════════════════
 func trigger_day_start(day: int) -> void:
-	## 每天开始时调用
+	## 每天登录时调用（与磁盘加载无关）
+	_story_day = day
 	_triggered_today.clear()
 	register_dialogues_to_comm()
 	var dlg_ids: Array = _get_trigger_list(day, "on_start")
@@ -147,17 +159,148 @@ func trigger_anomaly(day: int) -> void:
 		_triggered_today["on_anomaly"] = true
 		_trigger_dialogues(dlg_ids)
 
+func trigger_mail_read(day: int, mail_id: String) -> void:
+	## 阅读特定邮件后调用
+	var dlg_ids: Array = _get_trigger_list(day, "on_mail_read")
+	# 过滤出 mail_id 匹配的对话
+	var matched: Array = []
+	for dlg_id in dlg_ids:
+		var dlg_data: Dictionary = _dialogues.get(str(dlg_id), {})
+		var req_mail: String = str(dlg_data.get("requires_mail", ""))
+		if req_mail.is_empty() or req_mail == mail_id:
+			matched.append(dlg_id)
+	var trigger_key: String = "on_mail_read:" + mail_id
+	if matched.size() > 0 and not _triggered_today.has(trigger_key):
+		_triggered_today[trigger_key] = true
+		_trigger_dialogues(matched)
+
+func trigger_command(day: int, cmd_name: String) -> void:
+	## 执行特定命令后调用
+	var dlg_ids: Array = _get_trigger_list(day, "on_command")
+	var matched: Array = []
+	for dlg_id in dlg_ids:
+		var dlg_data: Dictionary = _dialogues.get(str(dlg_id), {})
+		var req_cmd: String = str(dlg_data.get("requires_command", ""))
+		if req_cmd.is_empty() or req_cmd == cmd_name:
+			matched.append(dlg_id)
+	var trigger_key: String = "on_command:" + cmd_name
+	if matched.size() > 0 and not _triggered_today.has(trigger_key):
+		_triggered_today[trigger_key] = true
+		_trigger_dialogues(matched)
+
 # ══════════════════════════════════════════
-#  存档
+#  剧情选项记录
+# ══════════════════════════════════════════
+func record_choice(choice_id: String, selected_option: String) -> void:
+	## 记录玩家的关键剧情选择
+	_story_choices[choice_id] = selected_option
+	save_story_save()
+
+func get_choice(choice_id: String, default: String = "") -> String:
+	## 查询某个剧情选择
+	return str(_story_choices.get(choice_id, default))
+
+func has_choice(choice_id: String) -> bool:
+	return _story_choices.has(choice_id)
+
+# ══════════════════════════════════════════
+#  剧情标记（通用 flag 系统）
+# ══════════════════════════════════════════
+func set_flag(flag_name: String, value: Variant = true) -> void:
+	_story_flags[flag_name] = value
+	save_story_save()
+
+func get_flag(flag_name: String, default: Variant = null) -> Variant:
+	return _story_flags.get(flag_name, default)
+
+func has_flag(flag_name: String) -> bool:
+	return _story_flags.has(flag_name)
+
+# ══════════════════════════════════════════
+#  独立存档（保存到 saves/{username}/story_progress.json）
+# ══════════════════════════════════════════
+func _get_save_path() -> String:
+	if main == null or main.user_mgr == null or not main.user_mgr.is_logged_in:
+		return ""
+	if main.save_mgr == null:
+		return ""
+	var user_dir: String = main.save_mgr.get_game_root_dir() + "saves/" + main.user_mgr.get_username() + "/"
+	return user_dir + "story_progress.json"
+
+func save_story_save() -> void:
+	## 保存主线剧情进度到独立文件
+	var path: String = _get_save_path()
+	if path.is_empty():
+		return
+	# 确保目录存在
+	var dir_path: String = path.get_base_dir()
+	if not DirAccess.dir_exists_absolute(dir_path):
+		DirAccess.make_dir_recursive_absolute(dir_path)
+	var save_data: Dictionary = {
+		"story_day": _story_day,
+		"triggered_today": _triggered_today.duplicate(),
+		"completed_dialogues": _completed_dialogues.duplicate(),
+		"story_choices": _story_choices.duplicate(),
+		"story_flags": _story_flags.duplicate(),
+		"saved_at": Time.get_datetime_string_from_system(),
+	}
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(save_data, "\t"))
+		file.close()
+
+func load_story_save() -> void:
+	## 从独立文件加载主线剧情进度
+	var path: String = _get_save_path()
+	if path.is_empty() or not FileAccess.file_exists(path):
+		return
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return
+	var json := JSON.new()
+	if json.parse(file.get_as_text()) != OK or not (json.data is Dictionary):
+		file.close()
+		return
+	file.close()
+	var data: Dictionary = json.data
+	_story_day = int(data.get("story_day", 1))
+	if data.has("triggered_today"):
+		_triggered_today = data["triggered_today"]
+	if data.has("completed_dialogues"):
+		_completed_dialogues.clear()
+		for d in data["completed_dialogues"]:
+			_completed_dialogues.append(str(d))
+	if data.has("story_choices"):
+		_story_choices = data["story_choices"]
+	if data.has("story_flags"):
+		_story_flags = data["story_flags"]
+	print("[DailyDialogue] 主线存档已加载: day=%d, choices=%d, flags=%d" % [_story_day, _story_choices.size(), _story_flags.size()])
+
+# ══════════════════════════════════════════
+#  兼容旧存档（disc_manager 调用的接口保留）
 # ══════════════════════════════════════════
 func get_save_data() -> Dictionary:
 	return {
 		"triggered_today": _triggered_today.duplicate(),
+		"story_day": _story_day,
+		"completed_dialogues": _completed_dialogues.duplicate(),
+		"story_choices": _story_choices.duplicate(),
+		"story_flags": _story_flags.duplicate(),
 	}
 
 func load_save_data(data: Dictionary) -> void:
 	if data.has("triggered_today"):
 		_triggered_today = data["triggered_today"]
+	if data.has("story_day"):
+		_story_day = int(data["story_day"])
+	if data.has("completed_dialogues"):
+		_completed_dialogues.clear()
+		for d in data["completed_dialogues"]:
+			_completed_dialogues.append(str(d))
+	if data.has("story_choices"):
+		_story_choices = data["story_choices"]
+	if data.has("story_flags"):
+		_story_flags = data["story_flags"]
 
 # ══════════════════════════════════════════
 #  内部
@@ -176,15 +319,21 @@ func _trigger_dialogues(dlg_ids: Array) -> void:
 		return
 	if dlg_ids.size() == 0:
 		return
-	# 过滤掉已完成且不可重复的对话
+	# 过滤掉已完成且不可重复的对话，以及条件不满足的对话
 	var valid_ids: Array = []
 	for dlg_id in dlg_ids:
 		var sid: String = str(dlg_id)
 		if main.comm_mgr._dialogues.has(sid):
 			var dlg_data: Dictionary = main.comm_mgr._dialogues[sid]
 			var repeatable: bool = dlg_data.get("repeatable", false)
-			if repeatable or not main.comm_mgr._completed_dialogues.has(sid):
-				valid_ids.append(sid)
+			if not repeatable and sid in _completed_dialogues:
+				continue
+			if not repeatable and main.comm_mgr._completed_dialogues.has(sid):
+				continue
+			# ★ 检查前置条件（需要某个选项或标记）
+			if not _check_conditions(dlg_data):
+				continue
+			valid_ids.append(sid)
 	if valid_ids.size() == 0:
 		return
 	if valid_ids.size() == 1:
@@ -196,3 +345,27 @@ func _trigger_dialogues(dlg_ids: Array) -> void:
 		main.get_tree().create_timer(1.5).timeout.connect(func():
 			main.comm_mgr.trigger_dialogue_sequence(valid_ids)
 		)
+
+func _check_conditions(dlg_data: Dictionary) -> bool:
+	## 检查对话的前置条件是否满足
+	# requires_choice: {"choice_id": "expected_value"}
+	var req_choice: Dictionary = dlg_data.get("requires_choice", {})
+	for choice_id in req_choice.keys():
+		if get_choice(choice_id) != str(req_choice[choice_id]):
+			return false
+	# requires_flag: {"flag_name": expected_value}
+	var req_flag: Dictionary = dlg_data.get("requires_flag", {})
+	for flag_name in req_flag.keys():
+		if not has_flag(flag_name):
+			return false
+		# 简单值比较
+		var expected = req_flag[flag_name]
+		var actual = get_flag(flag_name)
+		if str(actual) != str(expected):
+			return false
+	return true
+
+func mark_dialogue_completed(dlg_id: String) -> void:
+	if dlg_id not in _completed_dialogues:
+		_completed_dialogues.append(dlg_id)
+		save_story_save()

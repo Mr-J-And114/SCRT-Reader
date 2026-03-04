@@ -498,6 +498,11 @@ func _enter_desktop_after_login(message: String) -> void:
 		if comm_mgr._ui._toggle_btn:
 			comm_mgr._ui._toggle_btn.visible = true
 			comm_mgr._ui._sync_btn_to_bar()
+	# ★ 登录后加载主线存档并触发每日剧情对话
+	if daily_dialogue_mgr:
+		daily_dialogue_mgr.load_story_save()
+		if env_monitor:
+			daily_dialogue_mgr.trigger_day_start(env_monitor.current_day)
 	_request_scroll()
 
 
@@ -970,6 +975,9 @@ func _run_command(raw: String) -> void:
 	# ★ 通知通讯系统命令已执行（传入参数以支持前缀匹配）
 	if comm_mgr and comm_mgr.is_active:
 		comm_mgr.on_command_executed(cmd_name, cmd_args)
+	# ★ 通知每日剧情系统命令已执行（触发 on_command 类型对话）
+	if daily_dialogue_mgr and env_monitor and not cmd_name.is_empty():
+		daily_dialogue_mgr.trigger_command(env_monitor.current_day, cmd_name)
 	_command_running = false
 	_refocus_input.call_deferred()
 
@@ -1899,9 +1907,6 @@ func _show_welcome_message() -> void:
 				var col: String = T.error_hex if evt.get("scp_related", false) else T.warning_hex
 				append_output("[color=" + col + "]! 事件进行中: %s[/color]\n" % str(evt.get("name", eid)), false)
 		append_output("[color=%s]输入 env scan 执行自动检测，或 env help 查看所有命令。[/color]\n\n" % m, false)
-		# ★ 触发每日剧情对话
-		if daily_dialogue_mgr:
-			daily_dialogue_mgr.trigger_day_start(env_monitor.current_day)
 	else:
 		append_output("[color=" + m + "]输入 help 查看可用命令。[/color]\n\n", false)
 

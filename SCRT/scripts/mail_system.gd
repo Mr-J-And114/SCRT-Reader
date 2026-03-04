@@ -558,7 +558,16 @@ func _read_mail(idx: int) -> void:
 
 	# 获取原始内容
 	var raw_content: String = ""
-	if bool(mail.get("persistent", false)):
+	# ★ 优先检查内联正文（程序注入的邮件使用 _body_text 字段）
+	var inline_body: String = str(mail.get("_body_text", ""))
+	if not inline_body.is_empty():
+		# 为内联邮件构造伪 header + body 格式
+		raw_content = "---\ntitle: %s\ntemplate: %s\n---\n%s" % [
+			str(mail.get("title", "")),
+			str(mail.get("template", "email")),
+			inline_body,
+		]
+	elif bool(mail.get("persistent", false)):
 		raw_content = _load_global_mail_file(str(mail.get("id", "")))
 	else:
 		raw_content = _load_mail_raw_content(str(mail.get("id", "")))
@@ -622,6 +631,10 @@ func _read_mail(idx: int) -> void:
 
 	# 统一的自动保存请求（优先 DiscManager，失败则直接 SaveManager）
 	_request_auto_save()
+
+	# ★ 通知每日剧情系统邮件已阅读（触发 on_mail_read 类型对话）
+	if main.daily_dialogue_mgr and main.env_monitor:
+		main.daily_dialogue_mgr.trigger_mail_read(main.env_monitor.current_day, str(mail.get("id", "")))
 
 
 func _display_mail_in_terminal(title: String, body: String) -> void:

@@ -555,9 +555,10 @@ func _auto_save() -> void:
 		extra["env_data"] = main.env_monitor.get_save_data()
 	if main.env_task_mgr:
 		extra["env_task_data"] = main.env_task_mgr.get_save_data()
-	# ★ 每日剧情对话状态
+	# ★ 每日剧情对话状态（兼容旧存档 + 独立存档双写）
 	if main.daily_dialogue_mgr:
 		extra["daily_dialogue_data"] = main.daily_dialogue_mgr.get_save_data()
+		main.daily_dialogue_mgr.save_story_save()
 	save_mgr.auto_save(
 		main.story_id,
 		fs.player_clearance,

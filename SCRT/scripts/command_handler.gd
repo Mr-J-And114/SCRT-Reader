@@ -1844,17 +1844,32 @@ func _cmd_env_scan(em: EnvMonitor, tm: EnvTaskManager, colors: Dictionary) -> vo
 	main.append_output("[color=%s]║  %s  %s                           ║[/color]\n" % [p, em.get_day_display(), em.get_current_hour_display()], false)
 	main.append_output("[color=%s]╚══════════════════════════════════════════════╝[/color]\n\n" % p, false)
 
-	# 定义自动执行的任务序列
+	# 定义自动执行的任务序列（base_size 控制进度条基础速度，越大越慢）
 	var scan_sequence: Array = [
-		{"id": "equipment_check", "label": "设备状态自检", "icon": "SYS"},
-		{"id": "weather_reading", "label": "大气参数采集", "icon": "ATM"},
-		{"id": "ocean_reading", "label": "海洋参数采集", "icon": "OCN"},
-		{"id": "geophysics_reading", "label": "地球物理采集", "icon": "GEO"},
-		{"id": "composition_reading", "label": "大气成分分析", "icon": "CMP"},
-		{"id": "calibration", "label": "仪器校准检查", "icon": "CAL"},
-		{"id": "anomaly_check", "label": "异常检测扫描", "icon": "ANM"},
-		{"id": "daily_report", "label": "日报数据编译", "icon": "RPT"},
+		{"id": "equipment_check", "label": "设备状态自检", "icon": "SYS", "base_size": 80},
+		{"id": "weather_reading", "label": "大气参数采集", "icon": "ATM", "base_size": 120},
+		{"id": "ocean_reading", "label": "海洋参数采集", "icon": "OCN", "base_size": 150},
+		{"id": "geophysics_reading", "label": "地球物理采集", "icon": "GEO", "base_size": 180},
+		{"id": "composition_reading", "label": "大气成分分析", "icon": "CMP", "base_size": 140},
+		{"id": "calibration", "label": "仪器校准检查", "icon": "CAL", "base_size": 100},
+		{"id": "anomaly_check", "label": "异常检测扫描", "icon": "ANM", "base_size": 200},
+		{"id": "daily_report", "label": "日报数据编译", "icon": "RPT", "base_size": 160},
 	]
+
+	# ★ 根据当前环境状态计算异常严重度系数
+	var anomaly_severity: float = 0.0
+	var pending_anomalies: Array[Dictionary] = em.get_pending_anomalies()
+	for a in pending_anomalies:
+		match str(a.get("severity", "info")):
+			"critical": anomaly_severity += 2.0
+			"warning", "anomalous": anomaly_severity += 1.0
+			_: anomaly_severity += 0.3
+	var active_events: Dictionary = em.get_active_events()
+	for eid in active_events.keys():
+		if active_events[eid].get("scp_related", false):
+			anomaly_severity += 1.5
+		else:
+			anomaly_severity += 0.5
 
 	var total_steps: int = scan_sequence.size()
 	var completed_count: int = 0
@@ -1866,6 +1881,7 @@ func _cmd_env_scan(em: EnvMonitor, tm: EnvTaskManager, colors: Dictionary) -> vo
 		var task_id: String = step["id"]
 		var label: String = step["label"]
 		var icon: String = step["icon"]
+		var base_size: int = int(step["base_size"])
 
 		# 检查是否已完成
 		if tm.is_task_completed(task_id):
@@ -1877,9 +1893,27 @@ func _cmd_env_scan(em: EnvMonitor, tm: EnvTaskManager, colors: Dictionary) -> vo
 		var progress_pct: String = "%d/%d" % [step_idx + 1, total_steps]
 		main.append_output("[color=%s]  [%s] %s (%s)[/color]\n" % [p, icon, label, progress_pct], false)
 
+		# ★ 根据异常严重度动态调整进度条速度
+		# 异常越严重 → severity_factor 越大 → speed 越慢
+		var severity_factor: float = 1.0
+		if task_id == "anomaly_check":
+			severity_factor = 1.0 + anomaly_severity * 0.6
+		elif task_id in ["geophysics_reading", "ocean_reading"]:
+			severity_factor = 1.0 + anomaly_severity * 0.3
+		else:
+			severity_factor = 1.0 + anomaly_severity * 0.1
+		# 随机波动：每个步骤有 ±30% 的时间随机偏差
+		var time_jitter: float = randf_range(0.7, 1.3)
+		var adjusted_size: int = int(float(base_size) * severity_factor * time_jitter)
+		var speed: float = clampf(3.5 / severity_factor, 1.5, 5.0)
+
 		# 进度条动画
-		await main.tw.show_progress_bar(100 + step_idx * 30, 4.0)
-		await main.get_tree().create_timer(0.15).timeout
+		await main.tw.show_progress_bar(adjusted_size, speed)
+		# 步骤间短暂停顿（异常时偶尔出现更长的犹豫停顿）
+		var pause_time: float = randf_range(0.08, 0.2)
+		if anomaly_severity > 1.0 and randf() < 0.3:
+			pause_time += randf_range(0.3, 0.8)
+		await main.get_tree().create_timer(pause_time).timeout
 
 		# 执行任务
 		var result: Dictionary = tm.begin_task(task_id)
