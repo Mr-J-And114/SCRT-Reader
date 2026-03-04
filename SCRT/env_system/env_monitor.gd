@@ -630,6 +630,7 @@ func _activate_event(eid: String, edef: Dictionary) -> void:
 			if "has_new_mail" in main:
 				main.has_new_mail = true
 			main.mail_sys.start_blink()
+
 	# 触发特效（通过 main 的安全接口，自动处理预设和光敏降级）
 	if edef.has("triggers_effect") and main:
 		var fx_id: String = str(edef["triggers_effect"])

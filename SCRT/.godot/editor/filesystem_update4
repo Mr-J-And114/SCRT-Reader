@@ -4,3 +4,4 @@ res://addons/agent/agent.gd
 res://shaders/background_vignette.gdshader
 res://shaders/background_logo.gdshader
 res://env_system/env_monitor.gd
+res://comm_system/comm_manager.gd

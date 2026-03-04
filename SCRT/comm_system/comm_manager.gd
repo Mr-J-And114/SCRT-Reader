@@ -652,17 +652,17 @@ func reload_user_data() -> void:
 func _get_save_path() -> String:
 	if _main and _main.user_mgr and _main.user_mgr.is_logged_in:
 		var username: String = _main.user_mgr.get_username()
-		# ★ 保存到 saves/用户名/ 目录下，与其他存档一致
-		if _main.save_mgr:
-			var user_dir: String = _main.save_mgr.get_game_root_dir() + "/" + username
-			# 确保目录存在
-			if not DirAccess.dir_exists_absolute(user_dir):
-				DirAccess.make_dir_recursive_absolute(user_dir)
-			return user_dir + "/comm_progress.cfg"
-		# 回退：使用 user:// 
-		return "user://comm_" + username + ".cfg"
+		# ★ 与其他存档一致：res://saves/用户名/（编辑器）或 exe目录/saves/用户名/（导出后）
+		var base_dir: String = ""
+		if OS.has_feature("editor"):
+			base_dir = ProjectSettings.globalize_path("res://")
+		else:
+			base_dir = OS.get_executable_path().get_base_dir()
+		var user_dir: String = base_dir.path_join("saves").path_join(username)
+		if not DirAccess.dir_exists_absolute(user_dir):
+			DirAccess.make_dir_recursive_absolute(user_dir)
+		return user_dir.path_join("comm_progress.cfg")
 	return ""
-
 
 func _save_completed() -> void:
 	var path: String = _get_save_path()
