@@ -79,6 +79,9 @@ func _register_commands() -> void:
 		"set": _cmd_settings,        # ★ 设置系统（简写）
 		"env": _cmd_env,             # ★ 环境监测系统
 		"monitor": _cmd_env,         # ★ 环境监测（别名）
+		"camera": _cmd_camera,       # ★ 监控摄像头系统
+		"cam": _cmd_camera,          # ★ 监控摄像头（简写）
+		"cctv": _cmd_camera,         # ★ 监控摄像头（别名）
 	}
 
 	# ── 桌面模式专用命令 ──
@@ -406,6 +409,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 环境监测 ──[/color]")
 		lines.append("  [color=" + p + "]env[/color]           环境监测系统 (env help 查看子命令)")
+		lines.append("  [color=" + p + "]camera[/color]        监控摄像头系统 (camera help 查看子命令)")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
@@ -472,6 +476,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 环境监测 ──[/color]")
 		lines.append("  [color=" + p + "]env[/color]           环境监测系统 (env help 查看子命令)")
+		lines.append("  [color=" + p + "]camera[/color]        监控摄像头系统 (camera help 查看子命令)")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
@@ -2206,3 +2211,102 @@ func _beaufort_scale(wind_speed: float) -> int:
 	if wind_speed < 28.5: return 10
 	if wind_speed < 32.7: return 11
 	return 12
+
+# ══════════════════════════════════════════
+#  ★ 监控摄像头命令
+# ══════════════════════════════════════════
+func _cmd_camera(args: Array = []) -> void:
+	if main.camera_mgr == null:
+		main.append_output("[color=" + T.error_hex + "]监控摄像头系统未初始化。[/color]\n", false)
+		return
+	var cm: CameraManager = main.camera_mgr
+	if not cm.has_cameras():
+		main.append_output("[color=" + T.muted_hex + "]当前没有可用的摄像头。[/color]\n", false)
+		return
+	if args.is_empty():
+		_cmd_camera_help()
+		return
+	var sub: String = str(args[0]).to_lower()
+	var sub_args: Array = args.slice(1)
+	match sub:
+		"help", "?":
+			_cmd_camera_help()
+		"list", "ls":
+			_cmd_camera_list(cm)
+		"view", "v":
+			_cmd_camera_view(cm, sub_args)
+		"status", "s":
+			_cmd_camera_status(cm)
+		_:
+			# 无子命令时尝试直接打开（camera view 简写）
+			_cmd_camera_view(cm, args)
+
+func _cmd_camera_help() -> void:
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var s: String = T.success_hex
+	main.append_output("[color=" + p + "]════ CCTV 监控系统 ════[/color]\n", false)
+	main.append_output("[color=" + s + "]camera list[/color]          [color=" + m + "]列出所有已解锁摄像头[/color]\n", false)
+	main.append_output("[color=" + s + "]camera view [编号|ID][/color] [color=" + m + "]打开摄像头查看器[/color]\n", false)
+	main.append_output("[color=" + s + "]camera status[/color]        [color=" + m + "]显示所有摄像头状态[/color]\n", false)
+	main.append_output("[color=" + m + "]别名: cam, cctv[/color]\n", false)
+
+func _cmd_camera_list(cm: CameraManager) -> void:
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var s: String = T.success_hex
+	var e: String = T.error_hex
+	var unlocked: Array[CameraFeed] = cm.get_unlocked_cameras()
+	if unlocked.is_empty():
+		main.append_output("[color=" + m + "]没有已解锁的摄像头。[/color]\n", false)
+		return
+	main.append_output("[color=" + p + "]════ 已解锁摄像头 (%d) ════[/color]\n" % unlocked.size(), false)
+	for i in range(unlocked.size()):
+		var cam: CameraFeed = unlocked[i]
+		var status_str: String = "[color=" + s + "]● ONLINE[/color]" if cam.online else "[color=" + e + "]○ OFFLINE[/color]"
+		var sig_str: String = " SIG:%d%%" % int(cam.signal_quality * 100) if cam.online else ""
+		main.append_output("  [color=" + s + "]%d.[/color] %s  [color=" + m + "]%s[/color]  %s%s\n" % [
+			i + 1, cam.cam_name, cam.location, status_str, sig_str
+		], false)
+	main.append_output("[color=" + m + "]输入 camera view <编号> 打开查看器。[/color]\n", false)
+
+func _cmd_camera_view(cm: CameraManager, sub_args: Array) -> void:
+	var unlocked: Array[CameraFeed] = cm.get_unlocked_cameras()
+	if unlocked.is_empty():
+		main.append_output("[color=" + T.muted_hex + "]没有已解锁的摄像头。[/color]\n", false)
+		return
+	var target_id: String = ""
+	if not sub_args.is_empty():
+		var arg: String = str(sub_args[0])
+		# 尝试编号
+		if arg.is_valid_int():
+			var idx: int = int(arg) - 1
+			if idx >= 0 and idx < unlocked.size():
+				target_id = unlocked[idx].id
+			else:
+				main.append_output("[color=" + T.error_hex + "]编号超出范围。可用: 1-%d[/color]\n" % unlocked.size(), false)
+				return
+		else:
+			# 尝试 ID
+			target_id = arg
+	if main.camera_viewer:
+		main.camera_viewer.open(target_id)
+		main._camera_viewer_mode = true
+
+func _cmd_camera_status(cm: CameraManager) -> void:
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var s: String = T.success_hex
+	var e: String = T.error_hex
+	var w: String = T.warning_hex
+	var all_cams: Array[CameraFeed] = cm.get_all_cameras()
+	main.append_output("[color=" + p + "]════ 摄像头系统状态 ════[/color]\n", false)
+	main.append_output("[color=" + m + "]总计: %d  已解锁: %d[/color]\n" % [cm.get_camera_count(), cm.get_unlocked_count()], false)
+	for cam in all_cams:
+		var lock_str: String = "" if cam.unlocked else " [LOCKED]"
+		var status_color: String = s if cam.online else e
+		var status_text: String = "ONLINE" if cam.online else "OFFLINE"
+		var anom_str: String = " [color=" + w + "]! ANOMALY[/color]" if cam.is_anomaly_active() else ""
+		main.append_output("  [color=" + status_color + "]%s[/color] %s [color=" + m + "]%s[/color]%s%s\n" % [
+			status_text, cam.cam_name, cam.location, lock_str, anom_str
+		], false)
