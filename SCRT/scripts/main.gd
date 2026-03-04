@@ -122,7 +122,8 @@ var explore_viewer: ExploreViewer = null
 #  初始化
 # ══════════════════════════════════════════
 func _ready() -> void:
-	# 初始化主题
+	# 初始化主题（先设置存储路径，确保主题配置存入 saves/ 目录）
+	ThemeManager.setup_save_root(save_mgr.get_game_root_dir() + "saves/")
 	ThemeManager.init("phosphor_green")
 	T = ThemeManager.current
 	# 初始化打字机
@@ -226,6 +227,7 @@ func _ready() -> void:
 		push_warning("[Main] 未找到 crt_shader.gd 控制器节点")
 	# 初始化效果强度设置
 	effect_settings = EffectSettings.new()
+	effect_settings.setup_save_root(save_mgr.get_game_root_dir() + "saves/")
 	effect_settings.load_settings()
 	# 初始化操作音效系统
 	ui_sound = UiSound.new()
