@@ -79,6 +79,12 @@ func reset_all() -> void:
 	if main.mail_sys and main.mail_sys.has_method("reset"):
 		main.mail_sys.reset()
 	main.has_new_mail = false
+	# 重置摄像头系统
+	if main.camera_mgr:
+		main.camera_mgr.reset()
+	if main._camera_viewer_mode and main.camera_viewer and main.camera_viewer.is_active:
+		main.camera_viewer.close()
+		main._camera_viewer_mode = false
 
 # ══════════════════════════════════════════
 #  外部模组加载/卸载
@@ -480,6 +486,14 @@ func load_story(args: Array) -> void:
 			main.mail_sys.load_save_data(save_data["mail_data"])
 		print("[DiscManager] 邮件系统已加载")
 
+	# ── ★ 加载监控摄像头系统 ──
+	if main.camera_mgr:
+		main.camera_mgr.load_from_manifest(main.story_manifest)
+		if not save_data.is_empty() and save_data.has("camera_data"):
+			main.camera_mgr.load_save_data(save_data["camera_data"])
+		if main.camera_mgr.has_cameras():
+			print("[DiscManager] 摄像头系统已加载: %d 个摄像头" % main.camera_mgr.get_camera_count())
+
 	# ── ★ 加载环境监测系统覆盖 ──
 	if main.env_monitor:
 		main.env_monitor.load_from_manifest(main.story_manifest)
@@ -555,6 +569,9 @@ func _auto_save() -> void:
 		extra["env_data"] = main.env_monitor.get_save_data()
 	if main.env_task_mgr:
 		extra["env_task_data"] = main.env_task_mgr.get_save_data()
+	# ★ 监控摄像头系统状态
+	if main.camera_mgr and main.camera_mgr.has_cameras():
+		extra["camera_data"] = main.camera_mgr.get_save_data()
 	# ★ 每日剧情对话状态（兼容旧存档 + 独立存档双写）
 	if main.daily_dialogue_mgr:
 		extra["daily_dialogue_data"] = main.daily_dialogue_mgr.get_save_data()

@@ -293,6 +293,12 @@ func _exec_single(raw: String, ctx: Dictionary) -> void:
 		"unlock_folder": _act_unlock_folder(param)
 		"color_scheme": _act_color_scheme(param)
 		"comm":         _act_comm(param)
+		"camera_unlock":  _act_camera_unlock(param)
+		"camera_lock":    _act_camera_lock(param)
+		"camera_online":  _act_camera_online(param)
+		"camera_offline": _act_camera_offline(param)
+		"camera_anomaly": _act_camera_anomaly(param)
+		"camera_signal":  _act_camera_signal(param)
 		_:
 			push_warning("[TriggerSystem] 未知动作: " + raw)
 
@@ -502,6 +508,48 @@ func _act_comm(param: String) -> void:
 		return
 	print("[TriggerSystem] _act_comm: ", dialogue_id)
 	main.comm_mgr.trigger_dialogue(dialogue_id)
+
+# ── 摄像头触发器动作 ──
+func _act_camera_unlock(param: String) -> void:
+	if main.camera_mgr:
+		main.camera_mgr.unlock_camera(param.strip_edges())
+
+func _act_camera_lock(param: String) -> void:
+	if main.camera_mgr:
+		main.camera_mgr.lock_camera(param.strip_edges())
+
+func _act_camera_online(param: String) -> void:
+	if main.camera_mgr:
+		main.camera_mgr.set_camera_online(param.strip_edges(), true)
+
+func _act_camera_offline(param: String) -> void:
+	if main.camera_mgr:
+		main.camera_mgr.set_camera_online(param.strip_edges(), false)
+
+func _act_camera_anomaly(param: String) -> void:
+	# 格式: camera_id:anomaly_id 或 camera_id（触发第一个异常）
+	if main.camera_mgr == null:
+		return
+	var parts: PackedStringArray = param.split(":")
+	var cam_id: String = parts[0].strip_edges()
+	var anom_id: String = parts[1].strip_edges() if parts.size() > 1 else ""
+	if anom_id.is_empty():
+		# 触发该摄像头的第一个异常
+		var cam: CameraFeed = main.camera_mgr.get_camera(cam_id)
+		if cam and not cam.anomalies.is_empty():
+			anom_id = cam.anomalies[0].get("id", "")
+	if not anom_id.is_empty():
+		main.camera_mgr.trigger_anomaly(cam_id, anom_id)
+
+func _act_camera_signal(param: String) -> void:
+	# 格式: camera_id:quality（0-1）
+	if main.camera_mgr == null:
+		return
+	var parts: PackedStringArray = param.split(":")
+	if parts.size() >= 2:
+		var cam_id: String = parts[0].strip_edges()
+		var quality: float = float(parts[1].strip_edges())
+		main.camera_mgr.set_signal_quality(cam_id, quality)
 
 
 # ============================================================

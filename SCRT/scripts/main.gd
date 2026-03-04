@@ -109,6 +109,10 @@ var env_task_mgr: EnvTaskManager = null
 var env_viewer: EnvViewer = null
 var _env_viewer_mode: bool = false
 var daily_dialogue_mgr: DailyDialogueManager = null
+# ★ 监控摄像头系统
+var camera_mgr: CameraManager = null
+var camera_viewer: CameraViewer = null
+var _camera_viewer_mode: bool = false
 # ★ 内联音频播放系统
 var _inline_audio_path: String = ""
 var _inline_audio_timer: float = 0.0
@@ -250,6 +254,12 @@ func _ready() -> void:
 	daily_dialogue_mgr = DailyDialogueManager.new()
 	daily_dialogue_mgr.setup(self)
 	print("[Main] 环境监测系统已初始化")
+	# ★ 初始化监控摄像头系统
+	camera_mgr = CameraManager.new()
+	camera_mgr.setup(self)
+	camera_viewer = CameraViewer.new()
+	camera_viewer.setup(self, camera_mgr)
+	print("[Main] 监控摄像头系统已初始化")
 	
 	UIManager.setup_custom_cursor(self)
 	# 提示符颜色跟随主题
@@ -1152,6 +1162,12 @@ func _input(event: InputEvent) -> void:
 			_env_viewer_mode = false if not env_viewer.is_active else true
 			get_viewport().set_input_as_handled()
 			return
+	# ★ 监控摄像头模式
+	if _camera_viewer_mode and camera_viewer and camera_viewer.is_active:
+		if camera_viewer.handle_input(event):
+			_camera_viewer_mode = false if not camera_viewer.is_active else true
+			get_viewport().set_input_as_handled()
+			return
 	# ★ 密码解码器模式优先处理输入
 	if _decode_mode and decode_viewer and decode_viewer.is_active:
 		if decode_viewer.handle_input(event):
@@ -1584,6 +1600,11 @@ func _process(delta: float) -> void:
 		env_monitor.process(delta)
 	if env_viewer and env_viewer.is_active:
 		env_viewer.process(delta)
+	# ★ 监控摄像头系统
+	if camera_mgr:
+		camera_mgr.process(delta)
+	if camera_viewer and camera_viewer.is_active:
+		camera_viewer.process(delta)
 
 # ══════════════════════════════════════════
 #  超链接处理
