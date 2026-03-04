@@ -1,6 +1,6 @@
 
 # SCRT-Reader AI Handoff Document
-<!-- VERSION:1.2 | ENGINE:Godot4.6 | RENDERER:GL_Compatibility | LAST_UPDATE:2025-07-11 -->
+<!-- VERSION:1.3 | ENGINE:Godot4.6 | RENDERER:GL_Compatibility | LAST_UPDATE:2026-03-04 -->
 <!-- FORMAT: Compressed for AI consumption. Minimize whitespace. Section headers are anchors. -->
 
 ## §1 PROJECT OVERVIEW
@@ -15,7 +15,7 @@
 - Downloaded .scp files also saved to the same `vdisc/` directory via modem dial
 
 ## §2 ARCHITECTURE
-All logic lives in `res://scripts/` + `res://comm_system/` + `res://settings/` + `res://modder/` + `res://templates/`.
+All logic lives in `res://scripts/` + `res://comm_system/` + `res://settings/` + `res://modder/` + `res://templates/` + `res://camera_system/`.
 **Pattern:** Main.gd (Control node) owns RefCounted manager instances. No singletons. Managers reference each other via constructor injection in `_ready()`.
 
 ### Core Dependency Graph
@@ -51,6 +51,8 @@ main.gd (extends Control) — the god object
 ├─ radio_receiver: RadioReceiver — radio tuning/morse/SSTV/audio station/hidden signals decoder
 ├─ decode_viewer: DecodeViewer — cipher decode visualization
 ├─ ui_sound: UiSound — procedural keystroke/click SFX
+├─ camera_mgr: CameraManager — CCTV camera management (register/unlock/anomaly/save)
+├─ camera_viewer: CameraViewer — fullscreen camera overlay with shader rendering
 ├─ ui_manager(static calls): UIManager — theme-aware style builder
 ├─ audio_manager: AudioManager (extends Node) — ambient/sfx/media players, load from bytes (MP3/OGG/WAV)
 └─ crt_shader: CRTShader (extends ColorRect) — CRT post-process on CanvasLayer(10)
@@ -122,6 +124,8 @@ Main (Control, fullrect) [main.gd]
 | video_player.gd | VideoPlayerViewer | 737 | Video overlay with controls, ffmpeg fallback support |
 | env_monitor.gd | EnvMonitor | ~550 | Environmental simulation: sensors, weather, events, anomalies, daily seed |
 | env_task_manager.gd | EnvTaskManager | ~450 | Daily task checklist: inspection, recording, calibration, reporting |
+| camera_feed.gd | CameraFeed | ~273 | Single camera data model: base/depth/light/anomaly images, lens params |
+| camera_manager.gd | CameraManager | ~290 | Camera registry, unlock/lock, anomaly triggers, save/load, image loading |
 
 ### §4.2 Viewer/Overlay Scripts
 | File | Class | Lines | Purpose |
@@ -133,6 +137,7 @@ Main (Control, fullrect) [main.gd]
 | radio_receiver.gd | RadioReceiver | ~1700 | Full radio UI: tuning, bands, morse decode, SSTV, audio station, hidden signals, waterfall, _RadioCanvas inner class |
 | decode_viewer.gd | DecodeViewer | 1457 | Cipher decode animation viewer, _DecodeCanvas inner class |
 | env_viewer.gd | EnvViewer | ~350 | Environmental data panel overlay, 6 pages, _EnvCanvas inner class |
+| camera_viewer.gd | CameraViewer | ~480 | CCTV fullscreen overlay, shader-rendered surveillance feed, pan/switch controls |
 
 ### §4.3 Comm System (`res://comm_system/`)
 | File | Class | Purpose |
@@ -257,9 +262,10 @@ Format:
 
 ### §6.3 Commands (CommandHandler)
 
-**Desktop:** help, clear, status, whoami, settings, theme, volume, reboot, exit, logout, passwd, birthday, users, deluser, profile, comm, mail, scan, load, vdisc, explore, dial, phonebook, env
+**Desktop:** help, clear, status, whoami, settings, theme, volume, reboot, exit, logout, passwd, birthday, users, deluser, profile, comm, mail, scan, load, vdisc, explore, dial, phonebook, env, camera
 **Disc (story loaded):** ls, cd, back, open, unlock, eject, save, clearsave, radio, fx, sound, decode, install, uninstall, packages
 **Global (env subcommands):** env status, env view, env tasks, env check, env read, env calibrate, env anomaly, env report, env repair, env advance, env sensor, env weather, env events
+**Global (camera subcommands):** camera list, camera view [id/num], camera status (aliases: cam, cctv)
 
 ## §7 SHADERS
 
@@ -268,6 +274,7 @@ Format:
 | shaders/crt_effect.gdshader          | CRT post-process (scanlines, curvature, chromatic aberration, noise, brightness, shake offset) |
 | shaders/background_vignette.gdshader | Background vignette effect                                                                     |
 | shaders/background_logo.gdshader     | SCP logo background effect                                                                     |
+| camera_system/camera_effect.gdshader | CCTV surveillance shader: depth parallax, 3 light modes (spotlight/nightvision/infrared), noise, scanlines, signal interference, anomaly blend |
 
 ## §8 MODDING INTERFACE
 
@@ -304,6 +311,8 @@ scripts/effect_system.gd|452  scripts/crt_shader.gd|417  scripts/radio_signal_ma
 scripts/radio_audio_generator.gd|312  scripts/radio_config_parser.gd|303  scripts/sstv_decoder.gd|311
 scripts/morse_engine.gd|348  scripts/header_parser.gd|248  scripts/save_manager.gd|229
 scripts/profile_builder.gd|219  scripts/ui_sound.gd|201  scripts/effect_settings.gd|154
+camera_system/camera_feed.gd|273  camera_system/camera_manager.gd|290  camera_system/camera_viewer.gd|480
+camera_system/camera_effect.gdshader|~200
 comm_system/comm_manager.gd|~600  comm_system/comm_dialogue_player.gd|~280
 comm_system/comm_character.gd|?  comm_system/comm_sprite_renderer.gd|?
 comm_system/comm_ui.gd|?  comm_system/comm_voice.gd|?
@@ -319,8 +328,8 @@ templates/article_viewer.gd|?  templates/chat_viewer.gd|?  templates/email_viewe
 * Theme colors accessed via `T.c_primary()`, `T.c_error()` etc. (return hex string)
 * Output via `main.append_output(bbcode)` or `tw.append(text)` for typed output
 * CRT effects via `crt_shader.play_glitch()`, `crt_shader.play_shake()`, etc.
-* `_process(delta)` in main.gd drives: boot_sequence, typewriter, effect_system, mail_system, comm_mgr, radio, oscilloscope, image_viewer, video_player, decode_viewer, scroll, status bar, inline audio/video
-* Input handled in `_input(event)` with mode-priority: boot_sequence > comm > viewers > password > login > normal
+* `_process(delta)` in main.gd drives: boot_sequence, typewriter, effect_system, mail_system, comm_mgr, radio, oscilloscope, image_viewer, video_player, decode_viewer, camera_mgr, camera_viewer, scroll, status bar, inline audio/video
+* Input handled in `_input(event)` with mode-priority: boot_sequence > comm > viewers (env/camera/decode/radio/...) > password > login > normal
 * Dial system driven by `dial_mgr.process(delta)` in main._process; does NOT block terminal input (runs in background)
 * CommDialoguePlayer.stop_dialogue(silent=true) used for dialogue transitions; silent=false (default) for natural completion — prevents premature UI hide and hangup during multi-segment dialogues
 * Voice calls: CommManager._on_dialogue_finished() delays 1.0s before calling dial_mgr.on_voice_call_ended() to let UI close animation complete
@@ -381,6 +390,7 @@ templates/article_viewer.gd|?  templates/chat_viewer.gd|?  templates/email_viewe
 | CRTML         | ✅ Complete | Full markup parser                                                                                             |
 | Dial System   | ✅ Complete | DTMF dialing, voice call routing, modem handshake + HTTP download, phonebook, preset + story directory loading |
 | Env Monitor   | ✅ Complete | Environmental simulation, daily seed, Sakhalin baselines, weather, anomalies, daily tasks, viewer overlay      |
+| Camera System | ✅ Complete | CCTV surveillance: base/depth/light/anomaly images, shader pipeline, 3 light modes, anomaly system, trigger integration |
 
 ## §14 ENVIRONMENT MONITORING SYSTEM
 
@@ -477,6 +487,71 @@ api.env_get_anomalies()              # Pending anomalies
 
 ### §14.8 Save Data
 Stored in `extra["env_data"]` and `extra["env_task_data"]` within story save files.
+
+## §15 CAMERA SYSTEM (CCTV Surveillance)
+
+### §15.1 Overview
+CCTV monitoring system allowing players to view surveillance camera feeds. Each camera has a base image, optional depth map (pseudo-3D parallax), optional lighting map (spotlight/nightvision/infrared), and optional anomaly overlays. All rendering through a custom shader pipeline.
+
+### §15.2 Architecture
+```
+camera_system/camera_feed.gd (CameraFeed) — Single camera data model
+├─ Base/depth/light/anomaly image paths + cached textures
+├─ Lens parameters (viewport_size, viewport_pos, pan_speed, pan_bounds)
+├─ Effect parameters (noise, scanlines, vignette, signal_quality, snow)
+├─ Anomaly system (array of anomalies with trigger/duration/cooldown)
+└─ Runtime state (_active_anomaly, _anomaly_blend, _anomaly_cooldowns)
+
+camera_system/camera_manager.gd (CameraManager) — Registry & lifecycle
+├─ Camera registration from manifest "camera_system.cameras"
+├─ Unlock/lock, online/offline, signal quality control
+├─ Anomaly triggering with effect_settings safety check
+├─ Random anomaly auto-trigger in process()
+├─ Save/load state (unlocked, online, signal_quality per camera)
+└─ Image loading via FileSystem (supports ZIP .scp content)
+
+camera_system/camera_viewer.gd (CameraViewer) — Fullscreen overlay
+├─ ColorRect with camera_effect.gdshader for rendering
+├─ UI overlay (camera name, location, timestamp, signal bar, status)
+├─ Keyboard: arrows=pan, 1-9=switch, TAB=next, Q/ESC=close
+├─ Shader uniforms updated per-frame from CameraFeed state
+└─ Anomaly blend driven by CameraFeed._anomaly_blend
+
+camera_system/camera_effect.gdshader — Shader pipeline
+├─ Depth-based parallax offset (base + anomaly layers)
+├─ 3 lighting modes: spotlight (circle mask), nightvision (green tint), infrared (pseudocolor heatmap)
+├─ Noise/scanlines/vignette/signal interference/snow
+├─ Color compression (desaturation + green shift for CRT feel)
+└─ Anomaly smooth blend transition
+```
+
+### §15.3 Manifest Config
+Key: `"camera_system"` in manifest.json. Contains `"cameras"` dict keyed by camera ID.
+Each camera: `name`, `location`, `unlocked`, `online`, `base_image` (required), `depth_map`, `light_mode` ("none"|"spotlight"|"nightvision"|"infrared"), `light_image`, `light_radius`, `light_falloff`, `viewport_size` [w,h], `viewport_pos` [x,y], `pan_speed`, `pan_bounds` [x1,y1,x2,y2], `noise_intensity`, `scanline_intensity`, `vignette`, `signal_quality`, `snow_intensity`, `timestamp_visible`, `anomalies` array.
+Each anomaly: `id`, `image`, `depth_map`, `light_image`, `trigger` ("random"|"trigger"|"timed"), `probability`, `duration`, `min_interval`, `effects`, `action`.
+
+### §15.4 Commands
+| Command | Description |
+|---------|-------------|
+| `camera list` | List unlocked cameras |
+| `camera view [num/id]` | Open camera viewer |
+| `camera status` | Show all cameras status |
+
+### §15.5 Trigger Actions
+| Action | Description |
+|--------|-------------|
+| `camera_unlock:cam_id` | Unlock camera |
+| `camera_lock:cam_id` | Lock camera |
+| `camera_online:cam_id` | Set camera online |
+| `camera_offline:cam_id` | Set camera offline |
+| `camera_anomaly:cam_id[:anom_id]` | Trigger anomaly |
+| `camera_signal:cam_id:quality` | Set signal quality (0-1) |
+
+### §15.6 Save Data
+Stored in `extra["camera_data"]` within story save files. Saves per-camera: `unlocked`, `online`, `signal_quality`.
+
+### §15.7 Safety
+Anomaly visual effects blocked when `effect_settings.is_effect_allowed("jumpscare")` returns false (OFF mode). Trigger actions (mail delivery, file unlock, etc.) always execute regardless of effect level.
 
 <!-- END OF HANDOFF DOCUMENT -->
 
