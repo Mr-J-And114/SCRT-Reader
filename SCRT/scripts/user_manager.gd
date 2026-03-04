@@ -129,7 +129,7 @@ func get_all_users() -> Array[String]:
 # ============================================================
 # 注册
 # ============================================================
-func register(username: String, password: String) -> Dictionary:
+func register(username: String, password: String, extra: Dictionary = {}) -> Dictionary:
 	var name_check: Dictionary = _validate_username(username)
 	if not name_check["valid"]:
 		return { "success": false, "message": name_check["message"] }
@@ -141,6 +141,9 @@ func register(username: String, password: String) -> Dictionary:
 		return { "success": false, "message": "用户名 \"" + username + "\" 已被占用。" }
 
 	var profile: Dictionary = _create_default_profile(username, password)
+	# 合并注册引导中收集的额外信息
+	for key in extra.keys():
+		profile[key] = extra[key]
 	profile["system_notes"] = [
 		{
 			"from": "SYSTEM",
@@ -159,7 +162,10 @@ func register(username: String, password: String) -> Dictionary:
 	_save_current_profile()
 	_save_last_login_user(username)
 
-	return { "success": true, "message": "档案创建成功。欢迎, " + username + "。" }
+	var display_name: String = str(extra.get("nickname", ""))
+	if display_name.is_empty():
+		display_name = username
+	return { "success": true, "message": "档案创建成功。欢迎, " + display_name + "。" }
 
 # ============================================================
 # 登录
@@ -289,6 +295,94 @@ func get_role() -> String:
 func get_badge() -> String:
 	return str(current_user.get("badge", ""))
 
+func get_nickname() -> String:
+	return str(current_user.get("nickname", ""))
+
+func get_gender() -> String:
+	return str(current_user.get("gender", ""))
+
+func get_birthday() -> String:
+	return str(current_user.get("birthday", ""))
+
+func get_age() -> int:
+	var bday: String = get_birthday()
+	if bday.is_empty():
+		return -1
+	var parts: PackedStringArray = bday.split("-")
+	if parts.size() != 3:
+		return -1
+	var birth_year: int = int(parts[0])
+	var birth_month: int = int(parts[1])
+	var birth_day: int = int(parts[2])
+	var now: Dictionary = Time.get_datetime_dict_from_system()
+	var age: int = int(now["year"]) - birth_year
+	if int(now["month"]) < birth_month or (int(now["month"]) == birth_month and int(now["day"]) < birth_day):
+		age -= 1
+	return age
+
+## 检查今天是否是玩家生日
+func is_birthday_today() -> bool:
+	var bday: String = get_birthday()
+	if bday.is_empty():
+		return false
+	var parts: PackedStringArray = bday.split("-")
+	if parts.size() != 3:
+		return false
+	var now: Dictionary = Time.get_datetime_dict_from_system()
+	return int(parts[1]) == int(now["month"]) and int(parts[2]) == int(now["day"])
+
+## 获取玩家称呼（优先昵称，其次用户名）
+func get_player_name() -> String:
+	var nick: String = get_nickname()
+	if not nick.is_empty():
+		return nick
+	return get_username()
+
+## 获取玩家信息字典（供对话系统 / meta / 剧情使用）
+func get_player_info() -> Dictionary:
+	return {
+		"username": get_username(),
+		"nickname": get_nickname(),
+		"player_name": get_player_name(),
+		"gender": get_gender(),
+		"birthday": get_birthday(),
+		"age": get_age(),
+		"is_birthday_today": is_birthday_today(),
+		"role": get_role(),
+		"badge": get_badge(),
+		"login_count": int(current_user.get("login_count", 0)),
+		"total_time_seconds": int(current_user.get("total_time_seconds", 0)),
+	}
+
+## 设置昵称
+func set_nickname(nick: String) -> Dictionary:
+	if not is_logged_in:
+		return { "success": false, "message": "未登录。" }
+	if nick.length() > 20:
+		return { "success": false, "message": "昵称不能超过 20 个字符。" }
+	current_user["nickname"] = nick
+	_save_current_profile()
+	return { "success": true, "message": "昵称已设置为 " + nick + "。" }
+
+## 设置性别
+func set_gender(g: String) -> Dictionary:
+	if not is_logged_in:
+		return { "success": false, "message": "未登录。" }
+	var valid: Array[String] = ["M", "F", "X", ""]
+	if g.to_upper() not in valid:
+		return { "success": false, "message": "无效的性别选项。请使用 M(男) / F(女) / X(其他)。" }
+	current_user["gender"] = g.to_upper()
+	_save_current_profile()
+	return { "success": true, "message": "性别已设置。" }
+
+## 检查是否存在非管理员用户
+func has_non_admin_users() -> bool:
+	var users: Array[String] = get_all_users()
+	for u in users:
+		if u.to_lower() != ADMIN_USERNAME.to_lower():
+			return true
+	return false
+
 # ============================================================
 # 记住上次登录用户
 # ============================================================
@@ -412,10 +506,23 @@ func get_profile_data() -> Dictionary:
 	var birthday: String = str(current_user.get("birthday", ""))
 	if birthday.is_empty():
 		birthday = "未设置"
+	var nickname: String = get_nickname()
+	if nickname.is_empty():
+		nickname = "未设置"
+	var gender: String = get_gender()
+	if gender.is_empty():
+		gender = "未设置"
+	else:
+		match gender:
+			"M": gender = "男"
+			"F": gender = "女"
+			"X": gender = "其他"
 
 	return {
 		"username": get_username(),
 		"display_name": get_display_name(),
+		"nickname": nickname,
+		"gender": gender,
 		"role": _get_role_display(),
 		"badge": get_badge(),
 		"avatar": _get_avatar_status(),
@@ -453,6 +560,17 @@ func get_profile_page1() -> String:
 	var birthday: String = str(current_user.get("birthday", ""))
 	if birthday.is_empty():
 		birthday = "未设置 (use: birthday YYYY-MM-DD)"
+	var nickname: String = get_nickname()
+	if nickname.is_empty():
+		nickname = "未设置 (use: nickname <名字>)"
+	var gender_raw: String = get_gender()
+	var gender_display: String = "未设置 (use: gender M/F/X)"
+	if not gender_raw.is_empty():
+		match gender_raw:
+			"M": gender_display = "男"
+			"F": gender_display = "女"
+			"X": gender_display = "其他"
+			_: gender_display = gender_raw
 
 	var lines: String = ""
 	lines += "\n"
@@ -463,10 +581,12 @@ func get_profile_page1() -> String:
 	lines += "[color=" + p + "]╠══════════════════════════════════════════════╣[/color]\n"
 	lines += "[color=" + p + "]║[/color]                                              [color=" + p + "]║[/color]\n"
 	lines += "[color=" + p + "]║[/color]   [color=" + m + "]用户名    :[/color]  [color=" + p + "]" + get_username() + "[/color]\n"
+	lines += "[color=" + p + "]║[/color]   [color=" + m + "]昵称      :[/color]  [color=" + p + "]" + nickname + "[/color]\n"
 	lines += "[color=" + p + "]║[/color]   [color=" + m + "]身份      :[/color]  [color=" + p + "]" + role_display + "[/color]\n"
 	if not badge.is_empty():
 		lines += "[color=" + p + "]║[/color]   [color=" + m + "]徽章      :[/color]  [color=" + w + "][" + badge + "][/color]\n"
 	lines += "[color=" + p + "]║[/color]   [color=" + m + "]头像      :[/color]  " + _get_avatar_status() + "\n"
+	lines += "[color=" + p + "]║[/color]   [color=" + m + "]性别      :[/color]  [color=" + p + "]" + gender_display + "[/color]\n"
 	lines += "[color=" + p + "]║[/color]   [color=" + m + "]出生日期  :[/color]  [color=" + p + "]" + birthday + "[/color]\n"
 	lines += "[color=" + p + "]║[/color]                                              [color=" + p + "]║[/color]\n"
 	lines += "[color=" + p + "]╠══════════════════════════════════════════════╣[/color]\n"
@@ -608,6 +728,8 @@ func _create_default_profile(username: String, password: String) -> Dictionary:
 		"title": "",
 		"badge": "",
 		"avatar": "",
+		"nickname": "",
+		"gender": "",
 		"birthday": "",
 		"created_at": _get_current_datetime(),
 		"last_login": _get_current_datetime(),
