@@ -147,7 +147,12 @@ func _load_default_config() -> void:
 	_shutdown_config = config.get("shutdown", {}) as Dictionary
 
 func load_user_override(username: String) -> void:
-	var user_path: String = "user://saves/" + username + "/boot_config.json"
+	var saves_root: String = ""
+	if main and main.save_mgr:
+		saves_root = main.save_mgr.get_game_root_dir() + "saves/"
+	else:
+		saves_root = OS.get_executable_path().get_base_dir() + "/saves/"
+	var user_path: String = saves_root + username + "/boot_config.json"
 	if FileAccess.file_exists(user_path):
 		var loaded: Dictionary = _load_json_file(user_path)
 		if not loaded.is_empty():

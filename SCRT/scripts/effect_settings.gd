@@ -25,25 +25,47 @@ signal settings_changed
 # ── 持久化路径 ──
 const SETTINGS_KEY_LEVEL: String = "effect_level"
 const SETTINGS_KEY_PHOTO: String = "photosensitive_mode"
+var _save_root: String = ""
 
 # ============================================================
 # 初始化与持久化
 # ============================================================
 
+func setup_save_root(save_root: String) -> void:
+	_save_root = save_root
+	if not _save_root.ends_with("/"):
+		_save_root += "/"
+
+func _get_config_path() -> String:
+	if not _save_root.is_empty():
+		return _save_root + "effect_settings.cfg"
+	# 兜底：游戏根目录 saves/
+	if OS.has_feature("editor"):
+		return ProjectSettings.globalize_path("res://") + "saves/effect_settings.cfg"
+	return OS.get_executable_path().get_base_dir() + "/saves/effect_settings.cfg"
+
 func load_settings() -> void:
-	# 从 Godot 项目设置或用户配置文件读取
 	var cfg := ConfigFile.new()
-	var path: String = "user://effect_settings.cfg"
+	var path: String = _get_config_path()
 	if cfg.load(path) == OK:
 		effect_level = cfg.get_value("effects", SETTINGS_KEY_LEVEL, Level.FULL) as Level
 		photosensitive_mode = cfg.get_value("effects", SETTINGS_KEY_PHOTO, false)
+	else:
+		# 兼容迁移：尝试从旧 user:// 路径读取
+		var legacy_path: String = "user://effect_settings.cfg"
+		if cfg.load(legacy_path) == OK:
+			effect_level = cfg.get_value("effects", SETTINGS_KEY_LEVEL, Level.FULL) as Level
+			photosensitive_mode = cfg.get_value("effects", SETTINGS_KEY_PHOTO, false)
+			# 迁移到新路径
+			save_settings()
+			print("[EffectSettings] 已从 user:// 迁移到 saves/ 目录")
 	print("[EffectSettings] 已加载: level=", Level.keys()[effect_level], " photosensitive=", photosensitive_mode)
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("effects", SETTINGS_KEY_LEVEL, effect_level)
 	cfg.set_value("effects", SETTINGS_KEY_PHOTO, photosensitive_mode)
-	cfg.save("user://effect_settings.cfg")
+	cfg.save(_get_config_path())
 
 # ============================================================
 # 设置接口

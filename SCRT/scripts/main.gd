@@ -75,9 +75,13 @@ var _login_mode: bool = false
 var _login_step: int = 0  # 0=用户名, 1=密码
 var _login_username_input: String = ""
 var _register_mode: bool = false
-var _register_step: int = 0  # 0=用户名, 1=密码, 2=确认密码
+var _register_step: int = 0  # 0=用户名, 1=密码, 2=确认密码, 3=昵称, 4=性别, 5=生日
 var _register_username_input: String = ""
 var _register_password_input: String = ""
+var _register_nickname_input: String = ""
+var _register_gender_input: String = ""
+var _register_birthday_input: String = ""
+var _register_is_wizard: bool = false  # 是否首次注册引导模式
 var _passwd_mode: bool = false
 var _passwd_step: int = 0  # 0=旧密码, 1=新密码, 2=确认新密码
 var _passwd_old: String = ""
@@ -118,7 +122,8 @@ var explore_viewer: ExploreViewer = null
 #  初始化
 # ══════════════════════════════════════════
 func _ready() -> void:
-	# 初始化主题
+	# 初始化主题（先设置存储路径，确保主题配置存入 saves/ 目录）
+	ThemeManager.setup_save_root(save_mgr.get_game_root_dir() + "saves/")
 	ThemeManager.init("phosphor_green")
 	T = ThemeManager.current
 	# 初始化打字机
@@ -222,6 +227,7 @@ func _ready() -> void:
 		push_warning("[Main] 未找到 crt_shader.gd 控制器节点")
 	# 初始化效果强度设置
 	effect_settings = EffectSettings.new()
+	effect_settings.setup_save_root(save_mgr.get_game_root_dir() + "saves/")
 	effect_settings.load_settings()
 	# 初始化操作音效系统
 	ui_sound = UiSound.new()
@@ -395,6 +401,12 @@ func _show_login_prompt() -> void:
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
 	var w: String = T.warning_hex
+	# ★ 首次启动检测：没有非管理员用户时自动进入注册引导
+	if not user_mgr.has_non_admin_users():
+		_start_register_flow(true)  # true = 引导模式
+		input_field.grab_focus()
+		_update_status_bar_login()
+		return
 	var login_box: String = fs.build_box([
 		"SCP FOUNDATION SECURE TERMINAL",
         "SECURE · CONTAIN · PROTECT"
@@ -430,17 +442,37 @@ func _show_login_prompt() -> void:
 # ══════════════════════════════════════════
 #  注册流程
 # ══════════════════════════════════════════
-func _start_register_flow() -> void:
+func _start_register_flow(is_wizard: bool = false) -> void:
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
-	output_text.append_text("\n[color=" + m + "]━━━ 新操作员注册 ━━━[/color]\n\n")
+	var w: String = T.warning_hex
+	_register_is_wizard = is_wizard
+	if is_wizard:
+		# 首次注册引导 — 更友好的欢迎界面
+		var wizard_box: String = fs.build_box([
+			"NEW OPERATOR REGISTRATION",
+			"新操作员注册引导"
+		] as Array[String], p)
+		output_text.append_text("\n" + wizard_box + "\n\n")
+		output_text.append_text("[color=" + m + "]欢迎来到 SCP 基金会安全终端。[/color]\n")
+		output_text.append_text("[color=" + m + "]系统检测到尚无已注册操作员，请完成注册引导以建立您的档案。[/color]\n\n")
+		output_text.append_text("[color=" + w + "]注册流程: 代号 → 密码 → 个人信息[/color]\n")
+		output_text.append_text("[color=" + m + "]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/color]\n\n")
+	else:
+		output_text.append_text("\n[color=" + m + "]━━━ 新操作员注册 ━━━[/color]\n\n")
 	output_text.append_text("[color=" + m + "]用户名规则: " + str(UserManager.MIN_USERNAME_LENGTH) + "-" + str(UserManager.MAX_USERNAME_LENGTH) + " 字符，不含特殊字符和空格[/color]\n")
-	output_text.append_text("[color=" + m + "]输入 cancel 可取消注册。[/color]\n\n")
+	if not is_wizard:
+		output_text.append_text("[color=" + m + "]输入 cancel 可取消注册。[/color]\n\n")
+	else:
+		output_text.append_text("\n")
 	output_text.append_text("[color=" + p + "]请输入新操作员代号: [/color]")
 	_register_mode = true
 	_register_step = 0
 	_register_username_input = ""
 	_register_password_input = ""
+	_register_nickname_input = ""
+	_register_gender_input = ""
+	_register_birthday_input = ""
 	_request_scroll()
 	
 
@@ -537,6 +569,9 @@ func _get_default_placeholder() -> String:
 		match _register_step:
 			0: return "输入新用户名..."
 			1: return "设置密码..."
+			3: return "输入昵称 (skip 跳过)..."
+			4: return "M / F / X (skip 跳过)..."
+			5: return "YYYY-MM-DD (skip 跳过)..."
 			2: return "再次输入密码..."
 	if _passwd_mode:
 		match _passwd_step:
@@ -754,7 +789,9 @@ func _handle_register_input(raw: String) -> void:
 	var p: String = T.primary_hex
 	var e: String = T.error_hex
 	var m: String = T.muted_hex
-	if raw.to_lower() == "cancel":
+	var w: String = T.warning_hex
+	# 首次引导模式下不允许取消（必须完成注册）
+	if raw.to_lower() == "cancel" and not _register_is_wizard:
 		_register_mode = false
 		input_field.secret = false
 		output_text.append_text(raw + "\n")
@@ -800,15 +837,104 @@ func _handle_register_input(raw: String) -> void:
 				input_field.secret = true
 				_request_scroll()
 				return
-			var result: Dictionary = user_mgr.register(_register_username_input, _register_password_input)
-			_register_mode = false
-			if result["success"]:
-				output_text.append_text("\n[color=" + p + "]" + str(result["message"]) + "[/color]\n")
-				_enter_desktop_after_login(str(result["message"]))
-			else:
-				output_text.append_text("\n[color=" + e + "]" + str(result["message"]) + "[/color]\n\n")
-				_start_login_flow()
+			# 密码确认成功 → 进入个人信息收集阶段
+			output_text.append_text("\n[color=" + m + "]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/color]\n")
+			output_text.append_text("[color=" + w + "]个人信息登记[/color]\n")
+			output_text.append_text("[color=" + m + "]以下信息将用于游戏内角色对话和剧情适配。[/color]\n")
+			output_text.append_text("[color=" + m + "]输入 skip 可跳过当前项。[/color]\n\n")
+			output_text.append_text("[color=" + p + "]该怎么称呼你？(昵称): [/color]")
+			_register_step = 3
 			_request_scroll()
+		3:  # 昵称
+			output_text.append_text(raw + "\n")
+			if raw.to_lower() == "skip" or raw.is_empty():
+				_register_nickname_input = ""
+				output_text.append_text("[color=" + m + "](已跳过)[/color]\n\n")
+			else:
+				if raw.length() > 20:
+					output_text.append_text("[color=" + e + "]昵称不能超过 20 个字符。[/color]\n")
+					output_text.append_text("[color=" + p + "]该怎么称呼你？(昵称): [/color]")
+					_request_scroll()
+					return
+				_register_nickname_input = raw
+				output_text.append_text("[color=" + m + "]好的，" + raw + "。[/color]\n\n")
+			output_text.append_text("[color=" + p + "]性别 [M=男 / F=女 / X=其他]: [/color]")
+			_register_step = 4
+			_request_scroll()
+		4:  # 性别
+			output_text.append_text(raw + "\n")
+			if raw.to_lower() == "skip" or raw.is_empty():
+				_register_gender_input = ""
+				output_text.append_text("[color=" + m + "](已跳过)[/color]\n\n")
+			else:
+				var g: String = raw.to_upper().strip_edges()
+				if g not in ["M", "F", "X"]:
+					output_text.append_text("[color=" + e + "]请输入 M(男) / F(女) / X(其他)，或输入 skip 跳过。[/color]\n")
+					output_text.append_text("[color=" + p + "]性别 [M=男 / F=女 / X=其他]: [/color]")
+					_request_scroll()
+					return
+				_register_gender_input = g
+				var gender_label: String = {"M": "男", "F": "女", "X": "其他"}.get(g, g)
+				output_text.append_text("[color=" + m + "]已记录: " + gender_label + "[/color]\n\n")
+			output_text.append_text("[color=" + p + "]出生日期 (格式 YYYY-MM-DD): [/color]")
+			_register_step = 5
+			_request_scroll()
+		5:  # 生日
+			output_text.append_text(raw + "\n")
+			if raw.to_lower() == "skip" or raw.is_empty():
+				_register_birthday_input = ""
+				output_text.append_text("[color=" + m + "](已跳过)[/color]\n\n")
+			else:
+				# 验证日期格式
+				var parts: PackedStringArray = raw.split("-")
+				var valid: bool = parts.size() == 3
+				if valid:
+					for part_str in parts:
+						if not part_str.is_valid_int():
+							valid = false
+							break
+				if valid:
+					var year: int = int(parts[0])
+					var month: int = int(parts[1])
+					var day: int = int(parts[2])
+					if year < 1900 or year > 2100 or month < 1 or month > 12 or day < 1 or day > 31:
+						valid = false
+				if not valid:
+					output_text.append_text("[color=" + e + "]日期格式错误，请使用 YYYY-MM-DD 格式（如 2000-01-15）。[/color]\n")
+					output_text.append_text("[color=" + p + "]出生日期 (格式 YYYY-MM-DD): [/color]")
+					_request_scroll()
+					return
+				_register_birthday_input = raw
+				output_text.append_text("[color=" + m + "]已记录: " + raw + "[/color]\n\n")
+			# 收集完毕 → 执行注册
+			_finish_register()
+
+func _finish_register() -> void:
+	var p: String = T.primary_hex
+	var e: String = T.error_hex
+	var m: String = T.muted_hex
+	var extra: Dictionary = {}
+	if not _register_nickname_input.is_empty():
+		extra["nickname"] = _register_nickname_input
+	if not _register_gender_input.is_empty():
+		extra["gender"] = _register_gender_input
+	if not _register_birthday_input.is_empty():
+		extra["birthday"] = _register_birthday_input
+	var result: Dictionary = user_mgr.register(_register_username_input, _register_password_input, extra)
+	_register_mode = false
+	if result["success"]:
+		if _register_is_wizard:
+			output_text.append_text("[color=" + m + "]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/color]\n")
+			output_text.append_text("[color=" + p + "]" + str(result["message"]) + "[/color]\n")
+			output_text.append_text("[color=" + m + "]注册引导已完成。正在进入系统...[/color]\n")
+		else:
+			output_text.append_text("[color=" + p + "]" + str(result["message"]) + "[/color]\n")
+		_enter_desktop_after_login(str(result["message"]))
+	else:
+		output_text.append_text("\n[color=" + e + "]" + str(result["message"]) + "[/color]\n\n")
+		_start_login_flow()
+	_register_is_wizard = false
+	_request_scroll()
 # ══════════════════════════════════════════
 #  改密码交互处理
 # ══════════════════════════════════════════

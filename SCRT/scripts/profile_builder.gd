@@ -54,6 +54,7 @@ func _build_page1(data: Dictionary) -> String:
 	lines.append("[color=" + w + "]PERSONNEL FILE — 人员档案[/color]")
 	lines.append("")
 	lines.append(_kv("用户名", str(data.get("username", ""))))
+	lines.append(_kv("昵称", str(data.get("nickname", "未设置"))))
 	lines.append(_kv("身份", str(data.get("role", ""))))
 
 	var badge: String = str(data.get("badge", ""))
@@ -61,6 +62,7 @@ func _build_page1(data: Dictionary) -> String:
 		lines.append(_kv("徽章", "[color=" + w + "][" + badge + "][/color]"))
 
 	lines.append(_kv("头像", str(data.get("avatar", "未设置"))))
+	lines.append(_kv("性别", str(data.get("gender", "未设置"))))
 	lines.append(_kv("出生日期", str(data.get("birthday", "未设置"))))
 	lines.append("")
 	lines.append("[color=" + m + "]" + "-".repeat(30) + "[/color]")

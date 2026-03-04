@@ -56,8 +56,20 @@ class ThemeColors:
 static var current: ThemeColors = null
 static var current_theme_name: String = ""
 static var _pending_theme_name: String = ""
+static var _save_root: String = ""
 
-const THEME_CONFIG_PATH := "user://theme_config.cfg"
+static func setup_save_root(save_root: String) -> void:
+	_save_root = save_root
+	if not _save_root.ends_with("/"):
+		_save_root += "/"
+
+static func _get_config_path() -> String:
+	if not _save_root.is_empty():
+		return _save_root + "theme_config.cfg"
+	# 兜底
+	if OS.has_feature("editor"):
+		return ProjectSettings.globalize_path("res://") + "saves/theme_config.cfg"
+	return OS.get_executable_path().get_base_dir() + "/saves/theme_config.cfg"
 
 # ============================================================
 # 初始化
@@ -95,17 +107,27 @@ static func load_theme(theme_name: String) -> void:
 static func _save_theme_preference(theme_name: String) -> void:
 	var config := ConfigFile.new()
 	config.set_value("theme", "name", theme_name)
-	var err := config.save(THEME_CONFIG_PATH)
+	var err := config.save(_get_config_path())
 	if err == OK:
 		print("[Theme] 主题偏好已保存: " + theme_name)
 
 static func _load_saved_theme() -> String:
 	var config := ConfigFile.new()
-	var err := config.load(THEME_CONFIG_PATH)
+	var err := config.load(_get_config_path())
 	if err == OK:
 		var saved: String = config.get_value("theme", "name", "")
 		if saved in get_available_themes():
 			print("[Theme] 读取到保存的主题偏好: " + saved)
+			return saved
+	# 兼容迁移：尝试从旧 user:// 路径读取
+	var legacy_path: String = "user://theme_config.cfg"
+	var legacy_cfg := ConfigFile.new()
+	if legacy_cfg.load(legacy_path) == OK:
+		var saved: String = legacy_cfg.get_value("theme", "name", "")
+		if saved in get_available_themes():
+			print("[Theme] 从 user:// 迁移主题偏好: " + saved)
+			# 迁移到新路径
+			legacy_cfg.save(_get_config_path())
 			return saved
 	return ""
 

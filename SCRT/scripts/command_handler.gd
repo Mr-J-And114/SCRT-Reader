@@ -61,6 +61,8 @@ func _register_commands() -> void:
 		"logout": _cmd_logout,
 		"passwd": _cmd_passwd,
 		"birthday": _cmd_birthday,
+		"nickname": _cmd_nickname,
+		"gender": _cmd_gender,
 		"users": _cmd_users,
 		"decode": _cmd_decode,
 		"fx_level": _cmd_fx_level,
@@ -384,6 +386,8 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]users[/color]         列出所有用户")
 		lines.append("  [color=" + p + "]passwd[/color]        修改密码")
 		lines.append("  [color=" + p + "]birthday[/color]      设置出生日期 (YYYY-MM-DD)")
+		lines.append("  [color=" + p + "]nickname[/color]      设置昵称")
+		lines.append("  [color=" + p + "]gender[/color]        设置性别 (M/F/X)")
 		lines.append("  [color=" + p + "]logout[/color]        注销当前账户")
 		lines.append("  [color=" + p + "]deluser <用户名>[/color] 删除指定用户")
 		lines.append("")
@@ -739,6 +743,44 @@ func _cmd_birthday(args: Array = []) -> void:
 		return
 	var date_str: String = str(args[0])
 	var result: Dictionary = user_mgr.set_birthday(date_str)
+	if result["success"]:
+		main.append_output("[color=" + T.success_hex + "]" + str(result["message"]) + "[/color]\n", false)
+	else:
+		main.append_output("[color=" + T.error_hex + "]" + str(result["message"]) + "[/color]\n", false)
+
+func _cmd_nickname(args: Array = []) -> void:
+	if not user_mgr.is_logged_in:
+		main.append_output("[color=" + T.error_hex + "]当前未登录。[/color]\n", false)
+		return
+	if args.is_empty():
+		var current_nick: String = user_mgr.get_nickname()
+		if current_nick.is_empty():
+			main.append_output("[color=" + T.muted_hex + "]昵称未设置。[/color]\n", false)
+		else:
+			main.append_output("[color=" + T.primary_hex + "]昵称: " + current_nick + "[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]用法: nickname <名字>[/color]\n", false)
+		return
+	var nick: String = " ".join(args)
+	var result: Dictionary = user_mgr.set_nickname(nick)
+	if result["success"]:
+		main.append_output("[color=" + T.success_hex + "]" + str(result["message"]) + "[/color]\n", false)
+	else:
+		main.append_output("[color=" + T.error_hex + "]" + str(result["message"]) + "[/color]\n", false)
+
+func _cmd_gender(args: Array = []) -> void:
+	if not user_mgr.is_logged_in:
+		main.append_output("[color=" + T.error_hex + "]当前未登录。[/color]\n", false)
+		return
+	if args.is_empty():
+		var current_gender: String = user_mgr.get_gender()
+		if current_gender.is_empty():
+			main.append_output("[color=" + T.muted_hex + "]性别未设置。[/color]\n", false)
+		else:
+			var label: String = {"M": "男", "F": "女", "X": "其他"}.get(current_gender, current_gender)
+			main.append_output("[color=" + T.primary_hex + "]性别: " + label + "[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]用法: gender M/F/X[/color]\n", false)
+		return
+	var result: Dictionary = user_mgr.set_gender(str(args[0]))
 	if result["success"]:
 		main.append_output("[color=" + T.success_hex + "]" + str(result["message"]) + "[/color]\n", false)
 	else:
