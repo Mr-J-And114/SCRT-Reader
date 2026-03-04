@@ -2,8 +2,8 @@
 # env_viewer.gd
 # 环境监测站数据显示面板 —— CRT 风格覆盖层 UI
 #
-# 遵循 RadioReceiver/Oscilloscope 的 overlay 模式：
-# 在 OutputArea 上创建 Panel 覆盖，隐藏输入栏，
+# 遵循 DocumentViewer / RadioReceiver 的 overlay 模式：
+# 对齐到 OutputArea 区域，隐藏输入栏，
 # 自定义 _draw() 绘制环境仪表盘。
 # ============================================================
 class_name EnvViewer
@@ -34,6 +34,11 @@ const MAX_PAGES: int = 6
 var _blink_timer: float = 0.0
 var _blink_on: bool = true
 
+# 缓存（打开前保存，关闭后恢复）
+var _cached_input_visible: bool = true
+var _cached_prompt_visible: bool = true
+var _cached_output_text: String = ""
+
 # ══════════════════════════════════════════
 #  初始化
 # ══════════════════════════════════════════
@@ -50,13 +55,36 @@ func open() -> void:
 		return
 	is_active = true
 	current_page = 0
-	_create_overlay()
+	_ensure_overlay()
+	_align_overlay()
+	# 缓存并隐藏终端 UI
+	_cached_input_visible = main.input_field.visible
+	_cached_prompt_visible = main.prompt_label.visible
+	main.input_field.visible = false
+	main.prompt_label.visible = false
+	_cached_output_text = main.output_text.text
+	main.output_text.text = ""
+	# 更新路径栏提示
+	if main.path_label:
+		main.path_label.text = "ENV MONITOR | ←/→ 切换  TAB 下一页  Q/ESC 关闭"
+	overlay_panel.visible = true
 
 func close() -> void:
 	if not is_active:
 		return
 	is_active = false
-	_destroy_overlay()
+	# 隐藏覆盖层
+	if overlay_panel and is_instance_valid(overlay_panel):
+		overlay_panel.visible = false
+	# 恢复终端 UI
+	main.output_text.clear()
+	main.output_text.append_text(_cached_output_text)
+	_cached_output_text = ""
+	main.input_field.visible = _cached_input_visible
+	main.prompt_label.visible = _cached_prompt_visible
+	if main.has_method("_update_status_bar"):
+		main._update_status_bar()
+	main.input_field.grab_focus()
 
 func toggle() -> void:
 	if is_active:
@@ -105,17 +133,19 @@ func process(delta: float) -> void:
 		canvas.queue_redraw()
 
 # ══════════════════════════════════════════
-#  覆盖层创建/销毁
+#  覆盖层创建（首次调用时创建，之后复用）
 # ══════════════════════════════════════════
-func _create_overlay() -> void:
-	if main == null:
+func _ensure_overlay() -> void:
+	if overlay_panel != null and is_instance_valid(overlay_panel):
 		return
-	# 创建覆盖 Panel（挂载到 main 根节点，与 RadioReceiver 相同模式）
+	# 创建覆盖 Panel（挂载到 main 根节点）
 	overlay_panel = Panel.new()
 	overlay_panel.name = "EnvViewerOverlay"
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0, 0, 0, 0.95)
-	overlay_panel.add_theme_stylebox_override("panel", sb)
+	overlay_panel.visible = false
+	# 透明背景（由 canvas 自行绘制背景色）
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0, 0, 0, 0)
+	overlay_panel.add_theme_stylebox_override("panel", bg_style)
 
 	var root_control: Control = main as Control
 	root_control.add_child(overlay_panel)
@@ -123,7 +153,6 @@ func _create_overlay() -> void:
 	var crt_node: Node = root_control.get_node_or_null("CRTEffect")
 	if crt_node:
 		root_control.move_child(overlay_panel, crt_node.get_index())
-
 	overlay_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay_panel.offset_left = 0
 	overlay_panel.offset_top = 0
@@ -135,30 +164,16 @@ func _create_overlay() -> void:
 	canvas.viewer = self
 	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay_panel.add_child(canvas)
-	# 缓存并隐藏输入栏
-	if main.input_frame:
-		main.input_frame.visible = false
-	if main.prompt_label:
-		main.prompt_label.visible = false
-	# 更新路径栏提示
-	if main.path_label:
-		main.path_label.text = "ENV MONITOR | ←/→ 切换  TAB 下一页  Q/ESC 关闭"
 
-func _destroy_overlay() -> void:
-	if overlay_panel and is_instance_valid(overlay_panel):
-		overlay_panel.queue_free()
-	overlay_panel = null
-	canvas = null
-	# 恢复输入栏
-	if main and main.input_frame:
-		main.input_frame.visible = true
-	if main and main.prompt_label:
-		main.prompt_label.visible = true
-	if main and main.input_field:
-		main.input_field.grab_focus()
-	# 恢复路径栏
-	if main and main.has_method("_update_status_bar"):
-		main._update_status_bar()
+## 将覆盖层对齐到 OutputArea 的位置和大小（与 DocumentViewer 相同模式）
+func _align_overlay() -> void:
+	if overlay_panel == null or not is_instance_valid(overlay_panel):
+		return
+	var output_area: ScrollContainer = main.scroll_container
+	var rect: Rect2 = output_area.get_global_rect()
+	overlay_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	overlay_panel.position = rect.position
+	overlay_panel.size = rect.size
 
 # ══════════════════════════════════════════
 #  内部画布类
@@ -174,6 +189,9 @@ class _EnvCanvas extends Control:
 		var h: float = rect.size.y
 		var em: EnvMonitor = viewer.env_monitor
 
+		# 绘制半透明背景（由 canvas 自己绘制，方便控制透明度）
+		draw_rect(Rect2(Vector2.ZERO, rect.size), Color(0, 0, 0, 0.88))
+
 		# 颜色
 		var col_primary: Color = Color(viewer.T.primary) if viewer.T else Color.GREEN
 		var col_dim: Color = col_primary * 0.4
@@ -181,7 +199,6 @@ class _EnvCanvas extends Control:
 		col_bright.a = 1.0
 		var col_warn: Color = Color(1.0, 0.8, 0.0)
 		var col_err: Color = Color(1.0, 0.2, 0.2)
-		var col_bg: Color = Color(0, 0, 0, 0)
 
 		var font: Font = ThemeDB.fallback_font
 		var font_size: int = 13
