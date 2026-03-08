@@ -952,5 +952,425 @@
 		"name": "A.V.A.",
 		"text": "完成工作后你可以自由浏览文件系统。有新内容时我会通知你。祝你工作顺利。",
 		"time": "2026-03-04 13:45:26"
+	},
+	{
+		"dialogue_id": "tutorial_ask",
+		"name": "A.V.A.",
+		"text": "你好，操作员 [b]aaaa[/b]。我是 [b]A.V.A.[/b]——基金会自动化虚拟助手。\n欢迎接入 SCP 基金会安全终端系统。",
+		"time": "2026-03-05 17:36:07"
+	},
+	{
+		"dialogue_id": "tutorial_ask",
+		"name": "A.V.A.",
+		"text": "检测到你的账户刚刚完成注册。需要我为你进行终端操作指导吗？\n\n  [color=#ffcc00][1][/color] 是，请指导我\n  [color=#ffcc00][2][/color] 不用了，我已经了解",
+		"time": "2026-03-05 17:36:09"
+	},
+	{
+		"dialogue_id": "tutorial_skip",
+		"name": "A.V.A.",
+		"text": "了解。如有需要，随时输入 [b]help[/b] 查看可用命令。\n祝你好运，操作员。[b]控制，收容，保护。[/b]",
+		"time": "2026-03-05 17:36:12"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 18:59:49"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 18:59:50"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 19:05:45"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 19:05:48"
+	},
+	{
+		"dialogue_id": "day1_scan_done",
+		"name": "A.V.A.",
+		"text": "第一次自动扫描已完成。数据已上传至总部服务器。",
+		"time": "2026-03-05 19:06:20"
+	},
+	{
+		"dialogue_id": "day1_scan_done",
+		"name": "A.V.A.",
+		"text": "你现在可以自由探索终端功能。试试 [color=#ffaa00]ls[/color]、[color=#ffaa00]mail[/color]、[color=#ffaa00]env view[/color] 等命令。",
+		"time": "2026-03-05 19:06:22"
+	},
+	{
+		"dialogue_id": "day1_scan_done",
+		"name": "A.V.A.",
+		"text": "关闭终端后，下次启动将自动进入新的一天。期待明天的报告。",
+		"time": "2026-03-05 19:06:24"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 19:10:39"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 19:10:40"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 19:21:42"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 19:21:43"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 19:29:26"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 19:29:28"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 19:42:55"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 19:42:56"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 19:50:12"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 19:50:13"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 19:51:16"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 19:51:17"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 19:57:02"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 19:57:03"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 21:48:44"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 21:48:45"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-05 22:09:58"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-05 22:09:59"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 14:13:40"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 14:13:43"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 16:07:35"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 16:07:36"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 16:13:20"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 16:13:21"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 16:40:18"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 16:40:18"
+	},
+	{
+		"dialogue_id": "ava_chat",
+		"name": "A.V.A.",
+		"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]",
+		"time": "2026-03-06 16:46:31"
+	},
+	{
+		"dialogue_id": "ava_chat_a1",
+		"name": "A.V.A.",
+		"text": "我是 AVA —— 自适应虚拟助理。",
+		"time": "2026-03-06 16:46:35"
+	},
+	{
+		"dialogue_id": "ava_chat_a1",
+		"name": "A.V.A.",
+		"text": "我的职责是协助特工执行任务、管理通讯频道，以及提供系统操作指引。",
+		"time": "2026-03-06 16:46:37"
+	},
+	{
+		"dialogue_id": "ava_chat_a1",
+		"name": "A.V.A.",
+		"text": "虽然我是AI系统，但我会尽力提供有用的支持。",
+		"time": "2026-03-06 16:46:38"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 17:01:07"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 17:01:10"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 17:04:59"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 17:05:00"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 18:26:31"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 18:26:32"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 18:28:45"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 18:28:47"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 18:52:22"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 18:52:23"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 18:57:49"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 18:57:50"
+	},
+	{
+		"dialogue_id": "day2_morning",
+		"name": "A.V.A.",
+		"text": "早安，操作员。新的一天开始了。",
+		"time": "2026-03-06 18:59:26"
+	},
+	{
+		"dialogue_id": "day2_morning",
+		"name": "A.V.A.",
+		"text": "昨晚自动气象站记录到一些微弱的信号波动。可能是风暴前兆，也可能是……其他什么。",
+		"time": "2026-03-06 18:59:29"
+	},
+	{
+		"dialogue_id": "day2_morning",
+		"name": "A.V.A.",
+		"text": "建议你尽快执行 [color=#ffaa00]env scan[/color] 确认所有传感器状态。",
+		"time": "2026-03-06 18:59:30"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 19:00:30"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 19:00:31"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-06 23:41:54"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-06 23:41:55"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-07 00:31:13"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-07 00:31:14"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-07 00:32:13"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-07 00:32:14"
+	},
+	{
+		"dialogue_id": "day2_anomaly_reaction",
+		"name": "A.V.A.",
+		"text": "注意——扫描结果中检测到异常数据。我已经标记并上报总部。",
+		"time": "2026-03-07 00:32:46"
+	},
+	{
+		"dialogue_id": "day2_anomaly_reaction",
+		"name": "A.V.A.",
+		"text": "请保持关注。如果情况恶化，总部会发送进一步指令。",
+		"time": "2026-03-07 00:32:47"
+	},
+	{
+		"dialogue_id": "day3_morning",
+		"name": "A.V.A.",
+		"text": "第三天。查看你的邮件——Site Director 发来了一份机密评估报告。",
+		"time": "2026-03-07 00:34:08"
+	},
+	{
+		"dialogue_id": "day3_morning",
+		"name": "A.V.A.",
+		"text": "总部对之前的异常做出了初步分类。请继续日常检测。",
+		"time": "2026-03-07 00:34:10"
+	},
+	{
+		"dialogue_id": "ava_chat",
+		"name": "A.V.A.",
+		"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]",
+		"time": "2026-03-07 00:38:43"
+	},
+	{
+		"dialogue_id": "ava_chat_a3",
+		"name": "A.V.A.",
+		"text": "了解。随时可以联络我。",
+		"time": "2026-03-07 00:38:44"
+	},
+	{
+		"dialogue_id": "ava_chat_a3",
+		"name": "A.V.A.",
+		"text": "AVA 保持在线。祝一切顺利，特工。",
+		"time": "2026-03-07 00:38:45"
 	}
 ]

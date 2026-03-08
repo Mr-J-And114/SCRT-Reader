@@ -49,9 +49,9 @@ SCRT-Reader 模拟了一台 20 世纪风格的 CRT 终端计算机。用户通�
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                      Main (Control)                          │
-│         主控制器 - 管理所有子系统的初始化与交互               │
+│         主控制器 - 管理所有子系统的初始化与交互                 │
 ├──────────┬───────────┬───────────┬───────────────────────────┤
-│  UI 层   │  逻辑层   │  数据层   │  扩展层                   │
+│  UI 层   │  逻辑层    │  数据层   │  扩展层                    │
 ├──────────┼───────────┼───────────┼───────────────────────────┤
 │UIManager │CmdHandler │FileSystem │PackageManager             │
 │Typewriter│DiscMgr    │StoryLoader│ModAPI / ModBase           │
@@ -60,7 +60,7 @@ SCRT-Reader 模拟了一台 20 世纪风格的 CRT 终端计算机。用户通�
 │AudioMgr  │DialMgr    │ThemeMgr   │                           │
 │BootSeq   │CrtmlParser│           │                           │
 ├──────────┼───────────┼───────────┤                           │
-│ 查看器层 │ 模拟层    │           │                           │
+│ 查看器层  │ 模拟层    │           │                           │
 ├──────────┼───────────┤           │                           │
 │DocViewer │EnvMonitor │           │                           │
 │ImgViewer │EnvTaskMgr │           │                           │

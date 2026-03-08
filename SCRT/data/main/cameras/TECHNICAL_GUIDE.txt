@@ -1,0 +1,388 @@
+════════════════════════════════════════════════════════════════
+  摄像头系统 v2.0 - 完整功能说明
+════════════════════════════════════════════════════════════════
+
+本文档面向技术作者，详细说明所有高级功能和参数。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  核心功能
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+### 1. 预渲染图片系统（新）
+
+**功能：** 使用预先制作的图片替代 shader 实时计算
+
+**优点：**
+- 完全控制视觉效果
+- 不需要深度图
+- 性能更好
+- 适合不懂 shader 的作者
+
+**配置：**
+```json
+{
+  "use_prerendered": true,
+  "spotlight_image": "light.jpg",      // 聚光灯模式图片
+  "nightvision_image": "nvg.jpg",      // 夜视模式图片
+  "infrared_image": "heat.jpg"         // 红外模式图片（必需）
+}
+```
+
+**重要：** Infrared 模式已禁用自动生成，必须提供预渲染图！
+
+---
+
+### 2. 视差贴图（Parallax Mapping）
+
+**功能：** 使用深度图模拟真实 3D 空间感
+
+**效果：**
+- 移动摄像头时，近景和远景有不同的移动速度
+- 模拟真实的深度感
+- 需要深度图
+
+**配置：**
+```json
+{
+  "use_parallax": true,
+  "parallax_scale": 0.05,    // 视差强度（0.01-0.1）
+  "parallax_layers": 8       // 采样层数（4-16，越高越精细）
+}
+```
+
+**调试建议：**
+- parallax_scale 太大会导致画面扭曲
+- parallax_layers 太少会有阶梯感
+- 推荐值：scale=0.05, layers=8
+
+---
+
+### 3. 摄像头旋转模式
+
+**功能：** 模拟摄像头围绕摄像头臂转动，而不是平移
+
+**效果：**
+- 左右移动 = 摄像头左右转动
+- 上下移动 = 摄像头俯仰调整
+- 更真实的摄像头操作感
+
+**配置：**
+```json
+{
+  "rotation_enabled": true,
+  "rotation_center": [0.5, 0.5],    // 旋转中心点（归一化坐标）
+  "rotation_radius": 0.15,          // 旋转半径
+  "rotation_angle_range": 45.0      // 最大旋转角度（度）
+}
+```
+
+**参数说明：**
+- rotation_center: 摄像头安装位置（通常是画面中心）
+- rotation_radius: 摄像头臂长度（越大转动幅度越大）
+- rotation_angle_range: 左右转动范围（30-90度）
+
+**对比：**
+```
+平移模式（rotation_enabled: false）：
+  ←→ = 画面直接左右移动（不真实）
+
+旋转模式（rotation_enabled: true）：
+  ←→ = 摄像头围绕中心点转动（真实）
+```
+
+---
+
+### 4. 照明模式
+
+#### None（无照明）
+- 画面变暗（60% 亮度）
+- 模拟黑暗环境
+
+#### Spotlight（聚光灯）
+- **预渲染模式：** 直接显示 spotlight_image
+- **Shader 模式：** 局部照亮，根据深度衰减
+- 需要：深度图（shader）或 spotlight_image（预渲染）
+
+#### Nightvision（夜视）
+- **预渲染模式：** 直接显示 nightvision_image
+- **Shader 模式：** 绿色增强，距离衰减
+- 需要：深度图（shader）或 nightvision_image（预渲染）
+
+#### Infrared（红外）
+- **预渲染模式：** 直接显示 infrared_image
+- **Shader 模式：** 已禁用！
+- 必需：infrared_image
+
+---
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  完整配置示例
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+### 示例 1：新手配置（只用预渲染图）
+
+```json
+{
+  "cam_simple": {
+    "name": "简单摄像头",
+    "location": "走廊",
+    "unlocked": true,
+
+    // 只需要这些图片
+    "base_image": "base.jpg",
+    "spotlight_image": "light.jpg",
+    "nightvision_image": "nvg.jpg",
+    "infrared_image": "heat.jpg",
+
+    // 开启预渲染
+    "use_prerendered": true,
+
+    // 其他保持默认
+    "light_mode": "none"
+  }
+}
+```
+
+### 示例 2：进阶配置（预渲染 + 视差）
+
+```json
+{
+  "cam_advanced": {
+    "name": "高级摄像头",
+    "location": "大厅",
+    "unlocked": true,
+
+    // 图片
+    "base_image": "base.jpg",
+    "depth_map": "depth.jpg",           // 用于视差
+    "spotlight_image": "light.jpg",
+    "nightvision_image": "nvg.jpg",
+    "infrared_image": "heat.jpg",
+
+    // 预渲染
+    "use_prerendered": true,
+
+    // 视差效果
+    "use_parallax": true,
+    "parallax_scale": 0.05,
+    "parallax_layers": 8,
+
+    // 摄像头转动
+    "rotation_enabled": true,
+    "rotation_center": [0.5, 0.5],
+    "rotation_radius": 0.15,
+    "rotation_angle_range": 45.0,
+
+    "light_mode": "none"
+  }
+}
+```
+
+### 示例 3：技术配置（纯 Shader）
+
+```json
+{
+  "cam_shader": {
+    "name": "Shader 摄像头",
+    "location": "实验室",
+    "unlocked": true,
+
+    // 图片
+    "base_image": "base.jpg",
+    "depth_map": "depth.jpg",           // 必需
+
+    // 不使用预渲染
+    "use_prerendered": false,
+
+    // 视差效果
+    "use_parallax": true,
+    "parallax_scale": 0.06,
+    "parallax_layers": 12,
+
+    // 摄像头转动
+    "rotation_enabled": true,
+    "rotation_center": [0.5, 0.4],      // 偏上的安装位置
+    "rotation_radius": 0.2,
+    "rotation_angle_range": 60.0,
+
+    // Shader 照明参数
+    "light_mode": "spotlight",
+    "light_radius": 0.4,
+    "light_falloff": 2.5,
+
+    // 画面效果
+    "noise_intensity": 0.2,
+    "scanline_intensity": 0.4,
+    "vignette": 0.5,
+    "signal_quality": 0.85
+  }
+}
+```
+
+### 示例 4：混合配置（最佳效果）
+
+```json
+{
+  "cam_hybrid": {
+    "name": "混合摄像头",
+    "location": "监控室",
+    "unlocked": true,
+
+    // 完整图片集
+    "base_image": "base.jpg",
+    "depth_map": "depth.jpg",
+    "spotlight_image": "light.jpg",
+    "nightvision_image": "nvg.jpg",
+    "infrared_image": "heat.jpg",
+
+    // 使用预渲染
+    "use_prerendered": true,
+
+    // 视差效果（需要深度图）
+    "use_parallax": true,
+    "parallax_scale": 0.05,
+    "parallax_layers": 8,
+
+    // 摄像头转动
+    "rotation_enabled": true,
+    "rotation_center": [0.5, 0.5],
+    "rotation_radius": 0.15,
+    "rotation_angle_range": 45.0,
+
+    // 照明（Spotlight 会用 shader + 深度图）
+    "light_mode": "none",
+    "light_radius": 0.35,
+    "light_falloff": 2.0,
+
+    // 画面效果
+    "noise_intensity": 0.15,
+    "scanline_intensity": 0.3,
+    "vignette": 0.4,
+    "signal_quality": 1.0
+  }
+}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  参数详解
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+### 基础参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| id | String | 自动 | 摄像头唯一标识 |
+| name | String | "" | 显示名称 |
+| location | String | "" | 位置描述 |
+| unlocked | Boolean | false | 是否已解锁 |
+| online | Boolean | true | 是否在线 |
+
+### 图片资源
+
+| 参数 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| base_image | String | ✓ | 基础图 |
+| depth_map | String | 推荐 | 深度图（黑白） |
+| spotlight_image | String | 可选 | 聚光灯预渲染图 |
+| nightvision_image | String | 可选 | 夜视预渲染图 |
+| infrared_image | String | 可选* | 红外预渲染图 |
+
+*如果要使用 Infrared 模式，此项必需
+
+### 预渲染开关
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| use_prerendered | Boolean | false | 是否使用预渲染图 |
+
+### 视差贴图
+
+| 参数 | 类型 | 默认值 | 范围 | 说明 |
+|------|------|--------|------|------|
+| use_parallax | Boolean | false | - | 是否启用视差 |
+| parallax_scale | Float | 0.05 | 0.01-0.1 | 视差强度 |
+| parallax_layers | Int | 8 | 4-16 | 采样层数 |
+
+### 摄像头转动
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| rotation_enabled | Boolean | true | 是否启用旋转模式 |
+| rotation_center | Array[2] | [0.5, 0.5] | 旋转中心点 |
+| rotation_radius | Float | 0.15 | 旋转半径 |
+| rotation_angle_range | Float | 45.0 | 最大旋转角度 |
+
+### 镜头参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| viewport_size | Array[2] | [0.3, 0.3] | 视口大小 |
+| viewport_pos | Array[2] | [0.5, 0.5] | 初始位置 |
+| pan_speed | Float | 0.008 | 移动速度 |
+| pan_bounds | Array[4] | [0,0,1,1] | 移动边界 |
+
+### 照明参数
+
+| 参数 | 类型 | 默认值 | 选项 |
+|------|------|--------|------|
+| light_mode | String | "none" | none/spotlight/nightvision/infrared |
+| light_radius | Float | 0.35 | 照明范围 |
+| light_falloff | Float | 2.0 | 衰减指数 |
+
+### 画面效果
+
+| 参数 | 类型 | 默认值 | 范围 | 说明 |
+|------|------|--------|------|------|
+| noise_intensity | Float | 0.15 | 0-1 | 噪点强度 |
+| scanline_intensity | Float | 0.3 | 0-1 | 扫描线强度 |
+| vignette | Float | 0.4 | 0-1 | 暗角强度 |
+| signal_quality | Float | 1.0 | 0-1 | 信号质量 |
+| snow_intensity | Float | 0.0 | 0-1 | 雪花强度 |
+| timestamp_visible | Boolean | true | - | 显示时间戳 |
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  常见问题
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Q: 为什么 Infrared 模式不能自动生成？
+A: 因为根据深度图生成热力图是不合理的。热力图应该反映物体
+   的温度，而不是距离。必须手动制作预渲染图。
+
+Q: 视差效果不明显怎么办？
+A: 增大 parallax_scale（0.05 → 0.08），但不要超过 0.1
+
+Q: 摄像头转动太快/太慢？
+A: 调整 pan_speed（默认 0.008）
+
+Q: 旋转模式下摄像头移动范围太小？
+A: 增大 rotation_radius（0.15 → 0.2）或 rotation_angle_range（45 → 60）
+
+Q: 可以混用预渲染和 Shader 吗？
+A: 可以！设置 use_prerendered: true，然后：
+   - 提供的预渲染图会被使用
+   - 没提供的模式会回退到 Shader（需要深度图）
+
+Q: 深度图怎么制作？
+A: 1. 在 PS/GIMP 中打开基础图
+   2. 转为黑白
+   3. 手动调整：近景调亮（白色），远景调暗（黑色）
+   4. 保存为 JPG
+
+════════════════════════════════════════════════════════════════
+  更新日志
+════════════════════════════════════════════════════════════════
+
+v2.0 (当前版本)
+- ✓ 新增 Spotlight 预渲染支持
+- ✓ 禁用 Infrared 自动生成
+- ✓ 新增视差贴图（Parallax Mapping）
+- ✓ 新增摄像头旋转模式
+- ✓ 改进深度图空间模拟
+- ✓ 优化照明效果（局部照亮而非替换）
+
+v1.0
+- 基础摄像头系统
+- Shader 后处理
+- 预渲染图片支持（部分）
+
+════════════════════════════════════════════════════════════════

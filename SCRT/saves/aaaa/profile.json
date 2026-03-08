@@ -3,16 +3,16 @@
 	"avatar": "",
 	"badge": "",
 	"birthday": "",
-	"command_count": 66.0,
+	"command_count": 157,
 	"created_at": "2026-02-27 16:18:20",
-	"discs_loaded_count": 15.0,
+	"discs_loaded_count": 22,
 	"files_read_count": 2.0,
 	"installed_packages": {
 
 	},
 	"last_fail_time": "2026-02-27 18:49:31",
-	"last_login": "2026-03-04 13:45:19",
-	"login_count": 32,
+	"last_login": "2026-03-07 00:34:04",
+	"login_count": 60,
 	"login_fail_count": 0,
 	"password": "aaaa",
 	"preferences": {
@@ -20,16 +20,28 @@
 		"typing_speed": 1.0
 	},
 	"role": "user",
-	"session_count": 0.0,
+	"session_count": 10.0,
 	"system_notes": [
 		{
 			"content": "新操作员档案已建立。等待安全审查。",
 			"date": "2026-02-27 16:18:20",
 			"from": "SYSTEM",
 			"tone": "neutral"
+		},
+		{
+			"content": "欢迎 aaaa，这是综合演示磁盘。里面有些有趣的东西等你发现。",
+			"date": "2026-03-07 00:39:36",
+			"from": "Dr. Bright",
+			"tone": "positive"
+		},
+		{
+			"content": "aaaa，请注意：无线电监听室中的信号内容为实时模拟，不代表真实通讯。",
+			"date": "2026-03-07 00:39:36",
+			"from": "系统管理员",
+			"tone": "neutral"
 		}
 	],
 	"title": "",
-	"total_time_seconds": 0.0,
+	"total_time_seconds": 1405.0,
 	"username": "aaaa"
 }

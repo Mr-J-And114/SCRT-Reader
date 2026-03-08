@@ -82,6 +82,7 @@ func _register_commands() -> void:
 		"camera": _cmd_camera,       # ★ 监控摄像头系统
 		"cam": _cmd_camera,          # ★ 监控摄像头（简写）
 		"cctv": _cmd_camera,         # ★ 监控摄像头（别名）
+		"save": _cmd_save,           # ★ 手动保存进度
 	}
 
 	# ── 桌面模式专用命令 ──
@@ -105,10 +106,8 @@ func _register_commands() -> void:
 		"cat": _cmd_open,
 		"unlock": _cmd_unlock,
 		"eject": _cmd_eject,
-		"save": _cmd_save,
 		"clearsave": _cmd_clearsave,
 		"radio": _cmd_radio,
-		"decode": _cmd_decode,
 		"explore": _cmd_explore,
 	}
 
@@ -241,13 +240,20 @@ func _is_media_desc_file(item_name: String, dir_path: String) -> bool:
 #  Tab 自动补全
 # ══════════════════════════════════════════
 func get_completions(current_text: String) -> Array[String]:
+	var has_trailing_space: bool = current_text.ends_with(" ")
 	var parts: PackedStringArray = current_text.split(" ", false)
 	if parts.is_empty():
 		return [] as Array[String]
 
+	# logical_size：用户已"确认"的 token 数
+	# "cd"      → 1  补全命令名
+	# "cd "     → 2  补全第一参数（前缀为空）
+	# "cd doc"  → 2  补全第一参数（前缀 "doc"）
+	# "env r "  → 3  补全第二参数（前缀为空）
+	var logical_size: int = parts.size() + (1 if has_trailing_space else 0)
 	var results: Array[String] = []
 
-	if parts.size() == 1:
+	if logical_size == 1:
 		# 补全命令名
 		var prefix: String = parts[0].to_lower()
 		var all_cmds: Array[String] = []
@@ -263,10 +269,10 @@ func get_completions(current_text: String) -> Array[String]:
 			if cmd_name.begins_with(prefix) and cmd_name != prefix:
 				results.append(cmd_name)
 
-	elif parts.size() == 2:
-		# 补全参数
+	elif logical_size == 2:
+		# 补全第一个参数
 		var cmd: String = parts[0].to_lower()
-		var arg_prefix: String = parts[1]
+		var arg_prefix: String = "" if has_trailing_space else parts[1]
 
 		if cmd in ["cd", "open", "read", "cat"]:
 			var items: Array[String] = fs.get_children_at_path(main.current_path)
@@ -355,6 +361,52 @@ func get_completions(current_text: String) -> Array[String]:
 			for u in all_users:
 				if u.to_lower().begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + u)
+		elif cmd in ["env", "monitor"]:
+			var env_subs: Array[String] = ["status", "view", "tasks", "scan", "check", "read",
+				"calibrate", "anomaly", "report", "repair", "sensor", "weather", "events", "help"]
+			for sub in env_subs:
+				if sub.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + sub)
+		elif cmd in ["camera", "cam", "cctv"]:
+			var cam_subs: Array[String] = ["list", "view", "status", "help"]
+			for sub in cam_subs:
+				if sub.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + sub)
+		elif cmd == "mail":
+			var mail_subs: Array[String] = ["list", "read"]
+			for sub in mail_subs:
+				if sub.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + sub)
+		elif cmd == "clearsave":
+			if "all".begins_with(arg_prefix.to_lower()):
+				results.append(cmd + " all")
+
+	elif logical_size == 3:
+		# 补全第二个参数
+		var cmd: String = parts[0].to_lower()
+		var sub: String = parts[1].to_lower()
+		var arg_prefix: String = "" if has_trailing_space else parts[2]
+
+		if cmd in ["env", "monitor"] and sub == "read":
+			var categories: Array[String] = ["atmosphere", "ocean", "geophysics", "composition"]
+			for cat in categories:
+				if cat.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + sub + " " + cat)
+		elif cmd in ["env", "monitor"] and sub == "sensor":
+			if main.env_monitor:
+				for sid in main.env_monitor.sensors.keys():
+					if str(sid).to_lower().begins_with(arg_prefix.to_lower()):
+						results.append(cmd + " " + sub + " " + str(sid))
+		elif cmd in ["camera", "cam", "cctv"] and sub in ["view", "v"]:
+			if main.camera_mgr:
+				var unlocked: Array[SecurityCameraFeed] = main.camera_mgr.get_unlocked_cameras()
+				for i in range(unlocked.size()):
+					var num_str: String = str(i + 1)
+					if num_str.begins_with(arg_prefix):
+						results.append(cmd + " " + sub + " " + num_str)
+				for cam in unlocked:
+					if cam.id.to_lower().begins_with(arg_prefix.to_lower()):
+						results.append(cmd + " " + sub + " " + cam.id)
 
 	return results
 
@@ -1525,9 +1577,6 @@ func _cmd_eject(_args: Array = []) -> void:
 	await disc_mgr.eject_story()
 
 func _cmd_save(_args: Array = []) -> void:
-	if main.story_id.is_empty():
-		main.append_output("[color=" + T.error_hex + "]当前未加载磁盘。[/color]\n", false)
-		return
 	disc_mgr._auto_save()
 	main.append_output("[color=" + T.success_hex + "]进度已保存。[/color]\n", false)
 
@@ -1780,8 +1829,6 @@ func _cmd_env(args: Array = []) -> void:
 			_cmd_env_exec_task("daily_report", tm, colors)
 		"repair":
 			_cmd_env_repair(em, sub_args, colors)
-		"advance", "next":
-			_cmd_env_advance(em, tm, colors)
 		"sensor":
 			_cmd_env_sensor(em, sub_args, colors)
 		"weather", "wx":
@@ -1813,9 +1860,9 @@ func _cmd_env_help() -> void:
 		"  [color=" + T.primary_hex + "]env anomaly[/color]         — 异常检查与确认",
 		"  [color=" + T.primary_hex + "]env report[/color]          — 提交日报",
 		"",
-		"[color=" + T.muted_hex + "]维护与推进:[/color]",
+		"[color=" + T.muted_hex + "]维护:[/color]",
 		"  [color=" + T.primary_hex + "]env repair <传感器>[/color]  — 修复离线传感器",
-		"  [color=" + T.muted_hex + "]  (完成任务后自由探索，关闭软件后再次启动自动进入下一天)[/color]",
+		"  [color=" + T.muted_hex + "]  完成所有任务后关闭终端，下次启动将自动进入下一天。[/color]",
 		"",
 	]
 	main.append_output("\n".join(lines) + "\n", false)
@@ -1876,7 +1923,6 @@ func _cmd_env_view() -> void:
 	if main.env_viewer:
 		main.env_viewer.open()
 		main._env_viewer_mode = true
-		main.append_output("[color=" + T.muted_hex + "]环境监测面板已打开。[/color]\n", false)
 
 func _cmd_env_scan(em: EnvMonitor, tm: EnvTaskManager, colors: Dictionary) -> void:
 	## 自动按顺序执行所有日常检测任务，带进度条和动画衔接
@@ -2049,7 +2095,10 @@ func _cmd_env_exec_task(task_id: String, tm: EnvTaskManager, colors: Dictionary)
 			main.append_output("[color=" + T.success_hex + "]任务完成: " + str(tdef.get("name", task_id)) + "[/color]\n", false)
 	# 检查是否所有任务完成
 	if tm.is_all_required_completed():
-		main.append_output("[color=" + T.success_hex + "]所有必要任务已完成！输入 env advance 进入下一天。[/color]\n", false)
+		main.append_output("[color=" + T.success_hex + "]所有必要任务已完成！关闭终端后再次启动将自动进入下一天。[/color]\n", false)
+		# 任务完成后立即保存，防止退出后进度丢失
+		if main.disc_mgr:
+			main.disc_mgr._auto_save()
 
 func _cmd_env_repair(em: EnvMonitor, sub_args: Array, colors: Dictionary) -> void:
 	if sub_args.is_empty():
@@ -2076,29 +2125,6 @@ func _cmd_env_repair(em: EnvMonitor, sub_args: Array, colors: Dictionary) -> voi
 		main.append_output("[color=" + T.success_hex + "]传感器 " + str(cfg.get("name", sid)) + " 已修复并重新上线。[/color]\n", false)
 	else:
 		main.append_output("[color=" + T.muted_hex + "]传感器已在线，无需修复。[/color]\n", false)
-
-func _cmd_env_advance(em: EnvMonitor, tm: EnvTaskManager, _colors: Dictionary) -> void:
-	if not tm.can_advance_day():
-		var progress: Dictionary = tm.get_progress()
-		main.append_output("[color=" + T.error_hex + "]无法推进：请先完成所有必要任务并提交日报。[/color]\n", false)
-		main.append_output("[color=" + T.muted_hex + "]当前进度: %d/%d[/color]\n" % [int(progress["completed"]), int(progress["total"])], false)
-		return
-	em.advance_day()
-	tm.reset_for_new_day()
-	main.append_output("\n[color=" + T.primary_hex + "]═══════════════════════════════════════[/color]\n", false)
-	main.append_output("[color=" + T.primary_hex + "]  %s 开始  —  %s[/color]\n" % [em.get_day_display(), em.get_weather_name()], false)
-	main.append_output("[color=" + T.primary_hex + "]═══════════════════════════════════════[/color]\n\n", false)
-	# 通知当天天气
-	main.append_output("[color=" + T.muted_hex + "]今日天气预报: %s，风向 %s，气温 %.1f°C[/color]\n" % [
-		em.get_weather_name(), em.get_wind_direction_name(), em.get_reading("air_temp")], false)
-	# 活跃事件提醒
-	var events: Dictionary = em.get_active_events()
-	if events.size() > 0:
-		for eid in events.keys():
-			var evt: Dictionary = events[eid]
-			var col: String = T.error_hex if evt.get("scp_related", false) else T.warning_hex
-			main.append_output("[color=" + col + "]! 事件进行中: %s[/color]\n" % str(evt.get("name", eid)), false)
-	main.append_output("[color=" + T.muted_hex + "]\n输入 env tasks 查看今日任务清单。[/color]\n", false)
 
 func _cmd_env_sensor(em: EnvMonitor, sub_args: Array, colors: Dictionary) -> void:
 	if sub_args.is_empty():
@@ -2256,22 +2282,27 @@ func _cmd_camera_list(cm: CameraManager) -> void:
 	var m: String = T.muted_hex
 	var s: String = T.success_hex
 	var e: String = T.error_hex
-	var unlocked: Array[CameraFeed] = cm.get_unlocked_cameras()
+	var unlocked: Array[SecurityCameraFeed] = cm.get_unlocked_cameras()
 	if unlocked.is_empty():
 		main.append_output("[color=" + m + "]没有已解锁的摄像头。[/color]\n", false)
 		return
-	main.append_output("[color=" + p + "]════ 已解锁摄像头 (%d) ════[/color]\n" % unlocked.size(), false)
+	main.append_output("[color=" + p + "]════ 已解锁摄像头 (" + str(unlocked.size()) + ") ════[/color]\n", false)
 	for i in range(unlocked.size()):
-		var cam: CameraFeed = unlocked[i]
-		var status_str: String = "[color=" + s + "]● ONLINE[/color]" if cam.online else "[color=" + e + "]○ OFFLINE[/color]"
-		var sig_str: String = " SIG:%d%%" % int(cam.signal_quality * 100) if cam.online else ""
-		main.append_output("  [color=" + s + "]%d.[/color] %s  [color=" + m + "]%s[/color]  %s%s\n" % [
-			i + 1, cam.cam_name, cam.location, status_str, sig_str
-		], false)
+		var cam: SecurityCameraFeed = unlocked[i]
+		var status_col: String = s if cam.online else e
+		var status_icon: String = "●" if cam.online else "○"
+		var status_word: String = "ONLINE" if cam.online else "OFFLINE"
+		var sig: String = "  [" + str(int(cam.signal_quality * 100)) + "%]" if cam.online else ""
+		var line: String = \
+			"  [color=" + s + "]" + str(i + 1) + ".[/color]" \
+			+ "  [b]" + cam.cam_name + "[/b]" \
+			+ "  [color=" + m + "]" + cam.location + "[/color]" \
+			+ "  [color=" + status_col + "]" + status_icon + " " + status_word + sig + "[/color]\n"
+		main.append_output(line, false)
 	main.append_output("[color=" + m + "]输入 camera view <编号> 打开查看器。[/color]\n", false)
 
 func _cmd_camera_view(cm: CameraManager, sub_args: Array) -> void:
-	var unlocked: Array[CameraFeed] = cm.get_unlocked_cameras()
+	var unlocked: Array[SecurityCameraFeed] = cm.get_unlocked_cameras()
 	if unlocked.is_empty():
 		main.append_output("[color=" + T.muted_hex + "]没有已解锁的摄像头。[/color]\n", false)
 		return
@@ -2299,7 +2330,7 @@ func _cmd_camera_status(cm: CameraManager) -> void:
 	var s: String = T.success_hex
 	var e: String = T.error_hex
 	var w: String = T.warning_hex
-	var all_cams: Array[CameraFeed] = cm.get_all_cameras()
+	var all_cams: Array[SecurityCameraFeed] = cm.get_all_cameras()
 	main.append_output("[color=" + p + "]════ 摄像头系统状态 ════[/color]\n", false)
 	main.append_output("[color=" + m + "]总计: %d  已解锁: %d[/color]\n" % [cm.get_camera_count(), cm.get_unlocked_count()], false)
 	for cam in all_cams:

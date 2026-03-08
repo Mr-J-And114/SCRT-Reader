@@ -290,6 +290,12 @@ func load_story(args: Array) -> void:
 		# ★ 卸载之前的外部模组
 		_unload_external_mod()
 		fs.clear_all()
+	else:
+		# 桌面模式加载磁盘前也保存一次玩家进度
+		if main.env_monitor:
+			main.env_monitor.save_env_progress()
+		if main.env_task_mgr:
+			main.env_task_mgr.save_task_progress()
 	var story_data: Dictionary = available_stories[index]
 
 	# ★ 检查是否为内部软件包（不可通过 load 加载，需要 install）
@@ -488,7 +494,7 @@ func load_story(args: Array) -> void:
 
 	# ── ★ 加载监控摄像头系统 ──
 	if main.camera_mgr:
-		main.camera_mgr.load_from_manifest(main.story_manifest)
+		main.camera_mgr.load_from_manifest(main.story_manifest, true)  # merge=true 保留主线剧情摄像头
 		if not save_data.is_empty() and save_data.has("camera_data"):
 			main.camera_mgr.load_save_data(save_data["camera_data"])
 		if main.camera_mgr.has_cameras():
@@ -497,21 +503,17 @@ func load_story(args: Array) -> void:
 	# ── ★ 加载环境监测系统覆盖 ──
 	if main.env_monitor:
 		main.env_monitor.load_from_manifest(main.story_manifest)
-		if not save_data.is_empty() and save_data.has("env_data"):
-			main.env_monitor.load_save_data(save_data["env_data"])
+		# 从玩家专属存档恢复进度（保证 vdisc 加载不覆盖主线进度）
+		main.env_monitor.load_env_progress()
 		print("[DiscManager] 环境监测系统已加载")
 	if main.env_task_mgr:
-		var _env_should_advance: bool = false
-		if not save_data.is_empty() and save_data.has("env_task_data"):
-			main.env_task_mgr.load_save_data(save_data["env_task_data"])
-			# ★ 自动推进：如果上次会话所有任务已完成，自动进入下一天
-			if main.env_task_mgr.can_advance_day():
-				_env_should_advance = true
-		else:
+		if not main.env_task_mgr.load_task_progress():
 			main.env_task_mgr.reset_for_new_day()
-		if _env_should_advance and main.env_monitor:
+		elif main.env_task_mgr.can_advance_day() and main.env_monitor:
 			main.env_monitor.advance_day()
 			main.env_task_mgr.reset_for_new_day()
+			main.env_monitor.save_env_progress()
+			main.env_task_mgr.save_task_progress()
 			print("[DiscManager] 自动推进至第 %d 天" % main.env_monitor.current_day)
 	# ── ★ 加载每日剧情对话覆盖 ──
 	if main.daily_dialogue_mgr:
@@ -546,6 +548,13 @@ func eject_story() -> void:
 	main.output_text.text = ""
 	tw.clear_queue()
 	main.append_output("[color=" + str(T.muted_hex) + "]磁盘 \"" + title + "\" 已弹出。[/color]\n\n", false)
+
+	# ★ 重新加载主线剧情系统（摄像头和对话）
+	if main.daily_dialogue_mgr:
+		main.daily_dialogue_mgr.load_main_storyline()
+	if main.camera_mgr:
+		main.camera_mgr.load_main_storyline_cameras()
+
 	scan_stories(true)
 	main._update_status_bar()
 	show_desktop_welcome()
@@ -553,6 +562,12 @@ func eject_story() -> void:
 #  自动保存
 # ══════════════════════════════════════════
 func _auto_save() -> void:
+	# ★ 玩家专属进度总是保存（不依赖磁盘状态）
+	if main.env_monitor:
+		main.env_monitor.save_env_progress()
+	if main.env_task_mgr:
+		main.env_task_mgr.save_task_progress()
+
 	if main.story_id.is_empty():
 		return
 	# ★ 收集额外存档数据
@@ -564,7 +579,7 @@ func _auto_save() -> void:
 	# 无线电信号状态
 	if main.radio_receiver and main.radio_receiver.signal_mgr:
 		extra["radio_data"] = main.radio_receiver.signal_mgr.get_save_data()
-	# ★ 环境监测系统状态
+	# ★ 环境监测系统状态（disc 专属备份）
 	if main.env_monitor:
 		extra["env_data"] = main.env_monitor.get_save_data()
 	if main.env_task_mgr:

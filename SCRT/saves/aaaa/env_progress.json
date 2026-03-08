@@ -1,0 +1,292 @@
+{
+	"active_events": {
+		"magnetic_storm": {
+			"effects": {
+				"mag_declination_add": [
+					-3.0,
+					3.0
+				],
+				"mag_field_add": [
+					-800.0,
+					800.0
+				]
+			},
+			"end_day": 4.0,
+			"name": "地磁暴",
+			"scp_related": true,
+			"start_day": 3.0
+		},
+		"scp_event_alpha": {
+			"effects": {
+				"air_temp_add": [
+					-12.0,
+					12.0
+				],
+				"mag_field_add": [
+					-2000.0,
+					2000.0
+				],
+				"o2_concentration_add": -0.8,
+				"radiation_add": 0.5,
+				"seismic_add": 50.0
+			},
+			"end_day": 4,
+			"name": "Alpha 级环境事件",
+			"scp_related": true,
+			"start_day": 4
+		}
+	},
+	"calibration_offsets": {
+		"air_temp": -0.216708160925559,
+		"cloud_cover": 0.0,
+		"co2_concentration": 1.02239330505653,
+		"humidity": 0.646252112316956,
+		"light_level": -9.58233893773681,
+		"mag_declination": 0.0821925500957484,
+		"mag_field": -1.54924637820169,
+		"o2_concentration": 0.05015825631435,
+		"precipitation": 0.0515647766786726,
+		"pressure": 0.182894552752417,
+		"radiation": 0.00657691392421853,
+		"salinity": 0.0852664341268172,
+		"sea_temp": -0.040222730906977,
+		"seismic": 0.0,
+		"soil_temp": -0.112631662536211,
+		"tide_level": 0.006645515662131,
+		"uv_index": 0.0,
+		"visibility": 0.0396026361522868,
+		"wave_height": 0.0484423659352055,
+		"wind_dir": 0.125931830920398,
+		"wind_speed": 0.0427448656354768
+	},
+	"current_day": 4,
+	"current_hour": 18.2225938024215,
+	"current_weather": "partly_cloudy",
+	"current_wind_dir": 52.3809882747043,
+	"detected_anomalies": [
+		{
+			"anomaly_id": "radiation_elevation",
+			"day": 1.0,
+			"hour": 6.20023129333344,
+			"name": "辐射水平升高",
+			"report": "背景辐射读数异常：0.6 μSv/h（基线 0 μSv/h）。已记录。",
+			"scp_related": false,
+			"sensor": "radiation",
+			"severity": "caution",
+			"type": "above_threshold",
+			"value": 0.58
+		},
+		{
+			"anomaly_id": "composition_shift",
+			"day": 1.0,
+			"deviation": 0.799999999999997,
+			"expected": 20.9,
+			"hour": 6.20023129333344,
+			"name": "大气成分异常",
+			"report": "[异常] 大气成分分析显示异常：O2=20.1%，CO2=418ppm。检测到未编目气体成分。",
+			"scp_related": true,
+			"sensor": "o2_concentration",
+			"severity": "anomalous",
+			"type": "deviation",
+			"value": 20.1
+		},
+		{
+			"anomaly_id": "seismic_event",
+			"day": 1.0,
+			"hour": 6.20023129333344,
+			"name": "地震活动",
+			"report": "记录到地震活动：50.3mg。震源方位待定。",
+			"scp_related": false,
+			"sensor": "seismic",
+			"severity": "caution",
+			"type": "above_threshold",
+			"value": 50.3
+		},
+		{
+			"anomaly_id": "magnetic_spike",
+			"day": 1.0,
+			"deviation": 1465.0,
+			"expected": 54500.0,
+			"hour": 6.40023726545474,
+			"name": "磁场异常尖峰",
+			"report": "检测到磁场异常波动。峰值偏差：1465nT。持续时间：持续中。建议启动 Epsilon 协议。",
+			"scp_related": true,
+			"sensor": "mag_field",
+			"severity": "warning",
+			"type": "deviation",
+			"value": 55965.0
+		},
+		{
+			"anomaly_id": "temperature_inversion",
+			"day": 1.0,
+			"deviation": 11.8,
+			"expected": -15.0,
+			"hour": 20.3418384036133,
+			"name": "温度逆转",
+			"report": "[异常] 气温读数出现无法解释的变化：-26.8°C（预期 -15.0°C）。偏差：11.8°C。",
+			"scp_related": true,
+			"sensor": "air_temp",
+			"severity": "anomalous",
+			"type": "deviation",
+			"value": -26.8
+		},
+		{
+			"anomaly_id": "magnetic_spike",
+			"day": 1.0,
+			"deviation": 1780.0,
+			"expected": 54500.0,
+			"hour": 6.20006206424252,
+			"name": "磁场异常尖峰",
+			"report": "检测到磁场异常波动。峰值偏差：1780nT。持续时间：持续中。建议启动 Epsilon 协议。",
+			"scp_related": true,
+			"sensor": "mag_field",
+			"severity": "warning",
+			"type": "deviation",
+			"value": 56280.0
+		},
+		{
+			"anomaly_id": "radiation_elevation",
+			"day": 1.0,
+			"hour": 6.20006206424252,
+			"name": "辐射水平升高",
+			"report": "背景辐射读数异常：0.6 μSv/h（基线 0 μSv/h）。已记录。",
+			"scp_related": false,
+			"sensor": "radiation",
+			"severity": "caution",
+			"type": "above_threshold",
+			"value": 0.59
+		},
+		{
+			"anomaly_id": "temperature_inversion",
+			"day": 1.0,
+			"deviation": 13.2,
+			"expected": -15.0,
+			"hour": 6.20006206424252,
+			"name": "温度逆转",
+			"report": "[异常] 气温读数出现无法解释的变化：-28.2°C（预期 -15.0°C）。偏差：13.2°C。",
+			"scp_related": true,
+			"sensor": "air_temp",
+			"severity": "anomalous",
+			"type": "deviation",
+			"value": -28.2
+		},
+		{
+			"anomaly_id": "composition_shift",
+			"day": 1.0,
+			"deviation": 0.699999999999999,
+			"expected": 20.9,
+			"hour": 6.20006206424252,
+			"name": "大气成分异常",
+			"report": "[异常] 大气成分分析显示异常：O2=20.2%，CO2=416ppm。检测到未编目气体成分。",
+			"scp_related": true,
+			"sensor": "o2_concentration",
+			"severity": "anomalous",
+			"type": "deviation",
+			"value": 20.2
+		},
+		{
+			"anomaly_id": "seismic_event",
+			"day": 1.0,
+			"hour": 6.20006206424252,
+			"name": "地震活动",
+			"report": "记录到地震活动：51.0mg。震源方位待定。",
+			"scp_related": false,
+			"sensor": "seismic",
+			"severity": "caution",
+			"type": "above_threshold",
+			"value": 51.0
+		},
+		{
+			"anomaly_id": "magnetic_spike",
+			"day": 1.0,
+			"deviation": 1535.0,
+			"expected": 54500.0,
+			"hour": 6.20019138424252,
+			"name": "磁场异常尖峰",
+			"report": "检测到磁场异常波动。峰值偏差：1535nT。持续时间：持续中。建议启动 Epsilon 协议。",
+			"scp_related": true,
+			"sensor": "mag_field",
+			"severity": "warning",
+			"type": "deviation",
+			"value": 52965.0
+		},
+		{
+			"anomaly_id": "radiation_elevation",
+			"day": 1.0,
+			"hour": 6.20019138424252,
+			"name": "辐射水平升高",
+			"report": "背景辐射读数异常：0.6 μSv/h（基线 0 μSv/h）。已记录。",
+			"scp_related": false,
+			"sensor": "radiation",
+			"severity": "caution",
+			"type": "above_threshold",
+			"value": 0.58
+		},
+		{
+			"anomaly_id": "composition_shift",
+			"day": 1.0,
+			"deviation": 0.799999999999997,
+			"expected": 20.9,
+			"hour": 6.20019138424252,
+			"name": "大气成分异常",
+			"report": "[异常] 大气成分分析显示异常：O2=20.1%，CO2=416ppm。检测到未编目气体成分。",
+			"scp_related": true,
+			"sensor": "o2_concentration",
+			"severity": "anomalous",
+			"type": "deviation",
+			"value": 20.1
+		},
+		{
+			"anomaly_id": "seismic_event",
+			"day": 1.0,
+			"hour": 6.20019138424252,
+			"name": "地震活动",
+			"report": "记录到地震活动：50.3mg。震源方位待定。",
+			"scp_related": false,
+			"sensor": "seismic",
+			"severity": "caution",
+			"type": "above_threshold",
+			"value": 50.3
+		},
+		{
+			"anomaly_id": "temperature_inversion",
+			"day": 1.0,
+			"deviation": 11.7,
+			"expected": -15.0,
+			"hour": 6.40022846666692,
+			"name": "温度逆转",
+			"report": "[异常] 气温读数出现无法解释的变化：-26.7°C（预期 -15.0°C）。偏差：11.7°C。",
+			"scp_related": true,
+			"sensor": "air_temp",
+			"severity": "anomalous",
+			"type": "deviation",
+			"value": -26.7
+		}
+	],
+	"master_seed": 2850840561,
+	"sensor_status": {
+		"air_temp": "online",
+		"cloud_cover": "online",
+		"co2_concentration": "online",
+		"humidity": "online",
+		"light_level": "online",
+		"mag_declination": "online",
+		"mag_field": "online",
+		"o2_concentration": "online",
+		"precipitation": "online",
+		"pressure": "online",
+		"radiation": "online",
+		"salinity": "online",
+		"sea_temp": "online",
+		"seismic": "online",
+		"soil_temp": "online",
+		"tide_level": "online",
+		"uv_index": "degraded",
+		"visibility": "online",
+		"wave_height": "online",
+		"wind_dir": "online",
+		"wind_speed": "online"
+	},
+	"tide_phase": 3.25678959708325,
+	"weather_duration": 5.03000532173202
+}

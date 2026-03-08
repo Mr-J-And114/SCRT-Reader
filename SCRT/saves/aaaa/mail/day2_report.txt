@@ -1,0 +1,21 @@
+---
+title: 昨日数据汇总
+template: email
+---
+From: HQ-CONTROL <hq@foundation.scp>
+Subject: 昨日数据汇总
+---
+From: HQ-CONTROL <hq@foundation.scp>
+To: OB-7K Operator
+Subject: 昨日数据汇总
+---
+操作员，
+
+总部已收到你第一天的环境监测报告。数据质量合格。
+
+请注意：昨晚自动气象站记录到微弱信号波动。
+可能是风暴前兆，也可能是其他因素。
+
+请保持警惕，继续执行日常监测。
+
+—— 总部管控中心

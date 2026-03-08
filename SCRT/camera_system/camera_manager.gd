@@ -13,7 +13,7 @@ var main = null
 var fs = null
 var T = null
 
-var _cameras: Dictionary = {}           # id → CameraFeed
+var _cameras: Dictionary = {}           # id → SecurityCameraFeed
 var _camera_order: Array[String] = []   # 有序的摄像头ID列表（按配置顺序）
 var _anomaly_check_timer: float = 0.0   # 异常检查间隔计时
 const ANOMALY_CHECK_INTERVAL: float = 1.0  # 每秒检查一次随机异常
@@ -34,10 +34,35 @@ func setup(p_main) -> void:
 		T = ThemeManager.current
 
 # ============================================================
+# 加载主线剧情摄像头（从 data/main/manifest.json）
+# 由 main.gd 在登录后调用，确保只加载一次
+# ============================================================
+func load_main_storyline_cameras() -> void:
+	var path: String = "res://data/main/manifest.json"
+	if not FileAccess.file_exists(path):
+		return
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return
+	var json := JSON.new()
+	if json.parse(f.get_as_text()) != OK or not (json.data is Dictionary):
+		push_warning("[CameraManager] 主线剧情 manifest.json 解析失败")
+		return
+	var manifest: Dictionary = json.data as Dictionary
+	if manifest.has("camera_system"):
+		load_from_manifest(manifest)
+		print("[CameraManager] ✓ 主线剧情摄像头配置已加载: %d 个" % _cameras.size())
+		# ★ 不在这里加载纹理，延迟到打开查看器时加载
+
+# ============================================================
 # 从 manifest 加载摄像头配置
 # ============================================================
-func load_from_manifest(manifest: Dictionary) -> void:
-	reset()
+# ============================================================
+# 从 manifest 加载摄像头配置
+# ============================================================
+func load_from_manifest(manifest: Dictionary, merge: bool = false) -> void:
+	if not merge:
+		reset()
 	if not manifest.has("camera_system"):
 		return
 	var cam_sys: Dictionary = manifest["camera_system"] as Dictionary
@@ -56,34 +81,39 @@ func load_from_manifest(manifest: Dictionary) -> void:
 		for key in cam_data.keys():
 			merged[key] = cam_data[key]
 
-		var feed := CameraFeed.new()
+		var feed := SecurityCameraFeed.new()
 		# 图片路径相对于 cameras/ 目录
 		var base_path: String = str(cam_sys.get("base_path", "cameras"))
 		feed.load_from_dict(merged, base_path)
 
 		_cameras[cam_id] = feed
-		_camera_order.append(cam_id)
+		# 只在不存在时添加到顺序列表
+		if not _camera_order.has(cam_id):
+			_camera_order.append(cam_id)
 
-	print("[CameraManager] 已加载 %d 个摄像头" % _cameras.size())
+	if not merge:
+		print("[CameraManager] ✓ 摄像头系统已加载: %d 个" % _cameras.size())
+	else:
+		print("[CameraManager] ✓ 故事包摄像头已合并，总计: %d 个" % _cameras.size())
 
 # ============================================================
 # 摄像头查询
 # ============================================================
-func get_camera(id: String) -> CameraFeed:
+func get_camera(id: String) -> SecurityCameraFeed:
 	return _cameras.get(id, null)
 
-func get_all_cameras() -> Array[CameraFeed]:
-	var result: Array[CameraFeed] = []
+func get_all_cameras() -> Array[SecurityCameraFeed]:
+	var result: Array[SecurityCameraFeed] = []
 	for cam_id in _camera_order:
 		if _cameras.has(cam_id):
 			result.append(_cameras[cam_id])
 	return result
 
-func get_unlocked_cameras() -> Array[CameraFeed]:
-	var result: Array[CameraFeed] = []
+func get_unlocked_cameras() -> Array[SecurityCameraFeed]:
+	var result: Array[SecurityCameraFeed] = []
 	for cam_id in _camera_order:
 		if _cameras.has(cam_id):
-			var cam: CameraFeed = _cameras[cam_id]
+			var cam: SecurityCameraFeed = _cameras[cam_id]
 			if cam.unlocked:
 				result.append(cam)
 	return result
@@ -105,21 +135,21 @@ func has_cameras() -> bool:
 # 状态控制
 # ============================================================
 func unlock_camera(id: String) -> void:
-	var cam: CameraFeed = get_camera(id)
+	var cam: SecurityCameraFeed = get_camera(id)
 	if cam and not cam.unlocked:
 		cam.unlocked = true
 		camera_unlocked.emit(id)
 		print("[CameraManager] 摄像头已解锁: %s (%s)" % [id, cam.cam_name])
 
 func lock_camera(id: String) -> void:
-	var cam: CameraFeed = get_camera(id)
+	var cam: SecurityCameraFeed = get_camera(id)
 	if cam and cam.unlocked:
 		cam.unlocked = false
 		camera_locked.emit(id)
 		print("[CameraManager] 摄像头已锁定: %s" % id)
 
 func set_camera_online(id: String, online: bool) -> void:
-	var cam: CameraFeed = get_camera(id)
+	var cam: SecurityCameraFeed = get_camera(id)
 	if cam and cam.online != online:
 		cam.online = online
 		camera_status_changed.emit(id, online)
@@ -127,7 +157,7 @@ func set_camera_online(id: String, online: bool) -> void:
 		print("[CameraManager] 摄像头%s: %s" % [status, id])
 
 func set_signal_quality(id: String, quality: float) -> void:
-	var cam: CameraFeed = get_camera(id)
+	var cam: SecurityCameraFeed = get_camera(id)
 	if cam:
 		cam.signal_quality = clampf(quality, 0.0, 1.0)
 
@@ -135,7 +165,7 @@ func set_signal_quality(id: String, quality: float) -> void:
 # 异常系统
 # ============================================================
 func trigger_anomaly(camera_id: String, anomaly_id: String) -> void:
-	var cam: CameraFeed = get_camera(camera_id)
+	var cam: SecurityCameraFeed = get_camera(camera_id)
 	if cam == null:
 		print("[CameraManager] 摄像头不存在: %s" % camera_id)
 		return
@@ -196,12 +226,21 @@ func _execute_anomaly_action(anom: Dictionary) -> void:
 # 每帧处理（检查随机异常 + 更新异常计时器）
 # ============================================================
 func process(delta: float) -> void:
+	# ★ 只在摄像头查看器激活时才运行异常系统
+	var viewer_active: bool = false
+	if main and main.camera_viewer and main.camera_viewer.is_active:
+		viewer_active = true
+
 	# 更新所有摄像头的异常计时
 	for cam_id in _cameras:
-		var cam: CameraFeed = _cameras[cam_id]
+		var cam: SecurityCameraFeed = _cameras[cam_id]
 		var just_ended: bool = cam.update_anomaly(delta)
 		if just_ended:
 			camera_anomaly_ended.emit(cam_id)
+
+	# ★ 只在查看器激活时检查随机异常
+	if not viewer_active:
+		return
 
 	# 定期检查随机异常
 	_anomaly_check_timer += delta
@@ -211,7 +250,7 @@ func process(delta: float) -> void:
 
 func _check_random_anomalies() -> void:
 	for cam_id in _cameras:
-		var cam: CameraFeed = _cameras[cam_id]
+		var cam: SecurityCameraFeed = _cameras[cam_id]
 		if not cam.unlocked or not cam.online:
 			continue
 		if cam.is_anomaly_active():
@@ -231,7 +270,7 @@ func _check_random_anomalies() -> void:
 # 图片加载
 # ============================================================
 func load_camera_textures(camera_id: String) -> void:
-	var cam: CameraFeed = get_camera(camera_id)
+	var cam: SecurityCameraFeed = get_camera(camera_id)
 	if cam:
 		cam.load_textures(_load_image_func())
 
@@ -260,6 +299,9 @@ func _load_image(path: String) -> Image:
 	if path.begins_with("res://"):
 		local_paths.append(path)
 	else:
+		# ★ 在编辑器模式下，优先尝试 res:// 路径（支持 Godot 导入系统）
+		if OS.has_feature("editor"):
+			local_paths.append("res://" + path)
 		# 相对于数据目录
 		if main and main.has_method("get_data_dir"):
 			local_paths.append(main.get_data_dir() + "/" + path)
@@ -270,13 +312,22 @@ func _load_image(path: String) -> Image:
 			local_paths.append(OS.get_executable_path().get_base_dir() + "/" + path)
 
 	for local_path in local_paths:
-		if FileAccess.file_exists(local_path):
+		# ★ 对于 res:// 路径，使用 ResourceLoader（支持导入的资源）
+		if local_path.begins_with("res://"):
+			if ResourceLoader.exists(local_path):
+				var texture = ResourceLoader.load(local_path)
+				if texture is Texture2D:
+					return texture.get_image()
+				elif texture is Image:
+					return texture
+		# 对于文件系统路径，使用 FileAccess
+		elif FileAccess.file_exists(local_path):
 			var img := Image.new()
 			var err: Error = img.load(local_path)
 			if err == OK:
 				return img
 
-	print("[CameraManager] 无法加载图片: %s" % path)
+	# ★ 静默失败（图片不存在或加载失败）
 	return null
 
 func _image_from_bytes(file_path: String, data: PackedByteArray) -> Image:
@@ -312,7 +363,7 @@ func get_save_data() -> Dictionary:
 	var cooldowns: Dictionary = {}
 
 	for cam_id in _camera_order:
-		var cam: CameraFeed = _cameras[cam_id]
+		var cam: SecurityCameraFeed = _cameras[cam_id]
 		if cam.unlocked:
 			unlocked_ids.append(cam_id)
 		if not cam.online:
@@ -339,28 +390,28 @@ func load_save_data(data: Dictionary) -> void:
 	# 恢复解锁状态
 	if data.has("unlocked"):
 		for cam_id in data["unlocked"]:
-			var cam: CameraFeed = get_camera(str(cam_id))
+			var cam: SecurityCameraFeed = get_camera(str(cam_id))
 			if cam:
 				cam.unlocked = true
 
 	# 恢复在线状态
 	if data.has("online_states"):
 		for cam_id in data["online_states"]:
-			var cam: CameraFeed = get_camera(str(cam_id))
+			var cam: SecurityCameraFeed = get_camera(str(cam_id))
 			if cam:
 				cam.online = data["online_states"][cam_id]
 
 	# 恢复信号质量
 	if data.has("signal_qualities"):
 		for cam_id in data["signal_qualities"]:
-			var cam: CameraFeed = get_camera(str(cam_id))
+			var cam: SecurityCameraFeed = get_camera(str(cam_id))
 			if cam:
 				cam.signal_quality = float(data["signal_qualities"][cam_id])
 
 	# 恢复镜头位置
 	if data.has("viewport_positions"):
 		for cam_id in data["viewport_positions"]:
-			var cam: CameraFeed = get_camera(str(cam_id))
+			var cam: SecurityCameraFeed = get_camera(str(cam_id))
 			if cam:
 				var pos = data["viewport_positions"][cam_id]
 				if pos is Array and pos.size() >= 2:
@@ -369,7 +420,7 @@ func load_save_data(data: Dictionary) -> void:
 	# 恢复冷却
 	if data.has("cooldowns"):
 		for cam_id in data["cooldowns"]:
-			var cam: CameraFeed = get_camera(str(cam_id))
+			var cam: SecurityCameraFeed = get_camera(str(cam_id))
 			if cam and data["cooldowns"][cam_id] is Dictionary:
 				cam._anomaly_cooldowns = data["cooldowns"][cam_id].duplicate()
 

@@ -655,3 +655,43 @@ func _trend_icon(trend: String) -> String:
 			return "→"
 		_:
 			return "?"
+
+# ══════════════════════════════════════════
+#  玩家专属存档（跨磁盘/跨会话持久化）
+# ══════════════════════════════════════════
+func _get_task_progress_path() -> String:
+	if main == null:
+		return ""
+	if not main.get("user_mgr") or not main.user_mgr.is_logged_in:
+		return ""
+	if main.get("save_mgr") == null:
+		return ""
+	var user_dir: String = main.save_mgr.get_game_root_dir() + "saves/" + main.user_mgr.get_username() + "/"
+	return user_dir + "env_task_progress.json"
+
+func save_task_progress() -> void:
+	var path: String = _get_task_progress_path()
+	if path.is_empty():
+		return
+	var dir_path: String = path.get_base_dir()
+	if not DirAccess.dir_exists_absolute(dir_path):
+		DirAccess.make_dir_recursive_absolute(dir_path)
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(get_save_data(), "\t"))
+		file.close()
+
+func load_task_progress() -> bool:
+	var path: String = _get_task_progress_path()
+	if path.is_empty() or not FileAccess.file_exists(path):
+		return false
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return false
+	var json := JSON.new()
+	if json.parse(file.get_as_text()) != OK or not (json.data is Dictionary):
+		file.close()
+		return false
+	file.close()
+	load_save_data(json.data)
+	return true

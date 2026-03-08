@@ -191,6 +191,28 @@ func _build_page3(data: Dictionary) -> String:
 	lines.append("[color=" + m + "]" + "-".repeat(30) + "[/color]")
 	lines.append("")
 
+	# 主线进度
+	lines.append("[color=" + w + "]STORYLINE PROGRESS — 主线进度[/color]")
+	lines.append("")
+	if main.env_monitor:
+		var env: EnvMonitor = main.env_monitor
+		lines.append(_kv("当前天数", env.get_day_display()))
+		lines.append(_kv("天气状况", env.get_weather_name()))
+		if main.env_task_mgr:
+			var progress: Dictionary = main.env_task_mgr.get_progress()
+			var pct: String = "%.0f%%" % float(progress.get("percentage", 0))
+			lines.append(_kv("今日任务", str(progress.get("completed", 0)) + "/" + str(progress.get("total", 0)) + " (" + pct + ")"))
+			if progress.get("can_advance", false):
+				lines.append("  [color=" + s + "]所有任务已完成，下次登录将自动推进[/color]")
+	else:
+		lines.append("[color=" + m + "](环境监测系统未初始化)[/color]")
+	lines.append("")
+	lines.append("[color=" + m + "]输入 [/color][color=" + s + "]save[/color][color=" + m + "] 手动保存当前进度[/color]")
+
+	lines.append("")
+	lines.append("[color=" + m + "]" + "-".repeat(30) + "[/color]")
+	lines.append("")
+
 	# 终端信息
 	lines.append("[color=" + w + "]TERMINAL INFO — 终端信息[/color]")
 	lines.append("")

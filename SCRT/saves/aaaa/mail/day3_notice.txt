@@ -1,0 +1,23 @@
+---
+title: [机密] 异常评估报告
+template: email
+---
+From: Site Director <director@site-██.scp>
+Subject: [机密] 异常评估报告
+---
+From: Site Director
+To: OB-7K Operator
+Subject: [机密] 异常评估报告
+Priority: HIGH
+---
+操作员，
+
+经过 48 小时的数据分析，总部对你提交的异常报告做出了初步评估：
+
+  分类：待定（暂标为 Euclid 级）
+  风险等级：中
+  建议措施：持续监测，保持每日报告
+
+此信息为 Level-2 机密。请勿在非加密信道讨论。
+
+—— Site Director

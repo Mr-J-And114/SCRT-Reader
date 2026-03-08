@@ -323,6 +323,10 @@ func open_with_file(file_path: String, file_name: String, data: PackedByteArray)
 	if main.input_frame:
 		main.input_frame.visible = false
 
+	# ★ 隐藏 COMM 按钮（避免遮挡）
+	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
+		main.comm_mgr._ui._toggle_btn.visible = false
+
 	overlay.visible = true
 
 	_update_info_display()
@@ -360,6 +364,10 @@ func close() -> void:
 		main.status_frame.visible = true
 	if main.input_frame:
 		main.input_frame.visible = true
+
+	# ★ 恢复 COMM 按钮
+	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
+		main.comm_mgr._ui._toggle_btn.visible = true
 
 	main._update_status_bar()
 	main.input_field.grab_focus()

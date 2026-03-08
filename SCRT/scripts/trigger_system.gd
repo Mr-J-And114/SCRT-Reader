@@ -535,7 +535,7 @@ func _act_camera_anomaly(param: String) -> void:
 	var anom_id: String = parts[1].strip_edges() if parts.size() > 1 else ""
 	if anom_id.is_empty():
 		# 触发该摄像头的第一个异常
-		var cam: CameraFeed = main.camera_mgr.get_camera(cam_id)
+		var cam: SecurityCameraFeed = main.camera_mgr.get_camera(cam_id)
 		if cam and not cam.anomalies.is_empty():
 			anom_id = cam.anomalies[0].get("id", "")
 	if not anom_id.is_empty():

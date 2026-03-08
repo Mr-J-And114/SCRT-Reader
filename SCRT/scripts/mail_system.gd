@@ -39,6 +39,9 @@ var _mail_defs: Dictionary = {}
 var _blink_active: bool = false
 var _blink_timer: float = 0.0
 
+# ── 防止重入 ──
+var _mail_busy: bool = false
+
 # ── 已投递过的邮件ID集合（防止重复触发） ──
 var _delivered_ids: Dictionary = {}
 
@@ -299,6 +302,46 @@ func _do_deliver(mail_id: String, _context_path: String, persistent: bool) -> vo
 	# 统一的自动保存请求（优先 DiscManager，失败则直接 SaveManager）
 	_request_auto_save()
 
+## 投递内联邮件（无需虚拟文件系统，用于主线剧情）
+func deliver_inline_mail(mail_id: String, title: String, from: String, body_text: String, persistent: bool = true) -> void:
+	if _delivered_ids.has(mail_id):
+		return
+	for mail in _global_inbox:
+		if str(mail.get("id", "")) == mail_id:
+			_delivered_ids[mail_id] = true
+			return
+	for mail in _temp_inbox:
+		if str(mail.get("id", "")) == mail_id:
+			_delivered_ids[mail_id] = true
+			return
+	var now_str: String = _get_current_datetime()
+	var info: Dictionary = {
+		"id": mail_id,
+		"title": title,
+		"from": from,
+		"template": "email",
+		"priority": "normal",
+		"read": false,
+		"delivered_at": now_str,
+		"persistent": persistent,
+		"story_id": main.story_id if not main.story_id.is_empty() else "main",
+		"_body_text": body_text,
+	}
+	if persistent:
+		var raw_content: String = "---\ntitle: %s\ntemplate: email\n---\nFrom: %s\nSubject: %s\n---\n%s" % [title, from, title, body_text]
+		_save_global_mail_file(mail_id, raw_content)
+		_global_inbox.append(info)
+		_save_inbox_index()
+	else:
+		_temp_inbox.append(info)
+	_rebuild_merged()
+	main.has_new_mail = true
+	main._update_status_bar()
+	start_blink()
+	_show_notification(info)
+	_delivered_ids[mail_id] = true
+	_request_auto_save()
+
 # ============================================================
 # 从虚拟文件系统加载邮件原始内容
 # ============================================================
@@ -403,6 +446,9 @@ func _show_notification(info: Dictionary) -> void:
 # mail 命令入口
 # ============================================================
 func handle_mail_command(args: Array) -> void:
+	if _mail_busy:
+		return
+	_mail_busy = true
 	stop_blink()
 
 	var p: String = T.primary_hex if T else "#A0FFA0"
@@ -421,6 +467,7 @@ func handle_mail_command(args: Array) -> void:
 		await main.tw.show_progress_bar(200, 3.0)
 		await main.get_tree().create_timer(0.2).timeout
 		_open_inbox_viewer()
+		_mail_busy = false
 		return
 
 	var sub: String = str(args[0]).to_lower()
@@ -431,6 +478,7 @@ func handle_mail_command(args: Array) -> void:
 				await main.tw.show_progress_bar(200, 3.0)
 				await main.get_tree().create_timer(0.2).timeout
 				_open_inbox_viewer()
+				_mail_busy = false
 				return
 			var idx: int = str(args[1]).to_int()
 			if idx > 0:
@@ -446,6 +494,7 @@ func handle_mail_command(args: Array) -> void:
 				await main.tw.show_progress_bar(200, 3.0)
 				await main.get_tree().create_timer(0.2).timeout
 				_open_inbox_viewer()
+	_mail_busy = false
 
 
 # ============================================================
@@ -543,6 +592,7 @@ func _read_mail(idx: int) -> void:
 	if idx < 1 or idx > _merged_inbox.size():
 		var err_c: String = T.error_hex if T else "#FF6666"
 		main.append_output("[color=" + err_c + "]无效的邮件编号: " + str(idx) + "[/color]\n", false)
+		_mail_busy = false
 		return
 
 	# ★ 点击/阅读邮件时播放 beep 音效
@@ -554,7 +604,7 @@ func _read_mail(idx: int) -> void:
 	mail["read"] = true
 	if bool(mail.get("persistent", false)):
 		_save_inbox_index()
-		_refresh_mail_icon()
+	_refresh_mail_icon()  # 所有邮件读取后都刷新图标和未读计数
 
 	# 获取原始内容
 	var raw_content: String = ""
@@ -574,6 +624,7 @@ func _read_mail(idx: int) -> void:
 	if raw_content.is_empty():
 		var err_c: String = T.error_hex if T else "#FF6666"
 		main.append_output("[color=" + err_c + "]Cannot read mail content.[/color]\n", false)
+		_mail_busy = false
 		return
 
 	# 解析 header
@@ -636,7 +687,6 @@ func _read_mail(idx: int) -> void:
 	if main.daily_dialogue_mgr and main.env_monitor:
 		main.daily_dialogue_mgr.trigger_mail_read(main.env_monitor.current_day, str(mail.get("id", "")))
 
-
 func _display_mail_in_terminal(title: String, body: String) -> void:
 	var p: String = T.primary_hex if T else "#A0FFA0"
 	var m: String = T.muted_hex if T else "#888888"
@@ -665,9 +715,7 @@ func _refresh_mail_icon() -> void:
 	main.has_new_mail = has_unread
 	if not has_unread:
 		stop_blink()
-	# 不改变 mail_icon.text，始终保持 [Mail]
-	if main.mail_icon != null and not _blink_active:
-		main.mail_icon.text = "[Mail]"
+	# 调用 _update_status_bar() 会自动设置邮件图标文本
 	main._update_status_bar()
 
 

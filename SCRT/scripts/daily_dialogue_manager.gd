@@ -36,9 +36,10 @@ var _story_flags: Dictionary = {}   # 剧情标记 {flag_name: value}
 # ══════════════════════════════════════════
 func setup(p_main) -> void:
 	main = p_main
-	_load_main_storyline()
+	# ★ 不在初始化时加载主线剧情，改为登录后加载
 
-func _load_main_storyline() -> void:
+func load_main_storyline() -> void:
+	## 由 main.gd 在登录后调用，加载主线剧情配置
 	var path: String = "res://data/main/manifest.json"
 	if not FileAccess.file_exists(path):
 		print("[DailyDialogue] 主线剧情文件不存在: " + path)
@@ -140,6 +141,8 @@ func trigger_day_start(day: int) -> void:
 	_story_day = day
 	_triggered_today.clear()
 	register_dialogues_to_comm()
+	# ★ 处理当日邮件投递
+	_deliver_day_mails(day)
 	var dlg_ids: Array = _get_trigger_list(day, "on_start")
 	if dlg_ids.size() > 0 and not _triggered_today.has("on_start"):
 		_triggered_today["on_start"] = true
@@ -305,6 +308,29 @@ func load_save_data(data: Dictionary) -> void:
 # ══════════════════════════════════════════
 #  内部
 # ══════════════════════════════════════════
+func _deliver_day_mails(day: int) -> void:
+	## 投递当日配置中的邮件（mail_deliveries 字段）
+	if main.mail_sys == null:
+		return
+	var day_key: String = str(day)
+	var config: Dictionary = {}
+	if _daily_config.has(day_key):
+		config = _daily_config[day_key]
+	elif _daily_config.has("default"):
+		config = _daily_config["default"]
+	var mails: Array = config.get("mail_deliveries", [])
+	for mail_def in mails:
+		if not (mail_def is Dictionary):
+			continue
+		var mail_id: String = str(mail_def.get("id", ""))
+		if mail_id.is_empty():
+			continue
+		var title: String = str(mail_def.get("title", mail_id))
+		var from: String = str(mail_def.get("from", "SYSTEM"))
+		var body: String = str(mail_def.get("body", ""))
+		var persistent: bool = bool(mail_def.get("persistent", true))
+		main.mail_sys.deliver_inline_mail(mail_id, title, from, body, persistent)
+
 func _get_trigger_list(day: int, event_type: String) -> Array:
 	var day_key: String = str(day)
 	var config: Dictionary = {}

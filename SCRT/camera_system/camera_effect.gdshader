@@ -24,7 +24,13 @@ uniform vec2 light_center = vec2(0.5, 0.5);
 uniform float light_radius = 0.35;
 uniform float light_falloff = 2.0;
 uniform float light_intensity = 1.0;
-uniform float depth_weight = 0.5;     // 深度对照明衰减的影响权重
+uniform float depth_weight = 0.3;     // 深度对照明衰减的影响权重（降低以减少过度影响）
+
+// ── 视差贴图参数 ──
+uniform bool use_parallax = false;
+uniform float parallax_scale = 0.05;  // 视差强度
+uniform int parallax_layers = 8;      // 采样层数
+uniform vec2 parallax_view_offset = vec2(0.0, 0.0); // 镜头朝向偏移（viewport_pos - 0.5），消除中央畸变
 
 // ── 噪点 & 效果 ──
 uniform float noise_intensity = 0.15;
@@ -33,6 +39,13 @@ uniform float snow_intensity = 0.0;
 uniform float signal_quality = 1.0;
 uniform float vignette_strength = 0.4;
 uniform float time_val = 0.0;
+
+// ── 照明叠加（Spotlight 预渲染叠加模式）──
+uniform sampler2D spotlight_overlay : filter_linear, repeat_disable;
+uniform bool use_spotlight_overlay = false;
+
+// ── 异常叠加模式 ──
+uniform bool anomaly_overlay_mode = false; // false=图像替换, true=透明叠加（使用 anomaly_texture.a）
 
 // ── 色调参数 ──
 uniform vec3 tint_color = vec3(0.7, 0.8, 0.7);  // 监控画面微绿色调
@@ -63,100 +76,129 @@ float value_noise(vec2 p) {
 }
 
 // ============================================================
+// 视差遮蔽映射（Parallax Occlusion Mapping）
+// ============================================================
+vec2 parallax_mapping(vec2 uv, vec2 view_dir) {
+	if (!use_parallax) {
+		return uv;
+	}
+
+	// 采样深度
+	float height = texture(depth_texture, uv).r;
+
+	// 计算偏移
+	float layer_depth = 1.0 / float(parallax_layers);
+	float current_layer_depth = 0.0;
+	vec2 delta_uv = view_dir * parallax_scale / float(parallax_layers);
+	vec2 current_uv = uv;
+	float current_depth = texture(depth_texture, current_uv).r;
+
+	// 陡峭视差映射
+	for (int i = 0; i < parallax_layers; i++) {
+		if (current_layer_depth >= current_depth) {
+			break;
+		}
+		current_uv -= delta_uv;
+		current_depth = texture(depth_texture, current_uv).r;
+		current_layer_depth += layer_depth;
+	}
+
+	// 视差遮蔽映射（插值优化）
+	vec2 prev_uv = current_uv + delta_uv;
+	float after_depth = current_depth - current_layer_depth;
+	float before_depth = texture(depth_texture, prev_uv).r - current_layer_depth + layer_depth;
+	float weight = after_depth / (after_depth - before_depth);
+
+	return mix(current_uv, prev_uv, weight);
+}
+
+// ============================================================
 // 主片段着色器
 // ============================================================
 void fragment() {
 	// ── 1. 将屏幕 UV 映射到底图 UV ──
 	vec2 base_uv = viewport_rect.xy + UV * viewport_rect.zw;
 
-	// ── 2. 信号干扰（水平偏移）──
+	// ── 2. 视差贴图（模拟 3D 深度）──
+	if (use_parallax) {
+		// 使用镜头朝向偏移作为视角方向，避免以屏幕像素为基准导致的中央畸变
+		base_uv = parallax_mapping(base_uv, parallax_view_offset);
+	}
+
+	// ── 3. 信号干扰（水平偏移）──
 	float distortion = (1.0 - signal_quality) * 0.02;
-	float h_offset = sin(UV.y * 50.0 + time_val * 3.0) * distortion;
-	h_offset += sin(UV.y * 130.0 + time_val * 7.0) * distortion * 0.5;
+	float h_offset = sin(base_uv.y * 50.0 + time_val * 3.0) * distortion;
+	h_offset += sin(base_uv.y * 130.0 + time_val * 7.0) * distortion * 0.5;
 	base_uv.x += h_offset;
 
 	// 限制 UV 在有效范围内
 	base_uv = clamp(base_uv, vec2(0.0), vec2(1.0));
 
-	// ── 3. 采样底图和深度 ──
+	// ── 4. 采样底图和深度 ──
 	vec4 base_col = texture(base_texture, base_uv);
 	float depth = texture(depth_texture, base_uv).r;
 
-	// ── 4. 异常混合 ──
+	// ── 5. 异常混合 ──
 	if (anomaly_blend > 0.01) {
 		vec4 anom_col = texture(anomaly_texture, base_uv);
-		float anom_depth = texture(anomaly_depth, base_uv).r;
-		base_col = mix(base_col, anom_col, anomaly_blend);
-		depth = mix(depth, anom_depth, anomaly_blend);
+		if (anomaly_overlay_mode) {
+			// 透明叠加：使用异常图的 alpha 通道作为蒙版叠加在正常画面之上
+			base_col.rgb = mix(base_col.rgb, anom_col.rgb, anom_col.a * anomaly_blend);
+		} else {
+			// 图像替换：渐变替换整张底图（原有行为）
+			float anom_depth = texture(anomaly_depth, base_uv).r;
+			base_col = mix(base_col, anom_col, anomaly_blend);
+			depth = mix(depth, anom_depth, anomaly_blend);
+		}
 	}
 
-	// ── 5. 照明计算 ──
+	// ── 6. 照明计算 ──
 	vec4 final_color = base_col;
 
 	if (light_mode > 0) {
 		// 计算到照明中心的距离（考虑深度）
 		float uv_dist = distance(UV, light_center);
-		float effective_dist = uv_dist + depth * depth_weight;
+
+		// ★ 改进深度影响：深度值越大（越远），照明衰减越快
+		// 使用非线性映射让深度影响更自然
+		float depth_factor = 1.0 + (depth * depth) * depth_weight * 2.0;
+		float effective_dist = uv_dist * depth_factor;
 
 		// 照明蒙版（平滑衰减）
 		float mask = 1.0 - smoothstep(light_radius * 0.3, light_radius, effective_dist);
 		mask = pow(mask, light_falloff) * light_intensity;
 
-		// 采样照明图
-		vec4 light_col = texture(light_texture, base_uv);
-		if (anomaly_blend > 0.01) {
-			vec4 anom_light_col = texture(anomaly_light, base_uv);
-			light_col = mix(light_col, anom_light_col, anomaly_blend);
-		}
-
 		if (light_mode == 1) {
-			// ── Spotlight：白色锥形光 ──
-			vec3 lit = mix(base_col.rgb * 0.1, light_col.rgb, mask);
-			final_color.rgb = lit;
+			// ── Spotlight：灯光照亮圆形区域，圈外极暗 ──
+			if (use_spotlight_overlay) {
+				// 预渲染叠加模式：范围内以原图亮度直接替换，仅在边缘做窄过渡
+				vec3 overlay_col = texture(spotlight_overlay, base_uv).rgb;
+				// range_mask：范围内保持 1.0（不降低亮度），仅最外 15% 做软边过渡
+				float range_mask = 1.0 - smoothstep(light_radius * 0.85, light_radius, effective_dist);
+				final_color.rgb = mix(base_col.rgb * 0.08, overlay_col, range_mask);
+			} else {
+				// shader 计算模式：按亮度蒙版调整原底图
+				float brightness = mix(0.08, 1.2, mask);
+				final_color.rgb = base_col.rgb * brightness;
+			}
 		} else if (light_mode == 2) {
 			// ── Nightvision：全图绿色 + 增强亮度 ──
 			float luma = dot(base_col.rgb, vec3(0.299, 0.587, 0.114));
-			float light_luma = dot(light_col.rgb, vec3(0.299, 0.587, 0.114));
-			float combined_luma = mix(luma, light_luma, mask * 0.6);
 
 			// 距离衰减：远处可见度降低
 			float visibility = 1.0 - smoothstep(light_radius * 0.8, light_radius * 1.5, effective_dist);
-			combined_luma *= (0.3 + 0.7 * visibility);
+			luma *= (0.3 + 0.7 * visibility);
 
 			// 增强亮度 + 噪点
-			combined_luma = pow(combined_luma, 0.6) * 1.5;
+			luma = pow(luma, 0.6) * 1.5;
 			float nv_noise = hash(UV * 500.0 + time_val * 10.0) * 0.08;
-			combined_luma += nv_noise;
+			luma += nv_noise;
 
-			final_color.rgb = vec3(combined_luma * 0.2, combined_luma * 1.0, combined_luma * 0.15);
+			final_color.rgb = vec3(luma * 0.2, luma * 1.0, luma * 0.15);
 		} else if (light_mode == 3) {
-			// ── Infrared：热力图伪彩色 ──
-			float luma = dot(light_col.rgb, vec3(0.299, 0.587, 0.114));
-			float base_luma = dot(base_col.rgb, vec3(0.299, 0.587, 0.114));
-			float heat = mix(base_luma, luma, mask * 0.8);
-
-			// 距离衰减
-			float ir_vis = 1.0 - smoothstep(light_radius * 0.6, light_radius * 1.2, effective_dist);
-			heat *= (0.2 + 0.8 * ir_vis);
-
-			// 深度影响温度显示（近=暖，远=冷）
-			heat = heat * (1.0 - depth * 0.5);
-
-			// 伪彩色映射：蓝 → 紫 → 红 → 橙 → 黄 → 白
-			vec3 ir_color;
-			if (heat < 0.2) {
-				ir_color = mix(vec3(0.0, 0.0, 0.3), vec3(0.3, 0.0, 0.5), heat / 0.2);
-			} else if (heat < 0.4) {
-				ir_color = mix(vec3(0.3, 0.0, 0.5), vec3(0.8, 0.0, 0.2), (heat - 0.2) / 0.2);
-			} else if (heat < 0.6) {
-				ir_color = mix(vec3(0.8, 0.0, 0.2), vec3(1.0, 0.5, 0.0), (heat - 0.4) / 0.2);
-			} else if (heat < 0.8) {
-				ir_color = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 1.0, 0.0), (heat - 0.6) / 0.2);
-			} else {
-				ir_color = mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 1.0, 1.0), (heat - 0.8) / 0.2);
-			}
-
-			final_color.rgb = ir_color;
+			// ── Infrared：禁用自动生成，必须使用预渲染图 ──
+			// 如果到这里说明没有预渲染图，显示错误提示
+			final_color.rgb = vec3(1.0, 0.0, 1.0); // 洋红色错误提示
 		}
 	} else {
 		// 无照明模式：底图变暗模拟黑暗环境

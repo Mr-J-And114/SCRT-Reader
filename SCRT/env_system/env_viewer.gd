@@ -20,6 +20,7 @@ var T = null
 #  UI 节点
 # ══════════════════════════════════════════
 var overlay_panel: Panel = null
+var _scroll: ScrollContainer = null  # ★ 滚动容器
 var canvas: Control = null   # _EnvCanvas 内部类实例
 
 # ══════════════════════════════════════════
@@ -67,7 +68,15 @@ func open() -> void:
 	# 更新路径栏提示
 	if main.path_label:
 		main.path_label.text = "ENV MONITOR | ←/→ 切换  TAB 下一页  Q/ESC 关闭"
+
+	# ★ 隐藏 COMM 按钮（避免遮挡）
+	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
+		main.comm_mgr._ui._toggle_btn.visible = false
+
 	overlay_panel.visible = true
+	# ★ 重置滚动位置
+	if _scroll:
+		_scroll.scroll_vertical = 0
 
 func close() -> void:
 	if not is_active:
@@ -82,6 +91,11 @@ func close() -> void:
 	_cached_output_text = ""
 	main.input_field.visible = _cached_input_visible
 	main.prompt_label.visible = _cached_prompt_visible
+
+	# ★ 恢复 COMM 按钮
+	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
+		main.comm_mgr._ui._toggle_btn.visible = true
+
 	if main.has_method("_update_status_bar"):
 		main._update_status_bar()
 	main.input_field.grab_focus()
@@ -105,20 +119,28 @@ func handle_input(event: InputEvent) -> bool:
 				return true
 			KEY_LEFT:
 				current_page = (current_page - 1 + MAX_PAGES) % MAX_PAGES
+				_reset_scroll()
 				if canvas:
 					canvas.queue_redraw()
 				return true
 			KEY_RIGHT:
 				current_page = (current_page + 1) % MAX_PAGES
+				_reset_scroll()
 				if canvas:
 					canvas.queue_redraw()
 				return true
 			KEY_TAB:
 				current_page = (current_page + 1) % MAX_PAGES
+				_reset_scroll()
 				if canvas:
 					canvas.queue_redraw()
 				return true
 	return false
+
+## 重置滚动位置到顶部
+func _reset_scroll() -> void:
+	if _scroll:
+		_scroll.scroll_vertical = 0
 
 # ══════════════════════════════════════════
 #  每帧更新
@@ -142,9 +164,9 @@ func _ensure_overlay() -> void:
 	overlay_panel = Panel.new()
 	overlay_panel.name = "EnvViewerOverlay"
 	overlay_panel.visible = false
-	# 透明背景（由 canvas 自行绘制背景色）
+	# 统一深色背景（避免 Canvas 每帧重绘）
 	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0, 0, 0, 0)
+	bg_style.bg_color = Color(0, 0, 0, 0.88)
 	overlay_panel.add_theme_stylebox_override("panel", bg_style)
 
 	var root_control: Control = main as Control
@@ -159,11 +181,21 @@ func _ensure_overlay() -> void:
 	overlay_panel.offset_right = 0
 	overlay_panel.offset_bottom = 0
 
-	# 创建绘制画布
+	# ★ 创建 ScrollContainer 以支持内容滚动
+	_scroll = ScrollContainer.new()
+	_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	# 滚动条样式：使用细滚动条
+	var vbar: VScrollBar = _scroll.get_v_scroll_bar()
+	if vbar:
+		vbar.custom_minimum_size.x = 6
+	overlay_panel.add_child(_scroll)
+
+	# 创建绘制画布（放入 ScrollContainer，高度由内容决定）
 	canvas = _EnvCanvas.new()
 	canvas.viewer = self
-	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay_panel.add_child(canvas)
+	canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.add_child(canvas)
 
 ## 将覆盖层对齐到 OutputArea 的位置和大小（与 DocumentViewer 相同模式）
 func _align_overlay() -> void:
@@ -186,19 +218,19 @@ class _EnvCanvas extends Control:
 			return
 		var rect: Rect2 = get_rect()
 		var w: float = rect.size.x
-		var h: float = rect.size.y
+		# ★ 使用 ScrollContainer 的可见高度（用于底部提示定位）
+		var visible_h: float = viewer._scroll.size.y if viewer._scroll else rect.size.y
 		var em: EnvMonitor = viewer.env_monitor
 
-		# 绘制半透明背景（由 canvas 自己绘制，方便控制透明度）
-		draw_rect(Rect2(Vector2.ZERO, rect.size), Color(0, 0, 0, 0.88))
-
-		# 颜色
+		# 颜色（使用主题色，避免硬编码）
 		var col_primary: Color = Color(viewer.T.primary) if viewer.T else Color.GREEN
 		var col_dim: Color = col_primary * 0.4
 		var col_bright: Color = col_primary * 1.2
 		col_bright.a = 1.0
-		var col_warn: Color = Color(1.0, 0.8, 0.0)
-		var col_err: Color = Color(1.0, 0.2, 0.2)
+		var col_warn: Color = Color(viewer.T.warning) if viewer.T else Color(1.0, 0.8, 0.0)
+		col_warn.a = 1.0
+		var col_err: Color = Color(viewer.T.error) if viewer.T else Color(1.0, 0.2, 0.2)
+		col_err.a = 1.0
 
 		var font: Font = ThemeDB.fallback_font
 		var font_size: int = 13
@@ -240,7 +272,7 @@ class _EnvCanvas extends Control:
 		# ── 页面内容 ──
 		match viewer.current_page:
 			0:
-				y = _draw_overview(em, font, font_size, font_small, line_h, margin, y, w, h, col_primary, col_dim, col_bright, col_warn, col_err)
+				y = _draw_overview(em, font, font_size, font_small, line_h, margin, y, w, visible_h, col_primary, col_dim, col_bright, col_warn, col_err)
 			1:
 				y = _draw_category(em, "atmosphere", font, font_size, font_small, line_h, margin, y, w, col_primary, col_dim, col_warn, col_err)
 			2:
@@ -253,9 +285,13 @@ class _EnvCanvas extends Control:
 				y = _draw_events(em, font, font_size, font_small, line_h, margin, y, w, col_primary, col_dim, col_warn, col_err)
 
 		# ── 底部操作提示 ──
-		var help_y: float = h - line_h - margin
-		var help_text: String = "←/→ 切换页面  |  TAB 下一页  |  Q/ESC 关闭"
-		draw_string(font, Vector2(margin, help_y + font_small), help_text, HORIZONTAL_ALIGNMENT_LEFT, w - margin * 2, font_small, col_dim)
+		y += 8
+		var help_text: String = "←/→ 切换页面  |  TAB 下一页  |  滚轮滚动  |  Q/ESC 关闭"
+		draw_string(font, Vector2(margin, y + font_small), help_text, HORIZONTAL_ALIGNMENT_LEFT, w - margin * 2, font_small, col_dim)
+		y += line_h + margin
+
+		# ★ 更新画布最小高度以驱动 ScrollContainer 滚动条
+		custom_minimum_size.y = maxf(y, visible_h)
 
 	# ── 总览页 ──
 	func _draw_overview(em: EnvMonitor, font: Font, fs: int, fss: int, lh: float, mx: float, y: float, w: float, _h: float,
@@ -519,8 +555,7 @@ class _EnvCanvas extends Control:
 			draw_string(font, Vector2(mx + 8, y + fss), "无历史异常记录", HORIZONTAL_ALIGNMENT_LEFT, -1, fss, col_d)
 			y += lh
 		else:
-			var show_count: int = mini(detected.size(), 10)
-			for i in range(detected.size() - show_count, detected.size()):
+			for i in range(detected.size()):
 				var a: Dictionary = detected[i]
 				draw_string(font, Vector2(mx + 8, y + fss),
 					"Day%d %s: %s" % [int(a.get("day", 0)), str(a.get("name", "")), str(a.get("report", "")).left(60)],

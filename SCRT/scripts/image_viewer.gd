@@ -265,6 +265,10 @@ func open_with_file(file_path: String, file_name: String, data: PackedByteArray)
 	# 更新状态栏
 	main.path_label.text = "IMAGE VIEWER | " + file_name + " | Q/Esc 退出"
 
+	# ★ 隐藏 COMM 按钮（避免遮挡）
+	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
+		main.comm_mgr._ui._toggle_btn.visible = false
+
 	# 显示
 	overlay.visible = true
 	image_canvas.set_process(true)
@@ -294,6 +298,11 @@ func close() -> void:
 	main.input_field.visible = _cached_input_visible
 	main.prompt_label.visible = _cached_prompt_visible
 	main._update_status_bar()
+
+	# ★ 恢复 COMM 按钮
+	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
+		main.comm_mgr._ui._toggle_btn.visible = true
+
 	main.input_field.grab_focus()
 
 	# 通知 main

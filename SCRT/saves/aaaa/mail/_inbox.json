@@ -1,0 +1,22 @@
+[
+	{
+		"delivered_at": "2026-03-06 23:41:51",
+		"from": "HQ-CONTROL <hq@foundation.scp>",
+		"id": "day2_report",
+		"priority": "normal",
+		"read": true,
+		"story_id": "main",
+		"template": "email",
+		"title": "昨日数据汇总"
+	},
+	{
+		"delivered_at": "2026-03-07 00:34:05",
+		"from": "Site Director <director@site-██.scp>",
+		"id": "day3_notice",
+		"priority": "normal",
+		"read": true,
+		"story_id": "main",
+		"template": "email",
+		"title": "[机密] 异常评估报告"
+	}
+]

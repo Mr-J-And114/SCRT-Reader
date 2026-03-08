@@ -513,7 +513,7 @@ camera_system/camera_manager.gd (CameraManager) — Registry & lifecycle
 camera_system/camera_viewer.gd (CameraViewer) — Fullscreen overlay
 ├─ ColorRect with camera_effect.gdshader for rendering
 ├─ UI overlay (camera name, location, timestamp, signal bar, status)
-├─ Keyboard: arrows=pan, 1-9=switch, TAB=next, Q/ESC=close
+├─ Keyboard: arrows=pan, 1-9=switch, TAB=next, F=light mode, Q/ESC=close
 ├─ Shader uniforms updated per-frame from CameraFeed state
 └─ Anomaly blend driven by CameraFeed._anomaly_blend
 

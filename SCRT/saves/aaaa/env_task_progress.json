@@ -1,0 +1,21 @@
+{
+	"day_complete": false,
+	"report_submitted": false,
+	"special_tasks": {
+
+	},
+	"task_order_log": [],
+	"task_results": {
+
+	},
+	"task_status": {
+		"anomaly_check": "pending",
+		"calibration": "pending",
+		"composition_reading": "pending",
+		"daily_report": "pending",
+		"equipment_check": "pending",
+		"geophysics_reading": "pending",
+		"ocean_reading": "pending",
+		"weather_reading": "pending"
+	}
+}

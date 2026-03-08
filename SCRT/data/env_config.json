@@ -436,7 +436,7 @@
 			"description": "记录海水温度、潮位、浪高、盐度等海洋参数",
 			"command": "env read ocean",
 			"type": "recording",
-			"required": true,
+			"required": false,
 			"order": 3,
 			"time_estimate_min": 5,
 			"sensors": ["sea_temp", "tide_level", "wave_height", "salinity"]
@@ -446,7 +446,7 @@
 			"description": "记录磁场、辐射、地震活动、地温等地球物理参数",
 			"command": "env read geophysics",
 			"type": "recording",
-			"required": true,
+			"required": false,
 			"order": 4,
 			"time_estimate_min": 4,
 			"sensors": ["mag_field", "mag_declination", "radiation", "seismic", "soil_temp"]
@@ -456,7 +456,7 @@
 			"description": "读取大气成分分析仪数据，记录O2/CO2浓度",
 			"command": "env read composition",
 			"type": "recording",
-			"required": true,
+			"required": false,
 			"order": 5,
 			"time_estimate_min": 3,
 			"sensors": ["o2_concentration", "co2_concentration"]
@@ -466,7 +466,7 @@
 			"description": "对气压计和磁力计进行日常校准，检查偏移量",
 			"command": "env calibrate",
 			"type": "maintenance",
-			"required": true,
+			"required": false,
 			"order": 6,
 			"time_estimate_min": 4,
 			"sensors_to_calibrate": ["pressure", "mag_field"]
@@ -488,7 +488,7 @@
 			"required": true,
 			"order": 8,
 			"time_estimate_min": 3,
-			"requires_tasks": ["weather_reading", "ocean_reading", "geophysics_reading", "composition_reading", "anomaly_check"]
+			"requires_tasks": ["weather_reading", "anomaly_check"]
 		}
 	},
 

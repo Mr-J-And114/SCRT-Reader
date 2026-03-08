@@ -1,7 +1,9 @@
+res://scripts/mail_system.gd
 res://scenes/main.tscn
 res://addons/agent/ui/resource/AgentTheme.tres
 res://addons/agent/agent.gd
-res://shaders/background_vignette.gdshader
-res://shaders/background_logo.gdshader
-res://env_system/env_monitor.gd
-res://comm_system/comm_manager.gd
+res://scripts/disc_manager.gd
+res://env_system/env_viewer.gd
+res://scripts/image_viewer.gd
+res://scripts/oscilloscope.gd
+res://scripts/video_player.gd

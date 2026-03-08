@@ -126,6 +126,8 @@ var explore_viewer: ExploreViewer = null
 #  初始化
 # ══════════════════════════════════════════
 func _ready() -> void:
+	# ★ 窗口关闭时自动保存
+	get_tree().auto_accept_quit = false
 	# 初始化主题（先设置存储路径，确保主题配置存入 saves/ 目录）
 	ThemeManager.setup_save_root(save_mgr.get_game_root_dir() + "saves/")
 	ThemeManager.init("phosphor_green")
@@ -542,9 +544,31 @@ func _enter_desktop_after_login(message: String) -> void:
 			comm_mgr._ui._sync_btn_to_bar()
 	# ★ 登录后加载主线存档并触发每日剧情对话
 	if daily_dialogue_mgr:
+		daily_dialogue_mgr.load_main_storyline()  # 先加载主线剧情配置
 		daily_dialogue_mgr.load_story_save()
-		if env_monitor:
-			daily_dialogue_mgr.trigger_day_start(env_monitor.current_day)
+	# ★ 登录后加载全局邮箱（必须在 trigger_day_start 之前，否则 delivered_ids 为空导致重复投递）
+	if mail_sys:
+		mail_sys.load_global_inbox()
+	# ★ 加载玩家专属环境监测进度（覆盖 _ready 中的 start_new_game 初始状态）
+	if env_monitor:
+		if not env_monitor.load_env_progress():
+			env_monitor.save_env_progress()  # 新玩家：写入初始存档
+	if env_task_mgr:
+		if not env_task_mgr.load_task_progress():
+			env_task_mgr.reset_for_new_day()  # 新玩家：初始化当日任务
+			env_task_mgr.save_task_progress()
+		elif env_task_mgr.can_advance_day() and env_monitor:
+			# 上次会话任务已全部完成，自动推进到下一天
+			env_monitor.advance_day()
+			env_task_mgr.reset_for_new_day()
+			env_monitor.save_env_progress()
+			env_task_mgr.save_task_progress()
+			print("[Main] 自动推进至第 %d 天" % env_monitor.current_day)
+	if daily_dialogue_mgr and env_monitor:
+		daily_dialogue_mgr.trigger_day_start(env_monitor.current_day)
+	# ★ 登录后加载主线剧情摄像头（只加载一次，不受故事包影响）
+	if camera_mgr:
+		camera_mgr.load_main_storyline_cameras()
 	_request_scroll()
 
 
@@ -1039,8 +1063,18 @@ func start_delete_user_flow(username: String) -> void:
 	_delete_user_mode = true
 	_delete_user_target = username
 	_request_scroll()
+## 窗口关闭事件 —— 直接关窗口时也保存进度
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		if disc_mgr:
+			disc_mgr._auto_save()
+		get_tree().quit()
+
 ## 统一关机流程（登录界面和桌面命令都可调用）
 func _perform_shutdown() -> void:
+	# ★ 关机前保存所有进度（必须在 logout 前执行）
+	if disc_mgr:
+		disc_mgr._auto_save()
 	# ★ NEW: 分发用户注销钩子
 	if pkg_mgr and user_mgr.is_logged_in:
 		pkg_mgr.dispatch_user_logout(user_mgr.get_username())
@@ -1065,6 +1099,9 @@ func _perform_shutdown() -> void:
 
 func perform_logout() -> void:
 	var m: String = T.muted_hex
+	# ★ 注销前保存玩家进度（必须在 logout 前执行）
+	if disc_mgr:
+		disc_mgr._auto_save()
 	# ★ NEW: 分发用户注销钩子
 	if pkg_mgr and user_mgr.is_logged_in:
 		pkg_mgr.dispatch_user_logout(user_mgr.get_username())
@@ -1112,7 +1149,9 @@ func _run_command(raw: String) -> void:
 	if comm_mgr and comm_mgr.is_active:
 		comm_mgr.on_command_executed(cmd_name, cmd_args)
 	# ★ 通知每日剧情系统命令已执行（触发 on_command 类型对话）
-	if daily_dialogue_mgr and env_monitor and not cmd_name.is_empty():
+	# 仅在磁盘含有 env_config（主线剧情模式）或桌面模式时触发
+	var _disc_uses_env: bool = not _desktop_mode and story_manifest.has("env_config")
+	if daily_dialogue_mgr and env_monitor and not cmd_name.is_empty() and (_desktop_mode or _disc_uses_env):
 		daily_dialogue_mgr.trigger_command(env_monitor.current_day, cmd_name)
 	_command_running = false
 	_refocus_input.call_deferred()
@@ -1928,11 +1967,12 @@ func _update_status_bar() -> void:
 		var story_dict: Dictionary = story_manifest.get("story", {}) as Dictionary
 		var title: String = str(story_dict.get("title", "未知"))
 		path_label.text = "磁盘: " + title + " | 路径: " + current_path + " | 等级: " + str(fs.player_clearance)
-	# 邮件图标：始终只显示 [Mail]，有未读邮件时由 mail_sys._tick_blink 控制闪烁
-	if mail_sys != null and mail_sys._blink_active:
-		pass  # 闪烁中，由 _tick_blink 控制透明度
-	else:
+	# 邮件图标：始终显示 [Mail]，有未读邮件时由 mail_sys._tick_blink 控制闪烁（透明度）
+	if mail_icon != null:
 		mail_icon.text = "[Mail]"
+		# 确保在非闪烁状态下透明度为1
+		if mail_sys == null or not mail_sys._blink_active:
+			mail_icon.modulate = Color(1, 1, 1, 1)
 func _update_status_bar_login() -> void:
 	path_label.text = "SCP TERMINAL | 身份验证"
 	mail_icon.text = ""
@@ -2039,8 +2079,9 @@ func _show_welcome_message() -> void:
 		welcome_title = "ACCESS GRANTED"
 	var box: String = fs.build_box([welcome_title, title] as Array[String], p)
 	append_output(box + "\n\n", false)
-	# ★ 环境监测日提示
-	if env_monitor:
+	# ★ 环境监测日提示（仅当磁盘包含 env_config 配置时才显示）
+	var disc_uses_env: bool = env_monitor != null and story_manifest.has("env_config")
+	if disc_uses_env:
 		append_output("[color=%s]═══════════════════════════════════════[/color]\n" % p, false)
 		append_output("[color=%s]  %s 开始  —  %s[/color]\n" % [p, env_monitor.get_day_display(), env_monitor.get_weather_name()], false)
 		append_output("[color=%s]═══════════════════════════════════════[/color]\n" % p, false)
