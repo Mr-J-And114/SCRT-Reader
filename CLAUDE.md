@@ -28,8 +28,14 @@ tune radio signals, and decode ciphers.
 
 ## HOW (Key Conventions)
 - **Architecture**: No autoloads/singletons. main.gd instantiates all managers
-  in `_ready()` with constructor injection. Managers extend RefCounted (or Node
-  if they need `_process`).
+  in `_ready()` with constructor injection via `setup()` methods. Managers extend
+  RefCounted (or Node if they need `_process`).
+- **GDScript style (Godot 4.6)**: Fully typed — all vars, params, returns have
+  type annotations. Always use `class_name` at top. `@onready` with `$` for node
+  refs. Typed signals: `signal foo(bar: String)`. Connect via `.connect(callable)`.
+  JSON via `JSON.new()` then `.parse()`. File I/O via `FileAccess`/`DirAccess`.
+  String formatting with `%` operator. Type cast with `as`. Delays with
+  `await get_tree().create_timer(sec).timeout`.
 - **Output**: Use `main.append_output(bbcode)` or `tw.append(text)` for typed output.
 - **Theme colors**: `T.c_primary()`, `T.c_error()` etc. (return hex strings).
 - **CRT effects**: `crt_shader.play_glitch()`, `crt_shader.play_shake()`, etc.
