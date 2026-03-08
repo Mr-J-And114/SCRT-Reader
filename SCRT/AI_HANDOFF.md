@@ -1,3 +1,6 @@
+> **DEPRECATED**: This document has been split into structured Claude Code project files.
+> See `CLAUDE.md` (root), `docs/architecture.md`, `docs/data-formats.md`, `docs/extension-guide.md`,
+> and local `CLAUDE.md` files in `SCRT/scripts/`, `SCRT/comm_system/`, `SCRT/camera_system/`, `SCRT/radio/`.
 
 # SCRT-Reader AI Handoff Document
 <!-- VERSION:1.3 | ENGINE:Godot4.6 | RENDERER:GL_Compatibility | LAST_UPDATE:2026-03-04 -->
