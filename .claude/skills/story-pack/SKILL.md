@@ -126,7 +126,7 @@ Markdown-like syntax that converts to BBCode:
 
 Suffix modifiers: `.once` (force one-shot), `.repeat` (force repeatable)
 
-### Trigger Actions
+### Trigger Actions (common)
 
 | Action | Description |
 |---|---|
@@ -134,22 +134,12 @@ Suffix modifiers: `.once` (force one-shot), `.repeat` (force repeatable)
 | `level_up:N` | Raise security clearance |
 | `sound:path` | Play sound effect |
 | `text:message` | Output text to terminal |
-| `redirect:/path` | Auto-navigate to directory |
-| `glitch:intensity[:duration_ms]` | Visual glitch (or preset name like `chaos`, `heavy`) |
-| `shake:intensity:duration_ms` | Screen shake |
-| `tear:strength:duration_ms` | Tear distortion |
-| `noise_burst:intensity:duration_ms` | Static burst |
-| `play_effect:effect_id` | Trigger named effect sequence |
-| `preset_effect:name[:duration_ms]` | Preset effect |
-| `screen_off:ms` | Black screen |
-| `reboot` | Simulate reboot |
-| `lock_folder:/path` | Lock directory |
-| `unlock_folder:/path` | Unlock directory |
-| `color_scheme:theme[:force]` | Switch theme |
 | `comm:dialogue_id` | Trigger dialogue |
-| `delay:ms:action` | Delay then execute action |
-| `camera_unlock:cam_id` | Unlock camera |
-| `camera_anomaly:cam_id[:anom_id]` | Trigger camera anomaly |
+| `glitch:preset` | Visual effect (`chaos`/`heavy`/`moderate`/`subtle`) |
+| `delay:ms:action` | Delay then execute nested action |
+
+Full list (20+ actions including camera, screen, folder lock, reboot, etc.):
+see `docs/story-authoring-guide.txt` ch.10
 
 ## Step 4: Package as ZIP
 

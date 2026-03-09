@@ -39,40 +39,12 @@ Check the following project-specific conventions:
 - [ ] Typed arrays where possible: `Array[String]`, `Array[Dictionary]`
 - [ ] Null checks before member access: `if f != null:`, `if obj and obj.is_active:`
 
-### Godot 4.6 API Patterns
-- [ ] JSON parsing via instance method (NOT static):
-  ```gdscript
-  var json := JSON.new()
-  var err := json.parse(f.get_as_text())
-  if err != OK: return null
-  var data: Dictionary = json.data as Dictionary
-  ```
-- [ ] JSON serialization: `JSON.stringify(data, "\t")`
-- [ ] File I/O via `FileAccess` / `DirAccess` (NOT `File` / `Directory`):
-  ```gdscript
-  var f := FileAccess.open(path, FileAccess.READ)
-  if f == null: return null
-  # ... use f ...
-  f.close()
-  ```
-- [ ] Directory operations: `DirAccess.dir_exists_absolute()`, `DirAccess.make_dir_recursive_absolute()`
-- [ ] File existence: `FileAccess.file_exists(path)`
-- [ ] Tweens via `create_tween()` (NOT `Tween.new()`):
-  ```gdscript
-  var tw_anim: Tween = create_tween()
-  tw_anim.tween_method(func(v: float): mat.set_shader_parameter("param", v), 0.0, 1.0, 0.5)
-  ```
-- [ ] Delays via await:
-  ```gdscript
-  await get_tree().create_timer(0.5).timeout
-  await get_tree().process_frame  # 单帧等待
-  ```
-- [ ] ConfigFile for settings persistence (NOT custom JSON):
-  ```gdscript
-  var cfg := ConfigFile.new()
-  cfg.set_value("section", "key", value)
-  cfg.save(path)
-  ```
+### Godot 4.6 API (one-line checks)
+- [ ] JSON: `JSON.new()` + `.parse()` (NOT static `JSON.parse_string()`)
+- [ ] File I/O: `FileAccess` / `DirAccess` (NOT old `File` / `Directory`)
+- [ ] Tweens: `create_tween()` (NOT `Tween.new()`)
+- [ ] Delays: `await get_tree().create_timer(sec).timeout`
+- [ ] Settings persistence: `ConfigFile` (NOT custom JSON)
 
 ### Architecture
 - [ ] No autoloads/singletons — uses constructor injection via `setup()` in `main.gd._ready()`
