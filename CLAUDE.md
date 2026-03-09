@@ -30,12 +30,10 @@ tune radio signals, and decode ciphers.
 - **Architecture**: No autoloads/singletons. main.gd instantiates all managers
   in `_ready()` with constructor injection via `setup()` methods. Managers extend
   RefCounted (or Node if they need `_process`).
-- **GDScript style (Godot 4.6)**: Fully typed — all vars, params, returns have
-  type annotations. Always use `class_name` at top. `@onready` with `$` for node
-  refs. Typed signals: `signal foo(bar: String)`. Connect via `.connect(callable)`.
-  JSON via `JSON.new()` then `.parse()`. File I/O via `FileAccess`/`DirAccess`.
-  String formatting with `%` operator. Type cast with `as`. Delays with
-  `await get_tree().create_timer(sec).timeout`.
+- **GDScript style (Godot 4.6)**: Fully typed (all vars/params/returns), `class_name`
+  at top, `@onready` + `$`, typed signals, `.connect(callable)`, `JSON.new().parse()`,
+  `FileAccess`/`DirAccess`, `%` formatting, `as` casting, `await create_timer()`.
+  See code-review skill for full checklist.
 - **Output**: Use `main.append_output(bbcode)` or `tw.append(text)` for typed output.
 - **Theme colors**: `T.c_primary()`, `T.c_error()` etc. (return hex strings).
 - **CRT effects**: `crt_shader.play_glitch()`, `crt_shader.play_shake()`, etc.
@@ -60,11 +58,25 @@ tune radio signals, and decode ciphers.
 - `res://vdisc/` in editor, `./vdisc/` in exported build for disc storage.
 - Effect safety: check `effect_settings.is_effect_allowed("jumpscare")` before visual scares.
 
+## MODE FLAGS (main.gd input priority)
+
+```
+_booting > _shutting_down > _comm_active > _viewer_active > _camera_mode >
+_radio_mode > _env_mode > _explore_mode > _decode_mode > _password_mode >
+_login_mode > [normal terminal input]
+```
+
+Each flag gates a section in `main._input()`. If stuck `true`, lower-priority input blocked.
+
 ## SEE ALSO
 - `docs/architecture.md` — Full dependency graph, scene tree, script reference
 - `docs/data-formats.md` — .scp format, CRTML markup, boot config, save system
 - `docs/extension-guide.md` — Step-by-step for adding new features
-- `SCRT/scripts/CLAUDE.md` — Core scripts patterns
+- `SCRT/scripts/CLAUDE.md` — Core scripts patterns + file index
 - `SCRT/comm_system/CLAUDE.md` — Comm/dial system details
 - `SCRT/camera_system/CLAUDE.md` — Camera shader pipeline
 - `SCRT/radio/CLAUDE.md` — Radio system details
+- `SCRT/env_system/CLAUDE.md` — Environmental monitoring sensors/tasks
+- `SCRT/settings/CLAUDE.md` — Settings registry/storage
+- `SCRT/modder/CLAUDE.md` — Mod API/lifecycle
+- `SCRT/templates/CLAUDE.md` — Document viewer templates
