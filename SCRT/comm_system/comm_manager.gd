@@ -132,27 +132,52 @@ func _load_tutorial_json() -> void:
 			_dialogues[dlg_id] = dialogues[dlg_id]
 			print("[CommManager] 已加载教程对话: %s" % dlg_id)
 
-## 为 AVA 角色加载 res:// 静态头像
+## 通用分层角色设置（供 _setup_ava_portrait 等调用，也可由外部调用）
+func setup_layered_character(char_id: String, sprite_dir: String, config: Dictionary) -> void:
+	if not _characters.has(char_id):
+		push_warning("[CommManager] 角色不存在: %s" % char_id)
+		return
+	var ch: CommCharacter = _characters[char_id]
+	ch.sprite_mode = CommCharacter.SpriteMode.LAYERED
+	ch.sprite_dir = sprite_dir
+	ch.layer_config = config
+	ch._load_layered_sprites({}, null)
+	print("[CommManager] %s 分层头像已加载 (%d layers, %d mouth shapes)" % [
+		char_id, ch.layer_textures.size(), ch.mouth_textures.size()
+	])
+
+## 为 AVA 角色加载分层头像素材
 func _setup_ava_portrait() -> void:
 	if not _characters.has("ava"):
 		return
-	var tex_path: String = "res://images/character/ava-tmp.png"
-	if not ResourceLoader.exists(tex_path):
-		push_warning("[CommManager] AVA 头像不存在: " + tex_path)
-		return
-	var tex = load(tex_path)
-	if tex is Texture2D:
-		var ch: CommCharacter = _characters["ava"]
-		# 将 Texture2D 转为 ImageTexture（如果需要）
-		if tex is ImageTexture:
-			ch.static_portrait = tex
-		else:
-			# CompressedTexture2D → ImageTexture
-			var img: Image = tex.get_image()
-			if img:
-				ch.static_portrait = ImageTexture.create_from_image(img)
-		ch.sprite_mode = CommCharacter.SpriteMode.STATIC
-		print("[CommManager] AVA 头像已加载")
+	setup_layered_character("ava", "res://images/character/ava/", {
+		"order": ["head", "nose", "eye_L", "eye_R", "mouth", "eyehair", "glasses", "body"],
+		"files": {
+			"head": "ava-head.png",
+			"nose": "ava-nose.png",
+			"eyehair": "ava-eyehair.png",
+			"glasses": "ava-glasses.png",
+			"body": "ava-body-1.png",
+		},
+		"eye_files": {
+			"eye_L_open": "ava-eyes-1-L-open.png",
+			"eye_L_half": "ava-eyes-2-L-half.png",
+			"eye_L_close": "ava-eyes-3-L-close.png",
+			"eye_R_open": "ava-eyes-1-R-open.png",
+			"eye_R_half": "ava-eyes-2-R-half.png",
+			"eye_R_close": "ava-eyes-3-R-close.png",
+		},
+		"mouth_files": {
+			"MBP": "ava-M-1-MBP-closed.png",
+			"slight": "ava-M-2-slightopen.png",
+			"A": "ava-M-3-A.png",
+			"EI": "ava-M-4-EI.png",
+			"O": "ava-M-5-O.png",
+			"UW": "ava-M-6-UW.png",
+			"FV": "ava-M-7-FV.png",
+			"LNTS": "ava-M-8-LNTS.png",
+		},
+	})
 
 ## 为 researcher 角色加载 res:// 静态头像
 func _setup_researcher_portrait() -> void:
@@ -492,6 +517,33 @@ func _stop_speaking() -> void:
 func _speak_char(ch: String) -> void:
 	if _voice:
 		_voice.speak_char(ch)
+
+# ══════════════════════════════════════════
+#  Meeting 模式 API
+# ══════════════════════════════════════════
+
+## 切换显示模式: "card" / "meeting"
+func set_display_mode(mode: String) -> void:
+	_ui.set_display_mode(mode)
+
+## 设置 meeting 模式下角色位置 (slot: "left"/"center"/"right")
+func set_meeting_char(char_id: String, slot: String) -> void:
+	if not _characters.has(char_id):
+		return
+	var character: CommCharacter = _characters[char_id]
+	_ui.ensure_meeting_char(character, slot)
+
+## 播放 meeting 模式动画
+func play_meeting_anim(char_id: String, anim: String) -> void:
+	_ui.play_meeting_anim(char_id, anim)
+
+## 隐藏 meeting 模式角色
+func hide_meeting_char(char_id: String) -> void:
+	_ui.hide_meeting_char(char_id)
+
+## 清除所有 meeting 角色并回到 card 模式
+func clear_meeting() -> void:
+	_ui.clear_meeting_chars()
 
 # ══════════════════════════════════════════
 #  条件系统
@@ -927,6 +979,15 @@ func handle_comm_command(args: Array = []) -> void:
 				trigger_dialogue(call_id)
 			return
 
+		# comm video / meeting → 直接进入视频通讯（meeting 模式）
+		if target_id == "video" or target_id == "meeting":
+			var meeting_dlg: String = _find_meeting_dialogue()
+			if meeting_dlg.is_empty():
+				_main.append_output("[color=" + m + "]当前没有可用的视频通讯频道。[/color]\n", false)
+			else:
+				trigger_dialogue(meeting_dlg)
+			return
+
 		# comm <号码格式> → 通过 dial_manager 拨号
 		if _main.dial_mgr != null and _main.dial_mgr.is_number_format(target_id):
 			if _main.dial_mgr.is_active():
@@ -937,7 +998,7 @@ func handle_comm_command(args: Array = []) -> void:
 
 		# 其他参数 → 提示使用 dial 命令
 		_main.append_output("[color=" + e + "]未知参数: " + target_id + "[/color]\n", false)
-		_main.append_output("[color=" + m + "]用法: comm / comm answer / comm phonebook[/color]\n", false)
+		_main.append_output("[color=" + m + "]用法: comm / comm answer / comm phonebook / comm video[/color]\n", false)
 		_main.append_output("[color=" + m + "]如需联络，请使用 dial <号码> 拨号呼叫。[/color]\n", false)
 		return
 
@@ -972,6 +1033,7 @@ func handle_comm_command(args: Array = []) -> void:
 
 	_main.append_output("\n[color=" + p + "]════════════════════════════════════[/color]\n", false)
 	_main.append_output("[color=" + m + "]拨号联络: dial <号码>  (如 dial 1001-0001)[/color]\n", false)
+	_main.append_output("[color=" + m + "]视频通讯: comm video[/color]\n", false)
 	_main.append_output("[color=" + m + "]查看号码簿: phonebook[/color]\n", false)
 	if not _pending_incoming_call.is_empty():
 		_main.append_output("[color=" + m + "]接听来电: comm answer[/color]\n", false)
@@ -980,6 +1042,24 @@ func handle_comm_command(args: Array = []) -> void:
 # ══════════════════════════════════════════
 #  拨号系统集成
 # ══════════════════════════════════════════
+
+## ★ 查找可用的 meeting 模式对话（优先 ava_meeting，然后扫描含 meeting 字段的对话）
+func _find_meeting_dialogue() -> String:
+	# 优先查找以 _meeting 结尾的对话
+	var meeting_candidates: Array[String] = ["ava_meeting"]
+	for candidate in meeting_candidates:
+		if _dialogues.has(candidate) and _is_user_callable(candidate):
+			return candidate
+	# 扫描所有 callable 对话，查找含 display_mode: meeting 的
+	for dlg_id in _dialogues.keys():
+		if not _is_user_callable(dlg_id):
+			continue
+		var dlg: Dictionary = _dialogues[dlg_id] as Dictionary
+		var lines: Array = dlg.get("lines", []) as Array
+		for line in lines:
+			if line is Dictionary and str(line.get("display_mode", "")) == "meeting":
+				return dlg_id
+	return ""
 
 ## ★ 显示号码簿
 func _show_phonebook() -> void:

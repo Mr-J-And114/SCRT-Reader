@@ -50,7 +50,7 @@ var layer_textures: Dictionary = {}
 ## 表情帧 { "neutral": { "eyes": ImageTexture, "mouth_default": "closed" }, ... }
 var expression_data: Dictionary = {}
 
-## 嘴型帧 { "closed": ImageTexture, "half": ImageTexture, "open": ImageTexture, "wide": ImageTexture }
+## 嘴型帧 { "MBP": ImageTexture, "slight": ImageTexture, "A": ImageTexture, ... }
 var mouth_textures: Dictionary = {}
 
 ## 眨眼帧 { "neutral_blink": ImageTexture, ... }
@@ -62,6 +62,12 @@ var action_frames: Dictionary = {}
 ## overlay 纹理列表
 var overlay_textures: Dictionary = {}
 
+## 分层渲染顺序与文件映射（可由 manifest 或 comm_manager 配置）
+var layer_config: Dictionary = {
+	"order": [],
+	"files": {},
+}
+
 # ══════════════════════════════════════════
 #  当前状态
 # ══════════════════════════════════════════
@@ -69,7 +75,7 @@ var current_expression: String = "neutral"
 var current_mouth: String = "closed"
 var current_action: String = ""
 var is_speaking: bool = false
-var is_blinking: bool = false
+var blink_phase: int = 0  # 0=open, 1=half_closing, 2=closed, 3=half_opening
 
 # 嘴型动画计时
 var _mouth_timer: float = 0.0
@@ -122,6 +128,10 @@ func load_from_config(config: Dictionary, fs: FileSystem) -> void:
 	if config.has("voice") and config["voice"] is Dictionary:
 		for key in config["voice"].keys():
 			voice_config[key] = config["voice"][key]
+
+	# 分层素材配置（从 manifest 或代码传入）
+	if config.has("layer_config") and config["layer_config"] is Dictionary:
+		layer_config = config["layer_config"]
 
 	# 判断素材模式
 	var mode_str: String = str(config.get("sprite_mode", "")).to_lower()
@@ -183,14 +193,73 @@ func _load_mouth_frames(config: Dictionary, fs: FileSystem) -> void:
 		if texture:
 			mouth_textures[mouth_keys[i]] = texture
 
-## 加载分层素材（★ 预留：后续素材到位后实现）
+## 加载分层素材
 func _load_layered_sprites(_config: Dictionary, _fs: FileSystem) -> void:
-	# TODO: 加载 background, body, face, eyes, mouth, overlay 各层
-	# 当前降级为静态模式
-	push_warning("[CommCharacter] 分层素材尚未实现，降级为静态模式")
-	sprite_mode = SpriteMode.STATIC
-	_load_static_portrait(_config, _fs)
-	_load_mouth_frames(_config, _fs)
+	var base_path: String = sprite_dir
+	if base_path.is_empty():
+		push_warning("[CommCharacter] sprite_dir 为空，无法加载分层素材")
+		sprite_mode = SpriteMode.STATIC
+		_load_static_portrait(_config, _fs)
+		return
+
+	# 加载静态图层
+	var files_map: Dictionary = layer_config.get("files", {})
+	for layer_name in files_map.keys():
+		var file: String = str(files_map[layer_name])
+		if file.is_empty():
+			continue
+		var full_path: String = base_path + file
+		if not ResourceLoader.exists(full_path):
+			push_warning("[CommCharacter] 图层未找到: %s" % full_path)
+			continue
+		var tex: Texture2D = load(full_path)
+		if tex:
+			layer_textures[layer_name] = tex
+
+	# 加载眼睛状态 (3 状态 × 2 侧)
+	var eye_files: Dictionary = layer_config.get("eye_files", {})
+	for key in eye_files.keys():
+		var full_path: String = base_path + str(eye_files[key])
+		if ResourceLoader.exists(full_path):
+			var tex: Texture2D = load(full_path)
+			if tex:
+				layer_textures[key] = tex
+
+	# 加载嘴型音素帧 (8 种)
+	var mouth_map: Dictionary = layer_config.get("mouth_files", {})
+	for key in mouth_map.keys():
+		var full_path: String = base_path + str(mouth_map[key])
+		if ResourceLoader.exists(full_path):
+			var tex: Texture2D = load(full_path)
+			if tex:
+				mouth_textures[key] = tex
+
+	# 加载失败则降级
+	if layer_textures.is_empty():
+		push_warning("[CommCharacter] 分层素材加载失败，降级为静态模式")
+		sprite_mode = SpriteMode.STATIC
+		_load_static_portrait(_config, _fs)
+		return
+
+	# 分层模式使用 8 音素嘴型序列
+	_mouth_sequence = ["MBP", "slight", "A", "EI", "O", "UW", "slight", "MBP"]
+	current_mouth = "MBP"
+
+	# 加载动作帧序列（可选）
+	var act_files: Dictionary = layer_config.get("action_files", {})
+	for action_id in act_files.keys():
+		var frames_list: Array = act_files[action_id] as Array
+		if frames_list == null or frames_list.is_empty():
+			continue
+		var loaded_frames: Array = []
+		for frame_file in frames_list:
+			var full_path: String = base_path + str(frame_file)
+			if ResourceLoader.exists(full_path):
+				var tex: Texture2D = load(full_path)
+				if tex:
+					loaded_frames.append(tex)
+		if not loaded_frames.is_empty():
+			action_frames[action_id] = loaded_frames
 
 ## 从文件系统加载纹理
 func _load_texture_from_fs(path: String, fs: FileSystem) -> ImageTexture:
@@ -226,12 +295,12 @@ func start_speaking() -> void:
 	is_speaking = true
 	_mouth_timer = 0.0
 	_mouth_index = 0
-	current_mouth = "closed"
+	current_mouth = _mouth_sequence[0]
 
 ## 停止说话
 func stop_speaking() -> void:
 	is_speaking = false
-	current_mouth = "closed"
+	current_mouth = _mouth_sequence[0]
 	_mouth_index = 0
 
 ## 播放动作
@@ -269,17 +338,20 @@ func _process_mouth(delta: float) -> void:
 func _process_blink(delta: float) -> void:
 	if _blink_active:
 		_blink_timer += delta
-		if _blink_timer >= _blink_duration:
-			_blink_active = false
-			is_blinking = false
+		var phase_duration: float = _blink_duration / 4.0  # 4 阶段过渡
+		if _blink_timer >= phase_duration:
 			_blink_timer = 0.0
-			_blink_interval = randf_range(2.0, 5.0)
+			blink_phase += 1
+			if blink_phase >= 4:  # 完成一轮: 0(open)→1(half)→2(close)→3(half)→0(open)
+				blink_phase = 0
+				_blink_active = false
+				_blink_interval = randf_range(2.0, 5.0)
 		return
 
 	_blink_timer += delta
 	if _blink_timer >= _blink_interval:
 		_blink_active = true
-		is_blinking = true
+		blink_phase = 1  # 开始闭眼
 		_blink_timer = 0.0
 
 func _process_action(delta: float) -> void:
@@ -307,7 +379,7 @@ func get_render_state() -> Dictionary:
 		"expression": current_expression,
 		"mouth": current_mouth,
 		"is_speaking": is_speaking,
-		"is_blinking": is_blinking,
+		"blink_phase": blink_phase,
 		"action": current_action,
 		"action_playing": _action_playing,
 		"action_frame": _action_frame_index,

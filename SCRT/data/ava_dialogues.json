@@ -1,150 +1,300 @@
 {
-    "comm_characters": {},
-    "comm_dialogues": {
-        "ava_greeting": {
-            "title": "AVA - 日常问候",
-            "description": "联络员AVA的日常问候",
-            "callable": true,
-            "repeatable": true,
-            "lines": [
-                {
-                    "character": "ava",
-                    "text": "你好，特工。系统一切正常运行中。",
-                    "speed": 35
-                },
-                {
-                    "character": "ava",
-                    "text": "如果你需要帮助，随时呼叫我。输入 [color=#ffaa00]help[/color] 查看可用命令。",
-                    "speed": 35
-                },
-                {
-                    "character": "ava",
-                    "text": "祝你工作顺利。AVA 持续监控中。",
-                    "speed": 35
-                }
-            ]
-        },
-        "ava_login_welcome": {
-            "title": "AVA - 登录欢迎",
-            "description": "每次登录时的欢迎通讯",
-            "callable": false,
-            "repeatable": true,
-            "lines": [
-                {
-                    "character": "ava",
-                    "text": "检测到身份验证完成。欢迎回来，特工。",
-                    "speed": 35
-                },
-                {
-                    "character": "ava",
-                    "text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
-                    "speed": 35
-                }
-            ]
-        },
-        "ava_idle_hint_1": {
-            "title": "AVA - 空闲提示",
-            "callable": false,
-            "repeatable": true,
-            "lines": [
-                {
-                    "character": "ava",
-                    "text": "特工，检测到你似乎处于空闲状态。",
-                    "speed": 30
-                },
-                {
-                    "character": "ava",
-                    "text": "建议检查你的邮件或查阅文件系统中的文档。可能有新的任务等待处理。",
-                    "speed": 30
-                }
-            ]
-        },
-        "ava_idle_hint_2": {
-            "title": "AVA - 文件系统提示",
-            "callable": false,
-            "repeatable": true,
-            "lines": [
-                {
-                    "character": "ava",
-                    "text": "提醒：你可以使用 [color=#ffaa00]ls[/color] 查看当前目录，[color=#ffaa00]cd[/color] 切换目录，[color=#ffaa00]cat[/color] 查看文件内容。",
-                    "speed": 30
-                }
-            ]
-        },
-        "ava_chat": {
-            "title": "AVA - 闲聊",
-            "description": "与联络员AVA进行简短交流",
-            "callable": true,
-            "repeatable": true,
-            "lines": [
-                {
-                    "character": "ava",
-                    "text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]",
-                    "speed": 0,
-                    "wait_for": "choice:ava_chat_q1"
-                }
-            ]
-        },
-        "ava_chat_a1": {
-            "title": "AVA - 自我介绍",
-            "callable": false,
-            "repeatable": true,
-            "lines": [
-                {
-                    "character": "ava",
-                    "text": "我是 AVA —— 自适应虚拟助理。",
-                    "speed": 35
-                },
-                {
-                    "character": "ava",
-                    "text": "我的职责是协助特工执行任务、管理通讯频道，以及提供系统操作指引。",
-                    "speed": 30
-                },
-                {
-                    "character": "ava",
-                    "text": "虽然我是AI系统，但我会尽力提供有用的支持。",
-                    "speed": 30
-                }
-            ]
-        },
-        "ava_chat_a2": {
-            "title": "AVA - 系统介绍",
-            "callable": false,
-            "repeatable": true,
-            "lines": [
-                {
-                    "character": "ava",
-                    "text": "这是SCP基金会的安全终端系统。",
-                    "speed": 35
-                },
-                {
-                    "character": "ava",
-                    "text": "你可以通过命令行界面访问文件系统、通讯系统和各类工具。",
-                    "speed": 30
-                },
-                {
-                    "character": "ava",
-                    "text": "输入 [color=#ffaa00]help[/color] 获取命令列表。所有操作都在安全监控之下。",
-                    "speed": 30
-                }
-            ]
-        },
-        "ava_chat_a3": {
-            "title": "AVA - 闲聊回应",
-            "callable": false,
-            "repeatable": true,
-            "lines": [
-                {
-                    "character": "ava",
-                    "text": "了解。随时可以联络我。",
-                    "speed": 35
-                },
-                {
-                    "character": "ava",
-                    "text": "AVA 保持在线。祝一切顺利，特工。",
-                    "speed": 30
-                }
-            ]
-        }
-    }
+	"comm_characters": {},
+	"comm_dialogues": {
+		"ava_greeting": {
+			"title": "AVA - 日常问候",
+			"description": "联络员AVA的日常问候",
+			"callable": true,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "你好，特工。系统一切正常运行中。",
+					"speed": 35
+				},
+				{
+					"character": "ava",
+					"text": "如果你需要帮助，随时呼叫我。输入 [color=#ffaa00]help[/color] 查看可用命令。",
+					"speed": 35
+				},
+				{
+					"character": "ava",
+					"text": "祝你工作顺利。AVA 持续监控中。",
+					"speed": 35
+				}
+			]
+		},
+		"ava_login_welcome": {
+			"title": "AVA - 登录欢迎",
+			"description": "每次登录时的欢迎通讯",
+			"callable": false,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "检测到身份验证完成。欢迎回来，特工。",
+					"speed": 35
+				},
+				{
+					"character": "ava",
+					"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+					"speed": 35
+				}
+			]
+		},
+		"ava_idle_hint_1": {
+			"title": "AVA - 空闲提示",
+			"callable": false,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "特工，检测到你似乎处于空闲状态。",
+					"speed": 30
+				},
+				{
+					"character": "ava",
+					"text": "建议检查你的邮件或查阅文件系统中的文档。可能有新的任务等待处理。",
+					"speed": 30
+				}
+			]
+		},
+		"ava_idle_hint_2": {
+			"title": "AVA - 文件系统提示",
+			"callable": false,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "提醒：你可以使用 [color=#ffaa00]ls[/color] 查看当前目录，[color=#ffaa00]cd[/color] 切换目录，[color=#ffaa00]cat[/color] 查看文件内容。",
+					"speed": 30
+				}
+			]
+		},
+		"ava_chat": {
+			"title": "AVA - 闲聊",
+			"description": "与联络员AVA进行简短交流",
+			"callable": true,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]\n[color=#888888]4. 开启视频通讯。[/color]",
+					"speed": 0,
+					"wait_for": "choice:ava_chat_q1"
+				}
+			]
+		},
+		"ava_chat_a1": {
+			"title": "AVA - 自我介绍",
+			"callable": false,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "我是 AVA —— 自适应虚拟助理。",
+					"speed": 35
+				},
+				{
+					"character": "ava",
+					"text": "我的职责是协助特工执行任务、管理通讯频道，以及提供系统操作指引。",
+					"speed": 30
+				},
+				{
+					"character": "ava",
+					"text": "虽然我是AI系统，但我会尽力提供有用的支持。",
+					"speed": 30
+				}
+			]
+		},
+		"ava_chat_a2": {
+			"title": "AVA - 系统介绍",
+			"callable": false,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "这是SCP基金会的安全终端系统。",
+					"speed": 35
+				},
+				{
+					"character": "ava",
+					"text": "你可以通过命令行界面访问文件系统、通讯系统和各类工具。",
+					"speed": 30
+				},
+				{
+					"character": "ava",
+					"text": "输入 [color=#ffaa00]help[/color] 获取命令列表。所有操作都在安全监控之下。",
+					"speed": 30
+				}
+			]
+		},
+		"ava_chat_a3": {
+			"title": "AVA - 闲聊回应",
+			"callable": false,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "了解。随时可以联络我。",
+					"speed": 35
+				},
+				{
+					"character": "ava",
+					"text": "AVA 保持在线。祝一切顺利，特工。",
+					"speed": 30
+				}
+			]
+		},
+		"ava_chat_a4": {
+			"title": "AVA - 视频通讯 (从闲聊)",
+			"callable": false,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "正在建立加密视频链路……请稍候。",
+					"speed": 30,
+					"auto_next": 1.5
+				},
+				{
+					"character": "ava",
+					"text": "链路已建立。切换到全息显示模式。",
+					"display_mode": "meeting",
+					"meeting_slot": "center",
+					"char_anim": "slide_in_center",
+					"speed": 25
+				},
+				{
+					"character": "ava",
+					"text": "你好，特工。欢迎使用高清通讯模式。你现在可以看到我的完整形象了。",
+					"speed": 22
+				},
+				{
+					"character": "ava",
+					"text": "如果你有什么需要讨论的，我在这里。不过，视频通讯会消耗额外带宽。",
+					"speed": 22
+				},
+				{
+					"character": "ava",
+					"text": "好的，视频通讯结束。回到常规通讯模式。",
+					"char_anim": "fade_out",
+					"speed": 25,
+					"auto_next": 0.8
+				},
+				{
+					"character": "ava",
+					"text": "AVA 持续在线。如需视频通讯，随时呼叫。",
+					"display_mode": "card",
+					"speed": 30
+				}
+			]
+		},
+		"ava_meeting": {
+			"title": "AVA - 视频通讯",
+			"description": "与AVA建立全息视频通讯（大图模式）",
+			"callable": true,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "收到呼叫请求。正在建立加密视频链路……",
+					"speed": 30,
+					"auto_next": 1.8
+				},
+				{
+					"character": "ava",
+					"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+					"speed": 0,
+					"auto_next": 0.5,
+					"screen_effect": "noise"
+				},
+				{
+					"character": "ava",
+					"text": "特工，这里是 AVA。全息通讯模式已激活。",
+					"display_mode": "meeting",
+					"meeting_slot": "center",
+					"char_anim": "slide_in_center",
+					"speed": 22
+				},
+				{
+					"character": "ava",
+					"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "让我调整一下位置。移动到画面左侧——",
+					"display_mode": "meeting",
+					"meeting_slot": "left",
+					"char_anim": "slide_in_left",
+					"speed": 22,
+					"auto_next": 1.5
+				},
+				{
+					"character": "ava",
+					"text": "现在移动到右侧。",
+					"display_mode": "meeting",
+					"meeting_slot": "right",
+					"char_anim": "slide_in_right",
+					"speed": 25,
+					"auto_next": 1.5
+				},
+				{
+					"character": "ava",
+					"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+					"display_mode": "meeting",
+					"meeting_slot": "center",
+					"char_anim": "fade_in",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+					"speed": 0,
+					"char_anim": "shake",
+					"screen_effect": "glitch",
+					"auto_next": 0.8
+				},
+				{
+					"character": "ava",
+					"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+					"speed": 22
+				},
+				{
+					"character": "ava",
+					"text": "正在关闭全息链路……",
+					"char_anim": "fade_out",
+					"speed": 25,
+					"auto_next": 1.0
+				},
+				{
+					"character": "ava",
+					"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm[/color] 选择视频通讯频道，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+					"display_mode": "card",
+					"speed": 25
+				},
+				{
+					"character": "ava",
+					"text": "AVA 持续监控中。祝你工作顺利，特工。",
+					"speed": 30
+				}
+			]
+		}
+	}
 }

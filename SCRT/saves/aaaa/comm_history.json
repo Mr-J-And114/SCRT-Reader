@@ -1372,5 +1372,509 @@
 		"name": "A.V.A.",
 		"text": "AVA 保持在线。祝一切顺利，特工。",
 		"time": "2026-03-07 00:38:45"
+	},
+	{
+		"dialogue_id": "day4_morning",
+		"name": "A.V.A.",
+		"text": "操作员，总部终于回复了之前的异常报告。",
+		"time": "2026-03-12 00:08:59"
+	},
+	{
+		"dialogue_id": "day4_morning",
+		"name": "A.V.A.",
+		"text": "他们说……需要更多数据。标准回应。请继续监测，我会把每日报告同步上传。",
+		"time": "2026-03-12 00:09:03"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 00:19:59"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 00:20:06"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 01:19:45"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 01:19:50"
+	},
+	{
+		"dialogue_id": "ava_chat",
+		"name": "A.V.A.",
+		"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]",
+		"time": "2026-03-12 01:20:19"
+	},
+	{
+		"dialogue_id": "ava_chat_a1",
+		"name": "A.V.A.",
+		"text": "我是 AVA —— 自适应虚拟助理。",
+		"time": "2026-03-12 01:20:22"
+	},
+	{
+		"dialogue_id": "ava_chat_a1",
+		"name": "A.V.A.",
+		"text": "我的职责是协助特工执行任务、管理通讯频道，以及提供系统操作指引。",
+		"time": "2026-03-12 01:20:25"
+	},
+	{
+		"dialogue_id": "ava_chat_a1",
+		"name": "A.V.A.",
+		"text": "虽然我是AI系统，但我会尽力提供有用的支持。",
+		"time": "2026-03-12 01:20:26"
+	},
+	{
+		"dialogue_id": "ava_chat",
+		"name": "A.V.A.",
+		"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]",
+		"time": "2026-03-12 01:21:03"
+	},
+	{
+		"dialogue_id": "ava_chat_a2",
+		"name": "A.V.A.",
+		"text": "这是SCP基金会的安全终端系统。",
+		"time": "2026-03-12 01:21:04"
+	},
+	{
+		"dialogue_id": "ava_chat_a2",
+		"name": "A.V.A.",
+		"text": "你可以通过命令行界面访问文件系统、通讯系统和各类工具。",
+		"time": "2026-03-12 01:21:05"
+	},
+	{
+		"dialogue_id": "ava_chat_a2",
+		"name": "A.V.A.",
+		"text": "输入 [color=#ffaa00]help[/color] 获取命令列表。所有操作都在安全监控之下。",
+		"time": "2026-03-12 01:21:06"
+	},
+	{
+		"dialogue_id": "ava_chat",
+		"name": "A.V.A.",
+		"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]",
+		"time": "2026-03-12 01:25:52"
+	},
+	{
+		"dialogue_id": "ava_chat_a3",
+		"name": "A.V.A.",
+		"text": "了解。随时可以联络我。",
+		"time": "2026-03-12 01:25:56"
+	},
+	{
+		"dialogue_id": "ava_chat_a3",
+		"name": "A.V.A.",
+		"text": "AVA 保持在线。祝一切顺利，特工。",
+		"time": "2026-03-12 01:25:58"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 01:36:56"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 01:36:58"
+	},
+	{
+		"dialogue_id": "ava_chat",
+		"name": "A.V.A.",
+		"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]\n[color=#888888]4. 开启视频通讯。[/color]",
+		"time": "2026-03-12 01:37:19"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "正在建立加密视频链路……请稍候。",
+		"time": "2026-03-12 01:37:21"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "链路已建立。切换到全息显示模式。",
+		"time": "2026-03-12 01:37:23"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "你好，特工。欢迎使用高清通讯模式。你现在可以看到我的完整形象了。",
+		"time": "2026-03-12 01:37:26"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "如果你有什么需要讨论的，我在这里。不过，视频通讯会消耗额外带宽。",
+		"time": "2026-03-12 01:37:27"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "好的，视频通讯结束。回到常规通讯模式。",
+		"time": "2026-03-12 01:37:29"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "AVA 持续在线。如需视频通讯，随时呼叫。",
+		"time": "2026-03-12 01:37:31"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "收到呼叫请求。正在建立加密视频链路……",
+		"time": "2026-03-12 01:38:10"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+		"time": "2026-03-12 01:38:12"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "特工，这里是 AVA。全息通讯模式已激活。",
+		"time": "2026-03-12 01:38:13"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+		"time": "2026-03-12 01:38:14"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+		"time": "2026-03-12 01:38:16"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+		"time": "2026-03-12 01:38:18"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "让我调整一下位置。移动到画面左侧——",
+		"time": "2026-03-12 01:38:19"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "现在移动到右侧。",
+		"time": "2026-03-12 01:38:21"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+		"time": "2026-03-12 01:38:22"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+		"time": "2026-03-12 01:38:24"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+		"time": "2026-03-12 01:38:25"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+		"time": "2026-03-12 01:38:26"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "正在关闭全息链路……",
+		"time": "2026-03-12 01:38:27"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm[/color] 选择视频通讯频道，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+		"time": "2026-03-12 01:38:28"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "AVA 持续监控中。祝你工作顺利，特工。",
+		"time": "2026-03-12 01:38:30"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 01:58:12"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 01:58:14"
+	},
+	{
+		"dialogue_id": "ava_chat",
+		"name": "A.V.A.",
+		"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]\n[color=#888888]4. 开启视频通讯。[/color]",
+		"time": "2026-03-12 01:58:30"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "正在建立加密视频链路……请稍候。",
+		"time": "2026-03-12 01:58:31"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "链路已建立。切换到全息显示模式。",
+		"time": "2026-03-12 01:58:33"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "你好，特工。欢迎使用高清通讯模式。你现在可以看到我的完整形象了。",
+		"time": "2026-03-12 01:58:36"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "如果你有什么需要讨论的，我在这里。不过，视频通讯会消耗额外带宽。",
+		"time": "2026-03-12 01:58:39"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "好的，视频通讯结束。回到常规通讯模式。",
+		"time": "2026-03-12 01:58:41"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "AVA 持续在线。如需视频通讯，随时呼叫。",
+		"time": "2026-03-12 01:58:42"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 01:59:33"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 01:59:33"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "收到呼叫请求。正在建立加密视频链路……",
+		"time": "2026-03-12 01:59:41"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+		"time": "2026-03-12 01:59:43"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "特工，这里是 AVA。全息通讯模式已激活。",
+		"time": "2026-03-12 01:59:45"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+		"time": "2026-03-12 01:59:50"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+		"time": "2026-03-12 01:59:50"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+		"time": "2026-03-12 01:59:55"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "让我调整一下位置。移动到画面左侧——",
+		"time": "2026-03-12 01:59:58"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "现在移动到右侧。",
+		"time": "2026-03-12 02:00:00"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+		"time": "2026-03-12 02:00:03"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+		"time": "2026-03-12 02:00:06"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+		"time": "2026-03-12 02:00:09"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+		"time": "2026-03-12 02:00:10"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "正在关闭全息链路……",
+		"time": "2026-03-12 02:00:12"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm[/color] 选择视频通讯频道，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+		"time": "2026-03-12 02:00:15"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "AVA 持续监控中。祝你工作顺利，特工。",
+		"time": "2026-03-12 02:00:16"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 02:01:46"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 02:01:47"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "收到呼叫请求。正在建立加密视频链路……",
+		"time": "2026-03-12 02:02:19"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+		"time": "2026-03-12 02:02:21"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "特工，这里是 AVA。全息通讯模式已激活。",
+		"time": "2026-03-12 02:02:22"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+		"time": "2026-03-12 02:02:24"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+		"time": "2026-03-12 02:02:33"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+		"time": "2026-03-12 02:02:41"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "让我调整一下位置。移动到画面左侧——",
+		"time": "2026-03-12 02:02:46"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "现在移动到右侧。",
+		"time": "2026-03-12 02:02:48"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+		"time": "2026-03-12 02:02:51"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+		"time": "2026-03-12 02:02:54"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+		"time": "2026-03-12 02:02:57"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+		"time": "2026-03-12 02:03:02"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "正在关闭全息链路……",
+		"time": "2026-03-12 02:03:03"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm[/color] 选择视频通讯频道，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+		"time": "2026-03-12 02:03:06"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "AVA 持续监控中。祝你工作顺利，特工。",
+		"time": "2026-03-12 02:03:10"
 	}
 ]

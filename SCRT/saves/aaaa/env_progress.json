@@ -30,10 +30,10 @@
 				"radiation_add": 0.5,
 				"seismic_add": 50.0
 			},
-			"end_day": 4,
+			"end_day": 4.0,
 			"name": "Alpha 级环境事件",
 			"scp_related": true,
-			"start_day": 4
+			"start_day": 4.0
 		}
 	},
 	"calibration_offsets": {
@@ -60,9 +60,9 @@
 		"wind_speed": 0.0427448656354768
 	},
 	"current_day": 4,
-	"current_hour": 18.2225938024215,
-	"current_weather": "partly_cloudy",
-	"current_wind_dir": 52.3809882747043,
+	"current_hour": 51.0789615294925,
+	"current_weather": "clear",
+	"current_wind_dir": 225.820851665523,
 	"detected_anomalies": [
 		{
 			"anomaly_id": "radiation_elevation",
@@ -287,6 +287,6 @@
 		"wind_dir": "online",
 		"wind_speed": "online"
 	},
-	"tide_phase": 3.25678959708325,
-	"weather_duration": 5.03000532173202
+	"tide_phase": 1.02902489546392,
+	"weather_duration": 0.524867324866502
 }

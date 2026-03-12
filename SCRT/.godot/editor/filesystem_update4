@@ -1,9 +1,8 @@
-res://scripts/mail_system.gd
+res://comm_system/comm_character.gd
+res://comm_system/comm_manager.gd
+res://comm_system/comm_ui.gd
+res://comm_system/comm_dialogue_player.gd
 res://scenes/main.tscn
 res://addons/agent/ui/resource/AgentTheme.tres
 res://addons/agent/agent.gd
-res://scripts/disc_manager.gd
-res://env_system/env_viewer.gd
-res://scripts/image_viewer.gd
-res://scripts/oscilloscope.gd
-res://scripts/video_player.gd
+res://data/ava_dialogues.json

@@ -1,11 +1,46 @@
 # ============================================================
 # comm_ui.gd — 通讯系统 UI 层
 # ── 底部对话栏 + 角色立绘卡片 + COMM 按钮
+# ── Meeting 模式: galgame 风格大图角色展示
 # ── 历史记录：持久化到磁盘，通过 DocumentViewer 全屏查看
 # ── 使用裁剪容器实现输入框上沿消失线
 # ============================================================
 class_name CommUI
 extends RefCounted
+
+# ══════════════════════════════════════════
+#  ★ 手动微调区 — 修改这些值来调整角色显示
+# ══════════════════════════════════════════
+
+## ── 对话栏 ──
+const DIALOG_BAR_HEIGHT_MIN: float = 100.0         # 对话栏最小高度 (px)
+const DIALOG_BAR_HEIGHT_MAX: float = 300.0         # 对话栏最大高度 (约屏幕 1/3)
+const TOGGLE_BTN_SIZE: float = 24.0                # COMM 按钮高度
+const TOGGLE_BTN_GAP: float = 6.0                  # 按钮与对话栏间距
+const SLIDE_DURATION: float = 0.3                  # 对话栏展开/收起动画时长 (秒)
+const PADDING: float = 12.0                        # 对话栏内边距
+
+## ── 小头像卡片 (Card Mode) ──
+const CARD_SIZE: Vector2 = Vector2(150, 210)       # ★ 卡片宽高 (px), 250:350 比例
+const CARD_MARGIN_BOTTOM: float = 4.0              # ★ 卡片底部与对话栏顶部的间距
+const CARD_OVERLAP: float = 24.0                   # ★ 同位置多卡片叠放偏移
+const PORTRAIT_OFFSET_X: float = 12.0              # ★ 卡片距屏幕左/右边缘的距离
+const CARD_BRIGHTNESS: float = 0.5                 # ★ 卡片亮度 (0.0=全黑, 1.0=原亮度)
+
+## ── 大图模式 (Meeting Mode) ──
+const MEETING_CHAR_HEIGHT_RATIO: float = 0.65      # ★ 角色高度占屏幕高度比例 (0.3~0.8)
+const MEETING_CHAR_BOTTOM_GAP: float = 0.0         # ★ 角色底部与对话栏顶部间距 (px)
+const MEETING_POS_LEFT_X: float = 0.15             # ★ 左侧位置: 角色中心 X (屏幕宽度比例)
+const MEETING_POS_CENTER_X: float = 0.5            # ★ 中间位置
+const MEETING_POS_RIGHT_X: float = 0.85            # ★ 右侧位置
+const MEETING_BRIGHTNESS: float = 0.5             # ★ 大图亮度 (0.0=全黑, 1.0=原亮度)
+const MEETING_SLIDE_DURATION: float = 0.4          # ★ 入场/退场动画时长 (秒)
+const MEETING_SHAKE_INTENSITY: float = 8.0         # ★ 震动幅度 (px)
+const MEETING_SHAKE_DURATION: float = 0.3          # ★ 震动时长 (秒)
+
+# ══════════════════════════════════════════
+#  内部引用与状态
+# ══════════════════════════════════════════
 
 # ── 引用 ──
 var _main: Control = null
@@ -30,9 +65,17 @@ var _collapsed: bool = true
 var _auto_collapsed: bool = false
 var _built: bool = false
 
-# ── 立绘 ──
+# ── 立绘 (Card Mode) ──
 var _portrait_cards: Dictionary = {}
 var _current_character: CommCharacter = null
+
+# ── Meeting Mode ──
+var _display_mode: String = "card"                 # "card" | "meeting"
+var _meeting_chars: Dictionary = {}                # { char_id: { "container", "layer_rects", "slot" } }
+var _meeting_tween: Tween = null
+
+# ── 动态状态 ──
+var _current_bar_height: float = 100.0             # 对话栏当前实际高度
 
 # ── 动画 ──
 var _blink_timer: float = 0.0
@@ -42,19 +85,6 @@ var _mouth_timer: float = 0.0
 # ── 历史数据（内存 + 持久化） ──
 var _history_lines: Array[Dictionary] = []
 var _current_dialogue_id: String = ""
-
-# ── 常量 ──
-const DIALOG_BAR_HEIGHT_MIN: float = 100.0      # 最小高度
-const DIALOG_BAR_HEIGHT_MAX: float = 300.0     # 最大高度（约屏幕1/3）
-var _current_bar_height: float = 100.0           # 当前实际高度
-const TOGGLE_BTN_SIZE: float = 24.0
-const TOGGLE_BTN_GAP: float = 6.0    # 按钮与对话栏之间的间距
-const SLIDE_DURATION: float = 0.3
-const CARD_SIZE: Vector2 = Vector2(150, 210)  # 250:350 一寸照比例
-const CARD_MARGIN_BOTTOM: float = 4.0
-const CARD_OVERLAP: float = 24.0			  # 同位置多卡片叠放偏移量
-const PORTRAIT_OFFSET_X: float = 12.0
-const PADDING: float = 12.0
 
 # 动态计算的目标 Y（相对于 _root 内部坐标）
 var _target_y_expanded: float = 0.0
@@ -597,7 +627,7 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 		var card: Control = card_data["card"]
 		if is_instance_valid(card):
 			card.visible = true
-			card.modulate.a = 1.0
+			card.modulate = Color(CARD_BRIGHTNESS, CARD_BRIGHTNESS, CARD_BRIGHTNESS, 1.0)
 			_update_portrait_texture(card_data, character)
 			# 将当前说话角色提到最前
 			_bring_card_to_front(cid)
@@ -621,20 +651,25 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 	card_style.corner_radius_bottom_right = 0
 	card.add_theme_stylebox_override("panel", card_style)
 
-	# 头像纹理
-	var tex_rect := TextureRect.new()
-	tex_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(tex_rect)
-
-	# 嘴型覆盖层（预留）
-	var mouth_rect := TextureRect.new()
-	mouth_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	mouth_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	mouth_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mouth_rect.visible = false
-	card.add_child(mouth_rect)
+	# 根据角色素材模式创建图层栈（直接挂在 PanelContainer 下，由其自动填充）
+	var layer_rects: Dictionary = {}
+	if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
+		var layer_order: Array = character.layer_config.get("order", [])
+		for layer_name in layer_order:
+			var rect := TextureRect.new()
+			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			card.add_child(rect)
+			layer_rects[layer_name] = rect
+	else:
+		# STATIC/MINIMAL 模式：单张纹理
+		var tex_rect := TextureRect.new()
+		tex_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(tex_rect)
+		layer_rects["static"] = tex_rect
 
 	# 角色名标签（卡片底部）
 	var name_lbl := Label.new()
@@ -652,13 +687,14 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 	card.add_child(name_lbl)
 
 	_root.add_child(card)
+	# ★ 应用卡片亮度（调整 CARD_BRIGHTNESS 常量来改变）
+	card.modulate = Color(CARD_BRIGHTNESS, CARD_BRIGHTNESS, CARD_BRIGHTNESS, 1.0)
 
 	var position_slot: String = character.portrait_position if not character.portrait_position.is_empty() else "left"
 
 	var card_data: Dictionary = {
 		"card": card,
-		"texture_rect": tex_rect,
-		"mouth_rect": mouth_rect,
+		"layer_rects": layer_rects,
 		"name_label": name_lbl,
 		"character_id": cid,
 		"position": position_slot,
@@ -669,16 +705,52 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 	_update_card_layout()
 
 func _update_portrait_texture(card_data: Dictionary, character: CommCharacter) -> void:
-	var tex_rect: TextureRect = card_data["texture_rect"]
+	var layer_rects: Dictionary = card_data.get("layer_rects", {})
+
 	match character.sprite_mode:
-		CommCharacter.SpriteMode.STATIC:
-			if character.static_portrait:
-				tex_rect.texture = character.static_portrait
 		CommCharacter.SpriteMode.LAYERED:
-			if character.static_portrait:
+			_update_layered_portrait(layer_rects, character)
+		CommCharacter.SpriteMode.STATIC:
+			var tex_rect: TextureRect = layer_rects.get("static")
+			if tex_rect and character.static_portrait:
 				tex_rect.texture = character.static_portrait
 		_:
-			tex_rect.texture = null
+			pass  # MINIMAL 模式
+
+func _update_layered_portrait(layer_rects: Dictionary, character: CommCharacter) -> void:
+	var state: Dictionary = character.get_render_state()
+	var layers: Dictionary = state.get("layer_textures", {})
+	var mtex: Dictionary = state.get("mouth_textures", {})
+	var bp: int = state.get("blink_phase", 0)
+	var cur_mouth: String = state.get("mouth", "MBP")
+	var speaking: bool = state.get("is_speaking", false)
+
+	# 更新静态图层
+	for layer_name in ["head", "nose", "eyehair", "glasses", "body"]:
+		var rect: TextureRect = layer_rects.get(layer_name)
+		if rect and layers.has(layer_name):
+			rect.texture = layers[layer_name]
+
+	# 根据眨眼阶段更新眼睛
+	var eye_state: String = "open"
+	match bp:
+		0: eye_state = "open"
+		1, 3: eye_state = "half"
+		2: eye_state = "close"
+
+	for side in ["L", "R"]:
+		var key: String = "eye_%s_%s" % [side, eye_state]
+		var rect: TextureRect = layer_rects.get("eye_%s" % side)
+		if rect and layers.has(key):
+			rect.texture = layers[key]
+
+	# 更新嘴型
+	var mouth_rect: TextureRect = layer_rects.get("mouth")
+	if mouth_rect:
+		if speaking and mtex.has(cur_mouth):
+			mouth_rect.texture = mtex[cur_mouth]
+		else:
+			mouth_rect.texture = mtex.get("MBP")  # 默认闭嘴
 
 ## 将指定角色的卡片提到其位置组的最前面（z_index最高）
 func _bring_card_to_front(active_cid: String) -> void:
@@ -752,18 +824,50 @@ func _update_card_layout() -> void:
 				"center":
 					offset_x = (i - group.size() / 2.0) * CARD_OVERLAP
 			card.position = Vector2(base_x + offset_x, card_y)
-			card.visible = not _collapsed
-			card.modulate.a = 1.0
+			card.visible = not _collapsed and _display_mode == "card"
+			card.modulate = Color(CARD_BRIGHTNESS, CARD_BRIGHTNESS, CARD_BRIGHTNESS, 1.0)
 
 func _update_mouth_animations() -> void:
-	# 预留：分层模式嘴型动画
-	pass
+	# 更新所有分层角色的嘴型和眨眼动画（Card + Meeting 两种模式共用）
+	if _display_mode == "card":
+		for cid in _portrait_cards.keys():
+			var card_data: Dictionary = _portrait_cards[cid]
+			var character: CommCharacter = _get_character_by_id(cid)
+			if character:
+				var layer_rects: Dictionary = card_data.get("layer_rects", {})
+				if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
+					_update_layered_portrait(layer_rects, character)
+				elif character.sprite_mode == CommCharacter.SpriteMode.STATIC:
+					var tex_rect: TextureRect = layer_rects.get("static")
+					if tex_rect and character.static_portrait:
+						tex_rect.texture = character.static_portrait
+	elif _display_mode == "meeting":
+		for cid in _meeting_chars.keys():
+			var mdata: Dictionary = _meeting_chars[cid]
+			var character: CommCharacter = _get_character_by_id(cid)
+			if character:
+				var layer_rects: Dictionary = mdata.get("layer_rects", {})
+				if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
+					_update_layered_portrait(layer_rects, character)
+				elif character.sprite_mode == CommCharacter.SpriteMode.STATIC:
+					var tex_rect: TextureRect = layer_rects.get("static")
+					if tex_rect and character.static_portrait:
+						tex_rect.texture = character.static_portrait
 
 var _characters_speaking: Dictionary = {}
+
+## 注册角色引用（供 meeting 模式下多角色查找）
+var _character_refs: Dictionary = {}
+
+func register_character_ref(character: CommCharacter) -> void:
+	if character:
+		_character_refs[character.id] = character
 
 func _get_character_by_id(cid: String) -> CommCharacter:
 	if _current_character and _current_character.id == cid:
 		return _current_character
+	if _character_refs.has(cid):
+		return _character_refs[cid]
 	return null
 
 func clear_cards() -> void:
@@ -774,6 +878,7 @@ func clear_cards() -> void:
 			card.queue_free()
 	_portrait_cards.clear()
 	_characters_speaking.clear()
+	clear_meeting_chars()
 
 
 
@@ -865,7 +970,10 @@ func process(delta: float) -> void:
 
 	_update_positions()
 	if not _collapsed:
-		_update_card_layout()
+		if _display_mode == "card":
+			_update_card_layout()
+		elif _display_mode == "meeting":
+			_update_meeting_layout()
 	_update_mouth_animations()
 
 	if _continue_label and _continue_label.visible:
@@ -873,6 +981,232 @@ func process(delta: float) -> void:
 		if _blink_timer >= 0.5:
 			_blink_timer = 0.0
 			_continue_label.modulate.a = 0.3 if _continue_label.modulate.a > 0.5 else 1.0
+
+
+# ══════════════════════════════════════════
+#  Meeting 模式 — galgame 风格大图角色展示
+# ══════════════════════════════════════════
+
+## 原始图片宽高比 (1216 × 1803)
+const _MEETING_ASPECT: float = 1216.0 / 1803.0
+
+## 切换显示模式: "card" (小头像卡片) | "meeting" (大图)
+func set_display_mode(mode: String) -> void:
+	if mode == _display_mode:
+		return
+	_display_mode = mode
+	if mode == "meeting":
+		# 隐藏卡片
+		for cid in _portrait_cards.keys():
+			var card_data: Dictionary = _portrait_cards[cid]
+			var card: Control = card_data["card"]
+			if is_instance_valid(card):
+				card.visible = false
+		# Meeting 角色在 _ensure_meeting_char 中按需创建
+	elif mode == "card":
+		# 隐藏 meeting 角色
+		for cid in _meeting_chars.keys():
+			var mdata: Dictionary = _meeting_chars[cid]
+			var container: Control = mdata.get("container")
+			if container and is_instance_valid(container):
+				container.visible = false
+		# 重新显示卡片
+		if not _collapsed:
+			_update_card_layout()
+
+## 创建/显示 meeting 模式下的角色大图
+func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
+	if character == null or _root == null:
+		return
+	_build_ui()
+	register_character_ref(character)
+	var cid: String = character.id
+
+	# 已存在则更新 slot 并显示
+	if _meeting_chars.has(cid):
+		var mdata: Dictionary = _meeting_chars[cid]
+		mdata["slot"] = slot
+		var container: Control = mdata.get("container")
+		if container and is_instance_valid(container):
+			container.visible = _display_mode == "meeting"
+			_layout_meeting_char(mdata)
+			# 更新纹理
+			var layer_rects: Dictionary = mdata.get("layer_rects", {})
+			if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
+				_update_layered_portrait(layer_rects, character)
+			elif character.sprite_mode == CommCharacter.SpriteMode.STATIC and character.static_portrait:
+				var tex_rect: TextureRect = layer_rects.get("static")
+				if tex_rect:
+					tex_rect.texture = character.static_portrait
+		return
+
+	# 创建新容器（PanelContainer 自动管理子节点填充，与 Card 模式一致）
+	var container := PanelContainer.new()
+	container.name = "MeetingChar_" + cid
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	container.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	_root.add_child(container)
+
+	# 创建分层 TextureRect（PanelContainer 自动填充子节点，无需 anchors）
+	var layer_rects: Dictionary = {}
+	if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
+		var layer_order: Array = character.layer_config.get("order", [])
+		for layer_name in layer_order:
+			var rect := TextureRect.new()
+			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			container.add_child(rect)
+			layer_rects[layer_name] = rect
+	else:
+		# STATIC 模式降级
+		var tex_rect := TextureRect.new()
+		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		container.add_child(tex_rect)
+		layer_rects["static"] = tex_rect
+
+	# ★ 应用大图亮度
+	container.modulate = Color(MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, 1.0)
+	container.visible = _display_mode == "meeting"
+
+	var mdata: Dictionary = {
+		"container": container,
+		"layer_rects": layer_rects,
+		"slot": slot,
+		"character_id": cid,
+		"base_pos": Vector2.ZERO,  # 用于动画恢复
+	}
+	_meeting_chars[cid] = mdata
+	_layout_meeting_char(mdata)
+	# 初始纹理设置
+	if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
+		_update_layered_portrait(layer_rects, character)
+	elif character.sprite_mode == CommCharacter.SpriteMode.STATIC and character.static_portrait:
+		var tex_rect: TextureRect = layer_rects.get("static")
+		if tex_rect:
+			tex_rect.texture = character.static_portrait
+
+## 计算 meeting 角色的位置和大小
+func _layout_meeting_char(mdata: Dictionary) -> void:
+	var container: Control = mdata.get("container")
+	if container == null or not is_instance_valid(container):
+		return
+	if _root == null:
+		return
+
+	var screen_w: float = _root.size.x if _root.size.x > 0 else 800.0
+	var screen_h: float = _root.size.y if _root.size.y > 0 else 600.0
+
+	# ★ 计算角色尺寸
+	var char_h: float = screen_h * MEETING_CHAR_HEIGHT_RATIO
+	var char_w: float = char_h * _MEETING_ASPECT
+
+	# ★ 计算 X 位置（居中到 slot 位置）
+	var slot: String = str(mdata.get("slot", "center"))
+	var center_x: float = screen_w * MEETING_POS_CENTER_X
+	match slot:
+		"left": center_x = screen_w * MEETING_POS_LEFT_X
+		"right": center_x = screen_w * MEETING_POS_RIGHT_X
+		"center": center_x = screen_w * MEETING_POS_CENTER_X
+
+	var x: float = center_x - char_w / 2.0
+
+	# ★ Y 位置：底部对齐对话栏顶部
+	var bar_top: float = _target_y_expanded if not _collapsed else screen_h
+	var y: float = bar_top - char_h - MEETING_CHAR_BOTTOM_GAP
+
+	container.position = Vector2(x, y)
+	container.custom_minimum_size = Vector2(char_w, char_h)
+	container.size = Vector2(char_w, char_h)
+	mdata["base_pos"] = container.position
+
+## 更新所有 meeting 角色布局（在对话栏高度变化时调用）
+func _update_meeting_layout() -> void:
+	for cid in _meeting_chars.keys():
+		var mdata: Dictionary = _meeting_chars[cid]
+		_layout_meeting_char(mdata)
+
+## 播放 meeting 模式角色动画
+func play_meeting_anim(char_id: String, anim: String) -> void:
+	if not _meeting_chars.has(char_id):
+		return
+	var mdata: Dictionary = _meeting_chars[char_id]
+	var container: Control = mdata.get("container")
+	if container == null or not is_instance_valid(container):
+		return
+
+	if _meeting_tween:
+		_meeting_tween.kill()
+
+	var screen_w: float = _root.size.x if _root and _root.size.x > 0 else 800.0
+	var base_pos: Vector2 = mdata.get("base_pos", container.position)
+
+	match anim:
+		"slide_in_left":
+			container.position.x = -container.size.x
+			container.modulate.a = 0.0
+			_meeting_tween = _main.create_tween().set_parallel(true)
+			_meeting_tween.tween_property(container, "position:x", base_pos.x, MEETING_SLIDE_DURATION)\
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+			_meeting_tween.tween_property(container, "modulate:a", 1.0, MEETING_SLIDE_DURATION)
+		"slide_in_right":
+			container.position.x = screen_w
+			container.modulate.a = 0.0
+			_meeting_tween = _main.create_tween().set_parallel(true)
+			_meeting_tween.tween_property(container, "position:x", base_pos.x, MEETING_SLIDE_DURATION)\
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+			_meeting_tween.tween_property(container, "modulate:a", 1.0, MEETING_SLIDE_DURATION)
+		"slide_in_center":
+			container.position.y = base_pos.y + 60.0
+			container.modulate.a = 0.0
+			_meeting_tween = _main.create_tween().set_parallel(true)
+			_meeting_tween.tween_property(container, "position:y", base_pos.y, MEETING_SLIDE_DURATION)\
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+			_meeting_tween.tween_property(container, "modulate:a", 1.0, MEETING_SLIDE_DURATION)
+		"slide_out_left":
+			_meeting_tween = _main.create_tween().set_parallel(true)
+			_meeting_tween.tween_property(container, "position:x", -container.size.x, MEETING_SLIDE_DURATION)\
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			_meeting_tween.tween_property(container, "modulate:a", 0.0, MEETING_SLIDE_DURATION)
+		"slide_out_right":
+			_meeting_tween = _main.create_tween().set_parallel(true)
+			_meeting_tween.tween_property(container, "position:x", screen_w, MEETING_SLIDE_DURATION)\
+				.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			_meeting_tween.tween_property(container, "modulate:a", 0.0, MEETING_SLIDE_DURATION)
+		"fade_in":
+			container.modulate.a = 0.0
+			_meeting_tween = _main.create_tween()
+			_meeting_tween.tween_property(container, "modulate:a", 1.0, MEETING_SLIDE_DURATION)
+		"fade_out":
+			_meeting_tween = _main.create_tween()
+			_meeting_tween.tween_property(container, "modulate:a", 0.0, MEETING_SLIDE_DURATION)
+		"shake":
+			_meeting_tween = _main.create_tween()
+			var steps: int = int(MEETING_SHAKE_DURATION / 0.05)
+			for i in range(steps):
+				var offset_x: float = randf_range(-MEETING_SHAKE_INTENSITY, MEETING_SHAKE_INTENSITY)
+				_meeting_tween.tween_property(container, "position:x", base_pos.x + offset_x, 0.05)
+			_meeting_tween.tween_property(container, "position:x", base_pos.x, 0.05)
+
+## 清除所有 meeting 角色
+func clear_meeting_chars() -> void:
+	for cid in _meeting_chars.keys():
+		var mdata: Dictionary = _meeting_chars[cid]
+		var container: Control = mdata.get("container")
+		if container and is_instance_valid(container):
+			container.queue_free()
+	_meeting_chars.clear()
+	_display_mode = "card"
+
+## 隐藏指定 meeting 角色
+func hide_meeting_char(char_id: String) -> void:
+	if _meeting_chars.has(char_id):
+		var mdata: Dictionary = _meeting_chars[char_id]
+		var container: Control = mdata.get("container")
+		if container and is_instance_valid(container):
+			container.visible = false
 
 
 # ══════════════════════════════════════════
@@ -884,6 +1218,10 @@ func cleanup() -> void:
 	if _slide_tween:
 		_slide_tween.kill()
 		_slide_tween = null
+	if _meeting_tween:
+		_meeting_tween.kill()
+		_meeting_tween = null
+	_display_mode = "card"
 	if _root and is_instance_valid(_root):
 		_root.queue_free()
 		_root = null

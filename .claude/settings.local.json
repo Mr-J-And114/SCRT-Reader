@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"D:/Godot/Projects/SCRT/images/character/ava\" && file *.png | head -20)"
+    ]
+  }
+}

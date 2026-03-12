@@ -137,6 +137,22 @@ func _play_current_line() -> void:
 		if not action.is_empty():
 			_comm_mgr._play_action(action)
 
+		# Meeting 模式相关字段
+		var display_mode: String = str(line.get("display_mode", ""))
+		var meeting_slot: String = str(line.get("meeting_slot", "center"))
+		var char_anim: String = str(line.get("char_anim", ""))
+
+		if not display_mode.is_empty():
+			_comm_mgr.set_display_mode(display_mode)
+
+		# meeting 模式下设置角色位置
+		if display_mode == "meeting" and not char_id.is_empty():
+			_comm_mgr.set_meeting_char(char_id, meeting_slot)
+
+		# 播放角色动画（card/meeting 均可用）
+		if not char_anim.is_empty() and not char_id.is_empty():
+			_comm_mgr.play_meeting_anim(char_id, char_anim)
+
 	# 屏幕效果
 	var screen_effect: String = str(line.get("screen_effect", ""))
 	if not screen_effect.is_empty() and _main:
