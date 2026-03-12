@@ -234,6 +234,51 @@
 				},
 				{
 					"character": "ava",
+					"text": "比如这样——",
+					"speed": 25,
+					"anim_effect": "wink_right:2.5"
+				},
+				{
+					"character": "ava",
+					"text": "刚才我对你眨了一下右眼。这是通过图层覆盖系统实现的——临时替换指定眼睛图层的纹理，持续一段时间后自动恢复。",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "更进一步，还可以做到左右眼不同步——比如睁一只眼闭一只眼。",
+					"speed": 20,
+					"layer_override": { "eye_L": "eye_L_close", "eye_R": "eye_R_open" },
+					"layer_override_duration": 3.0
+				},
+				{
+					"character": "ava",
+					"text": "看到了吗？我的左眼关闭，右眼保持睁开。这在自动眨眼的基础上用图层覆盖实现，持续三秒后自动恢复正常。",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "接下来展示动作切换——",
+					"speed": 25,
+					"layer_override": { "body": "body_indexfinger" }
+				},
+				{
+					"character": "ava",
+					"text": "注意到了吗？我举起了右手，竖起了一根手指。这是通过替换身体图层纹理实现的——底层原理与眨眼效果完全一致，只是替换的目标图层不同。",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "记住这个手势的含义：第一，时刻保持警觉。",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "好的，恢复常规姿态。",
+					"speed": 25,
+					"clear_overrides": true
+				},
+				{
+					"character": "ava",
 					"text": "让我调整一下位置。移动到画面左侧——",
 					"display_mode": "meeting",
 					"meeting_slot": "left",
@@ -285,7 +330,7 @@
 				},
 				{
 					"character": "ava",
-					"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm[/color] 选择视频通讯频道，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+					"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm video[/color]，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
 					"display_mode": "card",
 					"speed": 25
 				},

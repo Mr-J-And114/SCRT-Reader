@@ -60,9 +60,9 @@
 		"wind_speed": 0.0427448656354768
 	},
 	"current_day": 4,
-	"current_hour": 51.0789615294925,
-	"current_weather": "clear",
-	"current_wind_dir": 225.820851665523,
+	"current_hour": 174.710185569525,
+	"current_weather": "partly_cloudy",
+	"current_wind_dir": 26.9623864794766,
 	"detected_anomalies": [
 		{
 			"anomaly_id": "radiation_elevation",
@@ -287,6 +287,6 @@
 		"wind_dir": "online",
 		"wind_speed": "online"
 	},
-	"tide_phase": 1.02902489546392,
-	"weather_duration": 0.524867324866502
+	"tide_phase": 0.741285381190883,
+	"weather_duration": 4.75700591982936
 }

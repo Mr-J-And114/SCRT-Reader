@@ -3,7 +3,7 @@
 	"avatar": "",
 	"badge": "",
 	"birthday": "",
-	"command_count": 160,
+	"command_count": 160.0,
 	"created_at": "2026-02-27 16:18:20",
 	"discs_loaded_count": 22.0,
 	"files_read_count": 2.0,
@@ -11,8 +11,8 @@
 
 	},
 	"last_fail_time": "2026-02-27 18:49:31",
-	"last_login": "2026-03-12 02:01:43",
-	"login_count": 67,
+	"last_login": "2026-03-12 23:55:46",
+	"login_count": 71,
 	"login_fail_count": 0,
 	"password": "aaaa",
 	"preferences": {
@@ -20,7 +20,7 @@
 		"typing_speed": 1.0
 	},
 	"role": "user",
-	"session_count": 11,
+	"session_count": 11.0,
 	"system_notes": [
 		{
 			"content": "新操作员档案已建立。等待安全审查。",
@@ -42,6 +42,6 @@
 		}
 	],
 	"title": "",
-	"total_time_seconds": 1497,
+	"total_time_seconds": 1497.0,
 	"username": "aaaa"
 }

@@ -1,8 +1,7 @@
-res://comm_system/comm_character.gd
-res://comm_system/comm_manager.gd
+res://comm_system/character_asset_library.gd
+res://data/ava_dialogues.json
 res://comm_system/comm_ui.gd
-res://comm_system/comm_dialogue_player.gd
+res://comm_system/character_animator.gd
 res://scenes/main.tscn
 res://addons/agent/ui/resource/AgentTheme.tres
 res://addons/agent/agent.gd
-res://data/ava_dialogues.json

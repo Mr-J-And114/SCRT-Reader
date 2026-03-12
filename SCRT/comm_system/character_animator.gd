@@ -227,6 +227,14 @@ func clear_all_overrides() -> void:
 func get_override_count() -> int:
 	return _active_overrides.size()
 
+## 检查指定图层是否被某个活跃覆盖显式控制
+func is_layer_overridden(layer_name: String) -> bool:
+	for override_id in _active_overrides.keys():
+		var override: LayerOverride = _active_overrides[override_id]
+		if override.layer_changes.has(layer_name):
+			return true
+	return false
+
 
 # ══════════════════════════════════════════
 #  预设动画效果

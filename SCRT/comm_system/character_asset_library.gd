@@ -377,6 +377,7 @@ static func create_ava_profile() -> AssetProfile:
 		"eyehair": "ava-eyehair.png",
 		"glasses": "ava-glasses.png",
 		"body": "ava-body-1.png",
+		"body_indexfinger": "ava-body-2-indexfinger.png",  # ★ 举手竖食指动作（替换 body）
 	}
 	p.eye_files = {
 		"eye_L_open": "ava-eyes-1-L-open.png",

@@ -37,6 +37,7 @@ const MEETING_BRIGHTNESS: float = 0.5             # ★ 大图亮度 (0.0=全黑
 const MEETING_SLIDE_DURATION: float = 0.4          # ★ 入场/退场动画时长 (秒)
 const MEETING_SHAKE_INTENSITY: float = 8.0         # ★ 震动幅度 (px)
 const MEETING_SHAKE_DURATION: float = 0.3          # ★ 震动时长 (秒)
+const _MEETING_BASE_ASPECT: float = 1216.0 / 1803.0  # 标准图层宽高比（用于容器定位）
 
 # ══════════════════════════════════════════
 #  内部引用与状态
@@ -658,7 +659,7 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 		for layer_name in layer_order:
 			var rect := TextureRect.new()
 			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			card.add_child(rect)
 			layer_rects[layer_name] = rect
@@ -763,18 +764,17 @@ func _update_layered_portrait(layer_rects: Dictionary, character: CommCharacter)
 		var rect: TextureRect = layer_rects.get(layer_key)
 		if rect == null:
 			continue
-		# 优先使用 animator 的覆盖纹理
-		if has_overrides and anim:
+		# 优先使用 animator 的覆盖纹理（仅当该眼睛被显式覆盖时）
+		if has_overrides and anim and anim.is_layer_overridden(layer_key):
 			var effective = anim.get_effective_layer_texture(layer_key)
 			if effective is Texture2D:
 				rect.texture = effective
 				rect.visible = true
 				continue
-			elif effective == null:
-				# 检查是否是显式隐藏
-				if anim.get_override_count() > 0:
-					rect.visible = false
-					continue
+			else:
+				# 覆盖值为 "hide" / "" → 隐藏该眼睛
+				rect.visible = false
+				continue
 		# 默认：根据眨眼状态选择
 		var tex_key: String = "eye_%s_%s" % [side, eye_state]
 		if layers.has(tex_key):
@@ -886,6 +886,8 @@ func _update_mouth_animations() -> void:
 				var layer_rects: Dictionary = mdata.get("layer_rects", {})
 				if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
 					_update_layered_portrait(layer_rects, character)
+					# 纹理变化可能改变宽高比（如 body → body_indexfinger），需重算尺寸
+					_resize_meeting_rects(mdata)
 				elif character.sprite_mode == CommCharacter.SpriteMode.STATIC:
 					var tex_rect: TextureRect = layer_rects.get("static")
 					if tex_rect and character.static_portrait:
@@ -1024,9 +1026,6 @@ func process(delta: float) -> void:
 #  Meeting 模式 — galgame 风格大图角色展示
 # ══════════════════════════════════════════
 
-## 原始图片宽高比 (1216 × 1803)
-const _MEETING_ASPECT: float = 1216.0 / 1803.0
-
 ## 切换显示模式: "card" (小头像卡片) | "meeting" (大图)
 func set_display_mode(mode: String) -> void:
 	if mode == _display_mode:
@@ -1071,20 +1070,20 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 			var layer_rects: Dictionary = mdata.get("layer_rects", {})
 			if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
 				_update_layered_portrait(layer_rects, character)
+				_resize_meeting_rects(mdata)
 			elif character.sprite_mode == CommCharacter.SpriteMode.STATIC and character.static_portrait:
 				var tex_rect: TextureRect = layer_rects.get("static")
 				if tex_rect:
 					tex_rect.texture = character.static_portrait
 		return
 
-	# 创建新容器（PanelContainer 自动管理子节点填充，与 Card 模式一致）
-	var container := PanelContainer.new()
+	# 创建新容器（普通 Control，不自动填充子节点，每个图层单独定位/缩放）
+	var container := Control.new()
 	container.name = "MeetingChar_" + cid
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	container.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	_root.add_child(container)
 
-	# 创建分层 TextureRect（PanelContainer 自动填充子节点，无需 anchors）
+	# 创建分层 TextureRect（每个 rect 根据纹理实际比例单独设置大小和位置）
 	var layer_rects: Dictionary = {}
 	if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
 		var layer_order: Array = character.layer_config.get("order", [])
@@ -1120,6 +1119,8 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 	# 初始纹理设置
 	if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
 		_update_layered_portrait(layer_rects, character)
+		# 纹理加载后根据实际宽高比调整每个图层 rect
+		_resize_meeting_rects(mdata)
 	elif character.sprite_mode == CommCharacter.SpriteMode.STATIC and character.static_portrait:
 		var tex_rect: TextureRect = layer_rects.get("static")
 		if tex_rect:
@@ -1138,7 +1139,7 @@ func _layout_meeting_char(mdata: Dictionary) -> void:
 
 	# ★ 计算角色尺寸
 	var char_h: float = screen_h * MEETING_CHAR_HEIGHT_RATIO
-	var char_w: float = char_h * _MEETING_ASPECT
+	var char_w: float = char_h * _MEETING_BASE_ASPECT
 
 	# ★ 计算 X 位置（居中到 slot 位置）
 	var slot: String = str(mdata.get("slot", "center"))
@@ -1158,6 +1159,39 @@ func _layout_meeting_char(mdata: Dictionary) -> void:
 	container.custom_minimum_size = Vector2(char_w, char_h)
 	container.size = Vector2(char_w, char_h)
 	mdata["base_pos"] = container.position
+	# 根据每个图层纹理的实际宽高比调整 TextureRect 大小
+	_resize_meeting_rects(mdata)
+
+## 根据每个图层纹理的实际宽高比单独调整 TextureRect 大小和位置
+## 所有图层同高度（= 容器高度），宽度按纹理比例自适应，水平居中
+func _resize_meeting_rects(mdata: Dictionary) -> void:
+	var container: Control = mdata.get("container")
+	if container == null or not is_instance_valid(container):
+		return
+	var ch: float = container.size.y
+	var cw: float = container.size.x
+	if ch <= 0.0:
+		return
+	var layer_rects: Dictionary = mdata.get("layer_rects", {})
+	for key in layer_rects.keys():
+		var rect: TextureRect = layer_rects[key]
+		if rect == null or not is_instance_valid(rect):
+			continue
+		var tex: Texture2D = rect.texture
+		if tex == null:
+			# 无纹理时使用标准尺寸
+			rect.position = Vector2.ZERO
+			rect.size = Vector2(cw, ch)
+			continue
+		var tw: float = tex.get_width()
+		var th: float = tex.get_height()
+		if th <= 0.0:
+			continue
+		# 图层高度 = 容器高度，宽度按纹理实际比例缩放
+		var rect_w: float = ch * (tw / th)
+		var rect_x: float = (cw - rect_w) / 2.0  # 水平居中
+		rect.position = Vector2(rect_x, 0.0)
+		rect.size = Vector2(rect_w, ch)
 
 ## 更新所有 meeting 角色布局（在对话栏高度变化时调用）
 func _update_meeting_layout() -> void:

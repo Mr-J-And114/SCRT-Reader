@@ -1876,5 +1876,737 @@
 		"name": "A.V.A.",
 		"text": "AVA 持续监控中。祝你工作顺利，特工。",
 		"time": "2026-03-12 02:03:10"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 20:58:10"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 20:58:12"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "收到呼叫请求。正在建立加密视频链路……",
+		"time": "2026-03-12 20:58:28"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+		"time": "2026-03-12 20:58:31"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "特工，这里是 AVA。全息通讯模式已激活。",
+		"time": "2026-03-12 20:58:32"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+		"time": "2026-03-12 20:58:37"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+		"time": "2026-03-12 20:58:42"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+		"time": "2026-03-12 20:58:44"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "让我调整一下位置。移动到画面左侧——",
+		"time": "2026-03-12 20:58:46"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "现在移动到右侧。",
+		"time": "2026-03-12 20:58:47"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+		"time": "2026-03-12 20:58:50"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+		"time": "2026-03-12 20:58:51"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+		"time": "2026-03-12 20:58:51"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+		"time": "2026-03-12 20:58:53"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "正在关闭全息链路……",
+		"time": "2026-03-12 20:58:55"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm[/color] 选择视频通讯频道，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+		"time": "2026-03-12 20:58:58"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "AVA 持续监控中。祝你工作顺利，特工。",
+		"time": "2026-03-12 20:58:59"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 22:38:58"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 22:39:00"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "收到呼叫请求。正在建立加密视频链路……",
+		"time": "2026-03-12 22:39:33"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+		"time": "2026-03-12 22:39:35"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "特工，这里是 AVA。全息通讯模式已激活。",
+		"time": "2026-03-12 22:39:36"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+		"time": "2026-03-12 22:39:40"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+		"time": "2026-03-12 22:39:46"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+		"time": "2026-03-12 22:39:48"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "比如这样——",
+		"time": "2026-03-12 22:39:49"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "刚才我对你眨了一下右眼。这是通过图层覆盖系统实现的——临时替换指定眼睛图层的纹理，持续一段时间后自动恢复。",
+		"time": "2026-03-12 22:39:56"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "更进一步，还可以做到左右眼不同步——比如睁一只眼闭一只眼。",
+		"time": "2026-03-12 22:39:59"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "看到了吗？我的左眼关闭，右眼保持睁开。这在自动眨眼的基础上用图层覆盖实现，持续三秒后自动恢复正常。",
+		"time": "2026-03-12 22:40:05"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "接下来展示动作切换——",
+		"time": "2026-03-12 22:40:07"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？我举起了右手，竖起了一根手指。这是通过替换身体图层纹理实现的——底层原理与眨眼效果完全一致，只是替换的目标图层不同。",
+		"time": "2026-03-12 22:40:17"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "记住这个手势的含义：第一，时刻保持警觉。",
+		"time": "2026-03-12 22:40:19"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好的，恢复常规姿态。",
+		"time": "2026-03-12 22:40:22"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "让我调整一下位置。移动到画面左侧——",
+		"time": "2026-03-12 22:40:24"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "现在移动到右侧。",
+		"time": "2026-03-12 22:40:25"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+		"time": "2026-03-12 22:40:29"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+		"time": "2026-03-12 22:40:34"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+		"time": "2026-03-12 22:40:37"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+		"time": "2026-03-12 22:40:38"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "正在关闭全息链路……",
+		"time": "2026-03-12 22:40:40"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm video[/color]，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+		"time": "2026-03-12 22:40:42"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "AVA 持续监控中。祝你工作顺利，特工。",
+		"time": "2026-03-12 22:40:43"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 23:19:54"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 23:19:56"
+	},
+	{
+		"dialogue_id": "ava_chat",
+		"name": "A.V.A.",
+		"text": "有什么需要我协助的吗，特工？\n\n[color=#888888]1. 你是谁？[/color]\n[color=#888888]2. 这个系统是什么？[/color]\n[color=#888888]3. 没事，只是随便聊聊。[/color]\n[color=#888888]4. 开启视频通讯。[/color]",
+		"time": "2026-03-12 23:20:10"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "正在建立加密视频链路……请稍候。",
+		"time": "2026-03-12 23:20:12"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "链路已建立。切换到全息显示模式。",
+		"time": "2026-03-12 23:20:14"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "你好，特工。欢迎使用高清通讯模式。你现在可以看到我的完整形象了。",
+		"time": "2026-03-12 23:20:15"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "如果你有什么需要讨论的，我在这里。不过，视频通讯会消耗额外带宽。",
+		"time": "2026-03-12 23:20:16"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "好的，视频通讯结束。回到常规通讯模式。",
+		"time": "2026-03-12 23:20:18"
+	},
+	{
+		"dialogue_id": "ava_chat_a4",
+		"name": "A.V.A.",
+		"text": "AVA 持续在线。如需视频通讯，随时呼叫。",
+		"time": "2026-03-12 23:20:20"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "收到呼叫请求。正在建立加密视频链路……",
+		"time": "2026-03-12 23:20:30"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+		"time": "2026-03-12 23:20:32"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "特工，这里是 AVA。全息通讯模式已激活。",
+		"time": "2026-03-12 23:20:33"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+		"time": "2026-03-12 23:20:38"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+		"time": "2026-03-12 23:20:43"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+		"time": "2026-03-12 23:20:46"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "比如这样——",
+		"time": "2026-03-12 23:20:48"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "刚才我对你眨了一下右眼。这是通过图层覆盖系统实现的——临时替换指定眼睛图层的纹理，持续一段时间后自动恢复。",
+		"time": "2026-03-12 23:20:52"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "更进一步，还可以做到左右眼不同步——比如睁一只眼闭一只眼。",
+		"time": "2026-03-12 23:20:55"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "看到了吗？我的左眼关闭，右眼保持睁开。这在自动眨眼的基础上用图层覆盖实现，持续三秒后自动恢复正常。",
+		"time": "2026-03-12 23:20:58"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "接下来展示动作切换——",
+		"time": "2026-03-12 23:21:00"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？我举起了右手，竖起了一根手指。这是通过替换身体图层纹理实现的——底层原理与眨眼效果完全一致，只是替换的目标图层不同。",
+		"time": "2026-03-12 23:21:11"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "记住这个手势的含义：第一，时刻保持警觉。",
+		"time": "2026-03-12 23:21:34"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好的，恢复常规姿态。",
+		"time": "2026-03-12 23:21:35"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "让我调整一下位置。移动到画面左侧——",
+		"time": "2026-03-12 23:21:37"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "现在移动到右侧。",
+		"time": "2026-03-12 23:21:39"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+		"time": "2026-03-12 23:21:41"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+		"time": "2026-03-12 23:21:45"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+		"time": "2026-03-12 23:21:47"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+		"time": "2026-03-12 23:21:51"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "正在关闭全息链路……",
+		"time": "2026-03-12 23:21:52"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm video[/color]，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+		"time": "2026-03-12 23:21:55"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "AVA 持续监控中。祝你工作顺利，特工。",
+		"time": "2026-03-12 23:21:57"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "检测到身份验证完成。欢迎回来，特工。",
+		"time": "2026-03-12 23:55:49"
+	},
+	{
+		"dialogue_id": "ava_login_welcome",
+		"name": "A.V.A.",
+		"text": "所有系统状态正常。如有需要，拨号 [color=#ffaa00]1001-0001[/color] 联络我。",
+		"time": "2026-03-12 23:55:51"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "收到呼叫请求。正在建立加密视频链路……",
+		"time": "2026-03-12 23:55:57"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+		"time": "2026-03-12 23:56:00"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "特工，这里是 AVA。全息通讯模式已激活。",
+		"time": "2026-03-12 23:56:01"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+		"time": "2026-03-12 23:56:05"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+		"time": "2026-03-12 23:56:10"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+		"time": "2026-03-12 23:56:13"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "比如这样——",
+		"time": "2026-03-12 23:56:14"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "刚才我对你眨了一下右眼。这是通过图层覆盖系统实现的——临时替换指定眼睛图层的纹理，持续一段时间后自动恢复。",
+		"time": "2026-03-12 23:56:18"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "更进一步，还可以做到左右眼不同步——比如睁一只眼闭一只眼。",
+		"time": "2026-03-12 23:56:20"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "看到了吗？我的左眼关闭，右眼保持睁开。这在自动眨眼的基础上用图层覆盖实现，持续三秒后自动恢复正常。",
+		"time": "2026-03-12 23:56:23"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "接下来展示动作切换——",
+		"time": "2026-03-12 23:56:25"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？我举起了右手，竖起了一根手指。这是通过替换身体图层纹理实现的——底层原理与眨眼效果完全一致，只是替换的目标图层不同。",
+		"time": "2026-03-12 23:56:29"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "记住这个手势的含义：第一，时刻保持警觉。",
+		"time": "2026-03-12 23:56:31"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好的，恢复常规姿态。",
+		"time": "2026-03-12 23:56:32"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "让我调整一下位置。移动到画面左侧——",
+		"time": "2026-03-12 23:56:34"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "现在移动到右侧。",
+		"time": "2026-03-12 23:56:36"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+		"time": "2026-03-12 23:56:39"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+		"time": "2026-03-12 23:56:41"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+		"time": "2026-03-12 23:56:42"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+		"time": "2026-03-12 23:56:44"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "正在关闭全息链路……",
+		"time": "2026-03-12 23:56:46"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm video[/color]，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+		"time": "2026-03-12 23:56:49"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "AVA 持续监控中。祝你工作顺利，特工。",
+		"time": "2026-03-12 23:56:51"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "收到呼叫请求。正在建立加密视频链路……",
+		"time": "2026-03-12 23:57:21"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+		"time": "2026-03-12 23:57:23"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "特工，这里是 AVA。全息通讯模式已激活。",
+		"time": "2026-03-12 23:57:24"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "你现在看到的是我的高清全息投影。这个模式下，你可以更清楚地观察到我的表情变化和口型同步效果。",
+		"time": "2026-03-12 23:57:27"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？当我说话的时候，我的嘴型会随着发音自动变化。这是基于八种基本音素映射实现的——MBP闭合、轻微张开、A元音、EI元音、O元音、UW元音……",
+		"time": "2026-03-12 23:57:32"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "同时，我的眼睛也在自然地眨动。这并不是预录的动画，而是程序化的自然节律。",
+		"time": "2026-03-12 23:57:34"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "比如这样——",
+		"time": "2026-03-12 23:57:35"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "刚才我对你眨了一下右眼。这是通过图层覆盖系统实现的——临时替换指定眼睛图层的纹理，持续一段时间后自动恢复。",
+		"time": "2026-03-12 23:57:39"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "更进一步，还可以做到左右眼不同步——比如睁一只眼闭一只眼。",
+		"time": "2026-03-12 23:57:42"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "看到了吗？我的左眼关闭，右眼保持睁开。这在自动眨眼的基础上用图层覆盖实现，持续三秒后自动恢复正常。",
+		"time": "2026-03-12 23:57:45"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "接下来展示动作切换——",
+		"time": "2026-03-12 23:57:46"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "注意到了吗？我举起了右手，竖起了一根手指。这是通过替换身体图层纹理实现的——底层原理与眨眼效果完全一致，只是替换的目标图层不同。",
+		"time": "2026-03-12 23:57:51"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "记住这个手势的含义：第一，时刻保持警觉。",
+		"time": "2026-03-12 23:57:54"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好的，恢复常规姿态。",
+		"time": "2026-03-12 23:57:56"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "让我调整一下位置。移动到画面左侧——",
+		"time": "2026-03-12 23:57:58"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "现在移动到右侧。",
+		"time": "2026-03-12 23:58:00"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "回到中央。通讯系统支持三个预设位置：左侧、中央和右侧。在多人会议中，每位参与者可以占据不同的位置。",
+		"time": "2026-03-12 23:58:04"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+		"time": "2026-03-12 23:58:06"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "……信号已恢复。刚才的干扰来自外部电磁脉冲。不必担心，加密层未受影响。",
+		"time": "2026-03-12 23:58:09"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "好了，视频通讯演示到此结束。各项功能运行正常。",
+		"time": "2026-03-12 23:58:11"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "正在关闭全息链路……",
+		"time": "2026-03-12 23:58:12"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "已回到常规通讯模式。如需再次启动视频通讯，输入 [color=#ffaa00]comm video[/color]，或直接拨号 [color=#ffaa00]1001-0001[/color]。",
+		"time": "2026-03-12 23:58:16"
+	},
+	{
+		"dialogue_id": "ava_meeting",
+		"name": "A.V.A.",
+		"text": "AVA 持续监控中。祝你工作顺利，特工。",
+		"time": "2026-03-12 23:58:17"
 	}
 ]

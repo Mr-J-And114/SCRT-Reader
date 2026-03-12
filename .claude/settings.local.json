@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cd \"D:/Godot/Projects/SCRT/images/character/ava\" && file *.png | head -20)"
+      "Bash(cd \"D:/Godot/Projects/SCRT/images/character/ava\" && file *.png | head -20)",
+      "Bash(cd \"D:/Godot/Projects/SCRT/images/character/ava/\" && file *.png | grep -oP 'image.*' | head -20)",
+      "Bash(cd \"D:/Godot/Projects/SCRT/images/character/ava/\" && file *.png)"
     ]
   }
 }
