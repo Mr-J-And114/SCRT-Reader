@@ -137,6 +137,32 @@ func _play_current_line() -> void:
 		if not action.is_empty():
 			_comm_mgr._play_action(action)
 
+		# ── 图层覆盖: 临时替换/隐藏角色图层 ──
+		# JSON: "layer_override": { "eye_L": "eye_L_close", "eye_R": "eye_R_open" }
+		#        "layer_override_duration": 5.0  (可选，默认永久直到下一行清除)
+		var layer_override = line.get("layer_override")
+		if layer_override is Dictionary and not layer_override.is_empty():
+			var duration: float = float(line.get("layer_override_duration", -1.0))
+			_comm_mgr._apply_layer_override(layer_override, duration)
+
+		# ── 清除图层覆盖 ──
+		# JSON: "clear_overrides": true
+		if line.get("clear_overrides", false):
+			_comm_mgr._clear_layer_overrides()
+
+		# ── 服装切换 ──
+		# JSON: "costume": "lab_coat" (空字符串 = 恢复默认)
+		var costume: String = str(line.get("costume", ""))
+		if line.has("costume"):
+			_comm_mgr._set_costume(costume)
+
+		# ── 预设动画效果 ──
+		# JSON: "anim_effect": "wink_left:2.0" / "wink_right:3.0" /
+		#        "eyes_closed:1.5" / "surprised:2.0"
+		var anim_effect: String = str(line.get("anim_effect", ""))
+		if not anim_effect.is_empty():
+			_comm_mgr._play_anim_effect(anim_effect)
+
 		# Meeting 模式相关字段
 		var display_mode: String = str(line.get("display_mode", ""))
 		var meeting_slot: String = str(line.get("meeting_slot", "center"))

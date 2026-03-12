@@ -1,6 +1,7 @@
 # ============================================================
 # comm_character.gd — 通讯角色数据模型
-# 管理角色的素材层、表情状态机、嘴型帧、动作帧
+# 轻量级数据模型，委托 CharacterAnimator 处理动画
+# 委托 CharacterAssetLibrary 管理素材加载
 # ============================================================
 class_name CommCharacter
 extends RefCounted
@@ -39,7 +40,17 @@ var voice_config: Dictionary = {
 }
 
 # ══════════════════════════════════════════
-#  素材缓存
+#  模块化组件
+# ══════════════════════════════════════════
+
+## 动画控制器（嘴型、眨眼、动作、图层覆盖）
+var animator: CharacterAnimator = null
+
+## 素材库引用（由 CharacterRegistry 注入）
+var _asset_library: CharacterAssetLibrary = null
+
+# ══════════════════════════════════════════
+#  向后兼容的素材缓存（代理到 asset_library）
 # ══════════════════════════════════════════
 ## 静态模式：单张头像纹理
 var static_portrait: ImageTexture = null
@@ -69,36 +80,50 @@ var layer_config: Dictionary = {
 }
 
 # ══════════════════════════════════════════
-#  当前状态
+#  当前状态（代理到 animator）
 # ══════════════════════════════════════════
-var current_expression: String = "neutral"
-var current_mouth: String = "closed"
-var current_action: String = ""
-var is_speaking: bool = false
-var blink_phase: int = 0  # 0=open, 1=half_closing, 2=closed, 3=half_opening
+var current_expression: String:
+	get:
+		return animator.current_expression if animator else "neutral"
+	set(value):
+		if animator:
+			animator.current_expression = value
 
-# 嘴型动画计时
-var _mouth_timer: float = 0.0
-var _mouth_interval: float = 0.08  # 嘴型切换间隔(秒)
-var _mouth_sequence: Array[String] = ["closed", "half", "open", "half"]
-var _mouth_index: int = 0
+var current_mouth: String:
+	get:
+		return animator.current_mouth if animator else "closed"
+	set(value):
+		if animator:
+			animator.current_mouth = value
 
-# 眨眼计时
-var _blink_timer: float = 0.0
-var _blink_interval: float = 3.5  # 平均眨眼间隔
-var _blink_duration: float = 0.15
-var _blink_active: bool = false
+var current_action: String:
+	get:
+		return animator.current_action if animator else ""
+	set(value):
+		if animator:
+			animator.current_action = value
 
-# 动作播放
-var _action_timer: float = 0.0
-var _action_frame_index: int = 0
-var _action_frame_duration: float = 0.12
-var _action_playing: bool = false
-var _action_callback: Callable = Callable()
+var is_speaking: bool:
+	get:
+		return animator.is_speaking if animator else false
+	set(value):
+		if animator:
+			animator.is_speaking = value
+
+var blink_phase: int:
+	get:
+		return animator.blink_phase if animator else 0
+	set(value):
+		if animator:
+			animator.blink_phase = value
+
 
 # ══════════════════════════════════════════
 #  初始化
 # ══════════════════════════════════════════
+
+func _init() -> void:
+	animator = CharacterAnimator.new()
 
 ## 从 manifest 配置加载角色数据
 func load_from_config(config: Dictionary, fs: FileSystem) -> void:
@@ -107,8 +132,7 @@ func load_from_config(config: Dictionary, fs: FileSystem) -> void:
 	title = str(config.get("title", ""))
 	sprite_dir = str(config.get("sprite_dir", ""))
 	default_expression = str(config.get("default_expression", "neutral"))
-	current_expression = default_expression
-	
+
 	# 名称颜色
 	if config.has("name_color"):
 		var nc = config["name_color"]
@@ -117,12 +141,10 @@ func load_from_config(config: Dictionary, fs: FileSystem) -> void:
 		elif nc is Color:
 			name_color = nc
 
-
 	# 头像位置
 	portrait_position = str(config.get("portrait_position", "left")).to_lower()
 	if portrait_position not in ["left", "center", "right"]:
 		portrait_position = "left"
-
 
 	# 语音
 	if config.has("voice") and config["voice"] is Dictionary:
@@ -143,25 +165,70 @@ func load_from_config(config: Dictionary, fs: FileSystem) -> void:
 		"minimal":
 			sprite_mode = SpriteMode.MINIMAL
 		_:
-			# 自动检测：有 sprite_dir 就尝试加载，否则 minimal
 			if not sprite_dir.is_empty():
-				sprite_mode = SpriteMode.STATIC  # 默认静态，有分层素材时升级
+				sprite_mode = SpriteMode.STATIC
 			else:
 				sprite_mode = SpriteMode.MINIMAL
 
-	# 加载素材
+	# 加载素材（向后兼容路径）
 	_load_sprites(config, fs)
+
+	# 初始化 animator 表情
+	animator.set_expression(default_expression)
+
+
+## 使用 AssetLibrary 的新加载路径初始化
+func init_from_asset_library(asset_library: CharacterAssetLibrary) -> void:
+	_asset_library = asset_library
+	if not asset_library.has_profile(id):
+		return
+
+	var textures: CharacterAssetLibrary.CharacterTextures = asset_library.load_character_assets(id)
+	if textures == null:
+		return
+
+	var profile: CharacterAssetLibrary.AssetProfile = asset_library.get_profile(id)
+	if profile == null:
+		return
+
+	# 同步素材模式
+	match profile.mode:
+		"layered":
+			sprite_mode = SpriteMode.LAYERED
+		"static":
+			sprite_mode = SpriteMode.STATIC
+		_:
+			sprite_mode = SpriteMode.MINIMAL
+
+	# 同步纹理到向后兼容字段
+	static_portrait = textures.static_portrait
+	layer_textures = textures.layer_textures
+	mouth_textures = textures.mouth_textures
+	action_frames = textures.action_frames
+	overlay_textures = textures.overlay_textures
+
+	# 更新 layer_config
+	layer_config = {
+		"order": profile.layer_order.duplicate(),
+		"files": profile.layer_files.duplicate(),
+	}
+
+	# 绑定 animator
+	animator.bind_assets(profile, textures)
+
+
+# ══════════════════════════════════════════
+#  向后兼容的素材加载（旧路径）
+# ══════════════════════════════════════════
 
 ## 加载素材（根据模式）
 func _load_sprites(config: Dictionary, fs: FileSystem) -> void:
 	if sprite_mode == SpriteMode.MINIMAL:
 		return
-
 	if sprite_mode == SpriteMode.STATIC:
 		_load_static_portrait(config, fs)
 		_load_mouth_frames(config, fs)
 		return
-
 	if sprite_mode == SpriteMode.LAYERED:
 		_load_layered_sprites(config, fs)
 		return
@@ -183,9 +250,7 @@ func _load_mouth_frames(config: Dictionary, fs: FileSystem) -> void:
 	if config.has("mouth_frames") and config["mouth_frames"] is Array:
 		mouth_files = config["mouth_frames"]
 	else:
-		# 默认文件名
 		mouth_files = ["mouth_closed.png", "mouth_half.png", "mouth_open.png", "mouth_wide.png"]
-
 	var mouth_keys: Array[String] = ["closed", "half", "open", "wide"]
 	for i in range(mini(mouth_files.size(), mouth_keys.size())):
 		var full_path: String = sprite_dir + str(mouth_files[i])
@@ -242,8 +307,8 @@ func _load_layered_sprites(_config: Dictionary, _fs: FileSystem) -> void:
 		return
 
 	# 分层模式使用 8 音素嘴型序列
-	_mouth_sequence = ["MBP", "slight", "A", "EI", "O", "UW", "slight", "MBP"]
-	current_mouth = "MBP"
+	animator._mouth_sequence = ["MBP", "slight", "A", "EI", "O", "UW", "slight", "MBP"]
+	animator.current_mouth = "MBP"
 
 	# 加载动作帧序列（可选）
 	var act_files: Dictionary = layer_config.get("action_files", {})
@@ -283,90 +348,53 @@ func _load_texture_from_fs(path: String, fs: FileSystem) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 # ══════════════════════════════════════════
-#  表情与嘴型控制
+#  表情与嘴型控制（代理到 animator）
 # ══════════════════════════════════════════
 
 ## 设置表情
 func set_expression(expr_id: String) -> void:
-	current_expression = expr_id
+	animator.set_expression(expr_id)
 
 ## 开始说话（启动嘴型动画）
 func start_speaking() -> void:
-	is_speaking = true
-	_mouth_timer = 0.0
-	_mouth_index = 0
-	current_mouth = _mouth_sequence[0]
+	animator.start_speaking()
 
 ## 停止说话
 func stop_speaking() -> void:
-	is_speaking = false
-	current_mouth = _mouth_sequence[0]
-	_mouth_index = 0
+	animator.stop_speaking()
 
 ## 播放动作
 func play_action(action_id: String, on_complete: Callable = Callable()) -> void:
-	if not action_frames.has(action_id):
-		# 动作素材不存在，直接完成
-		if on_complete.is_valid():
-			on_complete.call()
-		return
-	current_action = action_id
-	_action_playing = true
-	_action_frame_index = 0
-	_action_timer = 0.0
-	_action_callback = on_complete
+	animator.play_action(action_id, on_complete)
 
 ## 每帧更新（嘴型、眨眼、动作动画）
 func process(delta: float) -> void:
-	_process_mouth(delta)
-	_process_blink(delta)
-	_process_action(delta)
+	animator.process(delta)
 
-func _process_mouth(delta: float) -> void:
-	if not is_speaking:
-		return
-	_mouth_timer += delta
-	if _mouth_timer >= _mouth_interval:
-		_mouth_timer = 0.0
-		# 半随机嘴型切换
-		_mouth_index = (_mouth_index + 1) % _mouth_sequence.size()
-		# 偶尔跳过一帧增加自然感
-		if randf() < 0.2:
-			_mouth_index = (_mouth_index + 1) % _mouth_sequence.size()
-		current_mouth = _mouth_sequence[_mouth_index]
+# ══════════════════════════════════════════
+#  图层覆盖（新功能，代理到 animator）
+# ══════════════════════════════════════════
 
-func _process_blink(delta: float) -> void:
-	if _blink_active:
-		_blink_timer += delta
-		var phase_duration: float = _blink_duration / 4.0  # 4 阶段过渡
-		if _blink_timer >= phase_duration:
-			_blink_timer = 0.0
-			blink_phase += 1
-			if blink_phase >= 4:  # 完成一轮: 0(open)→1(half)→2(close)→3(half)→0(open)
-				blink_phase = 0
-				_blink_active = false
-				_blink_interval = randf_range(2.0, 5.0)
-		return
+## 添加临时图层覆盖
+func add_layer_override(layer_changes: Dictionary, duration: float = -1.0,
+		on_expire: Callable = Callable()) -> String:
+	return animator.add_layer_override(layer_changes, duration, on_expire)
 
-	_blink_timer += delta
-	if _blink_timer >= _blink_interval:
-		_blink_active = true
-		blink_phase = 1  # 开始闭眼
-		_blink_timer = 0.0
+## 移除图层覆盖
+func remove_layer_override(override_id: String) -> void:
+	animator.remove_layer_override(override_id)
 
-func _process_action(delta: float) -> void:
-	if not _action_playing:
-		return
-	_action_timer += delta
-	if _action_timer >= _action_frame_duration:
-		_action_timer = 0.0
-		_action_frame_index += 1
-		var frames: Array = action_frames.get(current_action, [])
-		if _action_frame_index >= frames.size():
-			_action_playing = false
-			current_action = ""
-			if _action_callback.is_valid():
-				_action_callback.call()
+## 清除所有图层覆盖
+func clear_all_overrides() -> void:
+	animator.clear_all_overrides()
+
+## 切换服装
+func set_costume(costume_name: String) -> void:
+	animator.set_costume(costume_name)
+
+## 播放预设动画：眨一只眼
+func play_wink(side: String, duration: float = 2.0) -> String:
+	return animator.play_wink(side, duration)
 
 # ══════════════════════════════════════════
 #  渲染数据获取（供 sprite_renderer 使用）
@@ -374,24 +402,24 @@ func _process_action(delta: float) -> void:
 
 ## 获取当前需要渲染的数据
 func get_render_state() -> Dictionary:
-	return {
-		"sprite_mode": sprite_mode,
-		"expression": current_expression,
-		"mouth": current_mouth,
-		"is_speaking": is_speaking,
-		"blink_phase": blink_phase,
-		"action": current_action,
-		"action_playing": _action_playing,
-		"action_frame": _action_frame_index,
-		# 纹理引用
-		"static_portrait": static_portrait,
-		"layer_textures": layer_textures,
-		"expression_data": expression_data,
-		"mouth_textures": mouth_textures,
-		"blink_textures": blink_textures,
-		"action_frames": action_frames,
-		"overlay_textures": overlay_textures,
-	}
+	var state: Dictionary = animator.get_render_state()
+	state["sprite_mode"] = sprite_mode
+	# 向后兼容：如果 animator 没有绑定素材，从本地缓存读取
+	if state.get("static_portrait") == null and static_portrait != null:
+		state["static_portrait"] = static_portrait
+	if state.get("layer_textures", {}).is_empty() and not layer_textures.is_empty():
+		state["layer_textures"] = layer_textures
+	if state.get("mouth_textures", {}).is_empty() and not mouth_textures.is_empty():
+		state["mouth_textures"] = mouth_textures
+	if state.get("action_frames", {}).is_empty() and not action_frames.is_empty():
+		state["action_frames"] = action_frames
+	if state.get("overlay_textures", {}).is_empty() and not overlay_textures.is_empty():
+		state["overlay_textures"] = overlay_textures
+	if state.get("expression_data", {}).is_empty() and not expression_data.is_empty():
+		state["expression_data"] = expression_data
+	if state.get("blink_textures", {}).is_empty() and not blink_textures.is_empty():
+		state["blink_textures"] = blink_textures
+	return state
 
 ## 是否有可显示的视觉素材
 func has_visual() -> bool:

@@ -724,14 +724,34 @@ func _update_layered_portrait(layer_rects: Dictionary, character: CommCharacter)
 	var bp: int = state.get("blink_phase", 0)
 	var cur_mouth: String = state.get("mouth", "MBP")
 	var speaking: bool = state.get("is_speaking", false)
+	var has_overrides: bool = state.get("has_overrides", false)
+	var anim: CharacterAnimator = character.animator
 
-	# 更新静态图层
-	for layer_name in ["head", "nose", "eyehair", "glasses", "body"]:
+	# 更新静态图层（从 layer_config.order 动态获取，不再硬编码）
+	var layer_order: Array = character.layer_config.get("order", [])
+	for layer_name in layer_order:
+		# 跳过动态图层（眼睛、嘴巴由下方逻辑处理）
+		if layer_name.begins_with("eye_") or layer_name == "mouth":
+			continue
 		var rect: TextureRect = layer_rects.get(layer_name)
-		if rect and layers.has(layer_name):
+		if rect == null:
+			continue
+		# 优先使用 animator 的有效纹理（支持服装/覆盖）
+		if has_overrides and anim:
+			var effective = anim.get_effective_layer_texture(layer_name)
+			if effective == null:
+				rect.visible = false  # 图层被隐藏
+				continue
+			elif effective is Texture2D:
+				rect.texture = effective
+				rect.visible = true
+				continue
+		# 默认：直接从 layer_textures 读取
+		if layers.has(layer_name):
 			rect.texture = layers[layer_name]
+			rect.visible = true
 
-	# 根据眨眼阶段更新眼睛
+	# 更新眼睛（支持图层覆盖，如 wink）
 	var eye_state: String = "open"
 	match bp:
 		0: eye_state = "open"
@@ -739,10 +759,27 @@ func _update_layered_portrait(layer_rects: Dictionary, character: CommCharacter)
 		2: eye_state = "close"
 
 	for side in ["L", "R"]:
-		var key: String = "eye_%s_%s" % [side, eye_state]
-		var rect: TextureRect = layer_rects.get("eye_%s" % side)
-		if rect and layers.has(key):
-			rect.texture = layers[key]
+		var layer_key: String = "eye_%s" % side
+		var rect: TextureRect = layer_rects.get(layer_key)
+		if rect == null:
+			continue
+		# 优先使用 animator 的覆盖纹理
+		if has_overrides and anim:
+			var effective = anim.get_effective_layer_texture(layer_key)
+			if effective is Texture2D:
+				rect.texture = effective
+				rect.visible = true
+				continue
+			elif effective == null:
+				# 检查是否是显式隐藏
+				if anim.get_override_count() > 0:
+					rect.visible = false
+					continue
+		# 默认：根据眨眼状态选择
+		var tex_key: String = "eye_%s_%s" % [side, eye_state]
+		if layers.has(tex_key):
+			rect.texture = layers[tex_key]
+			rect.visible = true
 
 	# 更新嘴型
 	var mouth_rect: TextureRect = layer_rects.get("mouth")
