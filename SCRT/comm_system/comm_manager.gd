@@ -1,7 +1,8 @@
 # ============================================================
 # comm_manager.gd — 通讯系统主管理器
 # 调度角色、对话、UI、语音、触发条件
-# ── 新增：教程系统、选项分支、完成状态持久化
+# ── 重构：角色管理委托给 CharacterRegistry
+# ── 新增：图层覆盖、服装切换、预设动画效果
 # ============================================================
 class_name CommManager
 extends RefCounted
@@ -18,8 +19,8 @@ var _ui: CommUI = null
 var _player: CommDialoguePlayer = null
 var _voice: CommVoice = null
 
-# 角色库 { "ava": CommCharacter, ... }
-var _characters: Dictionary = {}
+# ── 角色管理（委托给 CharacterRegistry） ──
+var _registry: CharacterRegistry = null
 var _active_character: CommCharacter = null
 
 # 对话库 { "tutorial_main": { ... dialogue_data } }
@@ -44,6 +45,10 @@ func setup(main, fs: FileSystem, theme) -> void:
 	_fs = fs
 	_T = theme
 
+	# 初始化角色注册中心
+	_registry = CharacterRegistry.new()
+	_registry.setup(main, fs)
+
 	_ui = CommUI.new()
 	_ui.setup(main, theme)
 
@@ -63,20 +68,24 @@ func setup(main, fs: FileSystem, theme) -> void:
 	# 加载内置教程数据
 	_load_tutorial_json()
 
+## 获取角色注册中心（供外部访问）
+func get_registry() -> CharacterRegistry:
+	return _registry
+
+## 获取素材库（供外部访问）
+func get_asset_library() -> CharacterAssetLibrary:
+	return _registry.get_asset_library() if _registry else null
+
 ## 从 manifest 加载通讯数据
 func load_from_manifest(manifest: Dictionary) -> void:
 	# 加载角色
 	var chars: Dictionary = manifest.get("comm_characters", {}) as Dictionary
 	for char_id in chars.keys():
 		var char_config: Dictionary = chars[char_id] as Dictionary
-		char_config["id"] = char_id
-		var character := CommCharacter.new()
-		character.load_from_config(char_config, _fs)
-		_characters[char_id] = character
-		print("[CommManager] 已加载角色: %s (%s)" % [char_id, character.display_name])
+		_registry.register_character(char_id, char_config, CharacterRegistry.CharacterSource.BUILTIN)
 
 	# 如果没有角色，创建默认角色
-	if _characters.is_empty():
+	if _registry.is_empty():
 		_create_default_character()
 
 	# 加载对话
@@ -111,17 +120,15 @@ func _load_tutorial_json() -> void:
 	# 加载教程角色
 	var chars: Dictionary = data.get("comm_characters", {}) as Dictionary
 	for char_id in chars.keys():
-		if not _characters.has(char_id):
+		if not _registry.has_character(char_id):
 			var char_config: Dictionary = chars[char_id] as Dictionary
-			char_config["id"] = char_id
-			var character := CommCharacter.new()
-			character.load_from_config(char_config, null)
-			_characters[char_id] = character
+			_registry.register_character(char_id, char_config, CharacterRegistry.CharacterSource.BUILTIN)
 			print("[CommManager] 已加载教程角色: %s" % char_id)
 
-	# 为 AVA 角色设置静态头像（从 res:// 加载）
-	_setup_ava_portrait()
-	_setup_researcher_portrait()     # ★ 新增
+	# 为内置角色设置素材
+	_registry.setup_ava()
+	_registry.setup_researcher()
+
 	# 加载 AVA 常态对话
 	_load_ava_dialogues()
 
@@ -132,68 +139,9 @@ func _load_tutorial_json() -> void:
 			_dialogues[dlg_id] = dialogues[dlg_id]
 			print("[CommManager] 已加载教程对话: %s" % dlg_id)
 
-## 通用分层角色设置（供 _setup_ava_portrait 等调用，也可由外部调用）
+## 通用分层角色设置（向后兼容接口）
 func setup_layered_character(char_id: String, sprite_dir: String, config: Dictionary) -> void:
-	if not _characters.has(char_id):
-		push_warning("[CommManager] 角色不存在: %s" % char_id)
-		return
-	var ch: CommCharacter = _characters[char_id]
-	ch.sprite_mode = CommCharacter.SpriteMode.LAYERED
-	ch.sprite_dir = sprite_dir
-	ch.layer_config = config
-	ch._load_layered_sprites({}, null)
-	print("[CommManager] %s 分层头像已加载 (%d layers, %d mouth shapes)" % [
-		char_id, ch.layer_textures.size(), ch.mouth_textures.size()
-	])
-
-## 为 AVA 角色加载分层头像素材
-func _setup_ava_portrait() -> void:
-	if not _characters.has("ava"):
-		return
-	setup_layered_character("ava", "res://images/character/ava/", {
-		"order": ["head", "nose", "eye_L", "eye_R", "mouth", "eyehair", "glasses", "body"],
-		"files": {
-			"head": "ava-head.png",
-			"nose": "ava-nose.png",
-			"eyehair": "ava-eyehair.png",
-			"glasses": "ava-glasses.png",
-			"body": "ava-body-1.png",
-		},
-		"eye_files": {
-			"eye_L_open": "ava-eyes-1-L-open.png",
-			"eye_L_half": "ava-eyes-2-L-half.png",
-			"eye_L_close": "ava-eyes-3-L-close.png",
-			"eye_R_open": "ava-eyes-1-R-open.png",
-			"eye_R_half": "ava-eyes-2-R-half.png",
-			"eye_R_close": "ava-eyes-3-R-close.png",
-		},
-		"mouth_files": {
-			"MBP": "ava-M-1-MBP-closed.png",
-			"slight": "ava-M-2-slightopen.png",
-			"A": "ava-M-3-A.png",
-			"EI": "ava-M-4-EI.png",
-			"O": "ava-M-5-O.png",
-			"UW": "ava-M-6-UW.png",
-			"FV": "ava-M-7-FV.png",
-			"LNTS": "ava-M-8-LNTS.png",
-		},
-	})
-
-## 为 researcher 角色加载 res:// 静态头像
-func _setup_researcher_portrait() -> void:
-	if not _characters.has("researcher"):
-		return
-	var tex_path: String = "res://images/character/researcher-tmp.png"
-	if not ResourceLoader.exists(tex_path):
-		return
-	var tex = load(tex_path)
-	if tex is Texture2D:
-		var ch: CommCharacter = _characters["researcher"]
-		var img: Image = tex.get_image()
-		if img:
-			ch.static_portrait = ImageTexture.create_from_image(img)
-		ch.sprite_mode = CommCharacter.SpriteMode.STATIC
-		print("[CommManager] Researcher 头像已加载")
+	_registry.setup_layered_character(char_id, sprite_dir, config)
 
 ## 加载 AVA 联络员常态对话
 func _load_ava_dialogues() -> void:
@@ -211,7 +159,6 @@ func _load_ava_dialogues() -> void:
 	var data: Dictionary = json.data as Dictionary
 	if data == null:
 		return
-	# 加载对话（不覆盖已有的）
 	var dialogues: Dictionary = data.get("comm_dialogues", {}) as Dictionary
 	for dlg_id in dialogues.keys():
 		if not _dialogues.has(dlg_id):
@@ -221,27 +168,12 @@ func _load_ava_dialogues() -> void:
 
 ## 创建内置默认角色
 func _create_default_character() -> void:
-	var default_config: Dictionary = {
-		"id": "op7",
-		"name": "OPERATOR-7",
-		"title": "Liaison Officer",
-		"sprite_mode": "minimal",
-		"default_expression": "neutral",
-		"voice": {
-			"tone": "square",
-			"base_pitch": 0.9,
-			"pitch_variance": 0.12,
-			"speed": "normal",
-		}
-	}
-	var character := CommCharacter.new()
-	character.load_from_config(default_config, _fs)
-	_characters["op7"] = character
+	_registry.create_default_character()
 
 ## ★ 设置默认角色的静态头像（给只有一张图的情况）
 func set_default_portrait(texture: ImageTexture) -> void:
-	if _characters.has("op7"):
-		var ch: CommCharacter = _characters["op7"]
+	var ch: CommCharacter = _registry.get_character("op7")
+	if ch:
 		ch.static_portrait = texture
 		ch.sprite_mode = CommCharacter.SpriteMode.STATIC
 
@@ -263,6 +195,7 @@ func trigger_dialogue(dialogue_id: String) -> bool:
 		_player.stop_dialogue(true)
 		if _active_character:
 			_active_character.stop_speaking()
+			_active_character.clear_all_overrides()
 		_pending_choice_id = ""
 
 	var dialogue_data: Dictionary = _dialogues[dialogue_id]
@@ -275,7 +208,7 @@ func trigger_dialogue(dialogue_id: String) -> bool:
 		first_line = lines[0] as Dictionary
 
 	var first_char_id: String = str(first_line.get("character", "op7"))
-	print("[CommManager] 首行角色: ", first_char_id, " 角色库: ", _characters.keys())
+	print("[CommManager] 首行角色: ", first_char_id, " 角色库: ", _registry.get_character_ids())
 	_set_active_character(first_char_id)
 
 	# 仅在 UI 尚未展开时执行弹出动画
@@ -293,23 +226,21 @@ func trigger_dialogue(dialogue_id: String) -> bool:
 
 
 
-
 ## 列出当前可用的通讯频道（供 comm 命令使用）
 func get_available_channels() -> Array[Dictionary]:
 	var channels: Array[Dictionary] = []
 	for dlg_id in _dialogues.keys():
-		# 跳过教程相关的内部对话
 		if dlg_id.begins_with("tutorial_"):
 			continue
 		var dlg_data: Dictionary = _dialogues[dlg_id]
 		var lines: Array = dlg_data.get("lines", []) as Array
-		# 从首行获取角色信息
 		var first_char_id: String = ""
 		if lines.size() > 0:
 			first_char_id = str((lines[0] as Dictionary).get("character", ""))
 		var char_name: String = first_char_id
-		if _characters.has(first_char_id):
-			char_name = _characters[first_char_id].display_name
+		var ch: CommCharacter = _registry.get_character(first_char_id)
+		if ch:
+			char_name = ch.display_name
 		channels.append({
 			"id": dlg_id,
 			"character": char_name,
@@ -341,10 +272,10 @@ func trigger_dialogue_sequence(dialogue_ids: Array) -> bool:
 func stop_dialogue() -> void:
 	if _ui:
 		_ui.flush_history_to_disk()
-	# ★ 主动停止不发 finished 信号（因为下面手动处理了清理）
 	_player.stop_dialogue(true)
 	if _active_character:
 		_active_character.stop_speaking()
+		_active_character.clear_all_overrides()
 	_ui.clear_cards()
 	_ui.hide()
 	is_active = false
@@ -362,7 +293,6 @@ func handle_input(event: InputEvent) -> bool:
 			_dialogue_queue.clear()
 			var esc_dlg_id: String = _player.current_dialogue_id
 			_mark_dialogue_completed(esc_dlg_id)
-			# ★ 检查是否为拨号通话
 			var esc_is_dial: bool = _main.dial_mgr != null and _main.dial_mgr.is_active()
 			stop_dialogue()
 			comm_finished.emit(esc_dlg_id)
@@ -381,12 +311,10 @@ func handle_input(event: InputEvent) -> bool:
 			if num >= 1:
 				_handle_choice_selection(num)
 				return true
-			# 选项模式下屏蔽其他按键
 			return true
 
 		# 空格/回车：点击继续 或 跳过打字
 		if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
-			# ★ 等待命令执行时：放行所有按键给终端
 			if is_waiting_for_command():
 				return false
 			_player.on_click()
@@ -395,7 +323,7 @@ func handle_input(event: InputEvent) -> bool:
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if not _pending_choice_id.is_empty():
-				return true  # 选项模式不响应鼠标点击推进
+				return true
 			_player.on_click()
 			return true
 
@@ -418,7 +346,6 @@ func _keycode_to_number(keycode: int) -> int:
 # ══════════════════════════════════════════
 #  选项系统
 # ══════════════════════════════════════════
-## 处理选项选择
 func _handle_choice_selection(choice_num: int) -> void:
 	var choice_id: String = _pending_choice_id
 	_pending_choice_id = ""
@@ -431,7 +358,6 @@ func _handle_choice_selection(choice_num: int) -> void:
 
 
 func _handle_tutorial_choice(choice_num: int) -> void:
-	# ★ silent 停止：不触发 finished 流程
 	_player.stop_dialogue(true)
 	if _active_character:
 		_active_character.stop_speaking()
@@ -446,16 +372,12 @@ func _handle_tutorial_choice(choice_num: int) -> void:
 
 
 ## 处理通用对话选项（非教程）
-## 处理通用对话选项（非教程）
 func _handle_generic_choice(choice_id: String, choice_num: int) -> void:
-	# ★ 与 _handle_tutorial_choice 同策略：只停止播放器，不隐藏 UI
 	_player.stop_dialogue(true)
 	if _active_character:
 		_active_character.stop_speaking()
 	_pending_choice_id = ""
-	# is_active 保持 true，UI 保持展开，实现无缝衔接
 
-	# 构造分支对话 ID
 	var base_id: String = choice_id
 	var q_pos: int = choice_id.rfind("_q")
 	if q_pos >= 0:
@@ -463,12 +385,11 @@ func _handle_generic_choice(choice_id: String, choice_num: int) -> void:
 
 	var branch_id: String = base_id + "_a" + str(choice_num)
 
-	# 尝试多种命名约定
 	var candidates: Array[String] = [
-		branch_id,									# test_choice_a1
-		base_id + "_" + str(choice_num),			  # test_choice_1
-		choice_id + "_" + str(choice_num),			# test_choice_q1_1
-		base_id + "_ready_" + str(choice_num),		# test_all_ready_1
+		branch_id,
+		base_id + "_" + str(choice_num),
+		choice_id + "_" + str(choice_num),
+		base_id + "_ready_" + str(choice_num),
 	]
 
 	for candidate in candidates:
@@ -476,7 +397,6 @@ func _handle_generic_choice(choice_id: String, choice_num: int) -> void:
 			trigger_dialogue(candidate)
 			return
 
-	# 没找到分支对话，输出提示
 	if _main:
 		var muted: String = _main.theme_manager.muted_hex if _main.theme_manager else "#888888"
 		_main.append_output("[color=" + muted + "]（选择了选项 " + str(choice_num) + "，但没有对应的分支对话）[/color]\n", false)
@@ -485,16 +405,16 @@ func _handle_generic_choice(choice_id: String, choice_num: int) -> void:
 #  角色控制（内部，供 dialogue_player 调用）
 # ══════════════════════════════════════════
 func _set_active_character(char_id: String) -> void:
-	if not _characters.has(char_id):
-		if _characters.has("op7"):
+	if not _registry.has_character(char_id):
+		if _registry.has_character("op7"):
 			char_id = "op7"
-		elif _characters.has("ava"):
+		elif _registry.has_character("ava"):
 			char_id = "ava"
-		elif _characters.size() > 0:
-			char_id = _characters.keys()[0]
+		elif _registry.size() > 0:
+			char_id = _registry.get_character_ids()[0]
 		else:
 			return
-	_active_character = _characters[char_id]
+	_active_character = _registry.get_character(char_id)
 	_voice.apply_config(_active_character.voice_config)
 	_ui.set_character(_active_character)
 
@@ -519,6 +439,47 @@ func _speak_char(ch: String) -> void:
 		_voice.speak_char(ch)
 
 # ══════════════════════════════════════════
+#  图层覆盖 / 服装 / 动画效果（新功能）
+# ══════════════════════════════════════════
+
+## 应用图层覆盖（由 dialogue_player 调用）
+func _apply_layer_override(layer_changes: Dictionary, duration: float = -1.0) -> void:
+	if _active_character and _active_character.animator:
+		_active_character.animator.add_layer_override(layer_changes, duration)
+
+## 清除所有图层覆盖
+func _clear_layer_overrides() -> void:
+	if _active_character and _active_character.animator:
+		_active_character.animator.clear_all_overrides()
+
+## 切换服装
+func _set_costume(costume_name: String) -> void:
+	if _active_character:
+		_active_character.set_costume(costume_name)
+
+## 播放预设动画效果
+## 格式: "effect_name:duration" 或 "effect_name"
+func _play_anim_effect(effect_str: String) -> void:
+	if _active_character == null or _active_character.animator == null:
+		return
+	var parts: PackedStringArray = effect_str.split(":")
+	var effect_name: String = parts[0].strip_edges()
+	var duration: float = 2.0
+	if parts.size() > 1:
+		duration = float(parts[1].strip_edges())
+	match effect_name:
+		"wink_left":
+			_active_character.animator.play_wink("L", duration)
+		"wink_right":
+			_active_character.animator.play_wink("R", duration)
+		"eyes_closed":
+			_active_character.animator.play_eyes_closed(duration)
+		"surprised":
+			_active_character.animator.play_surprised(duration)
+		_:
+			push_warning("[CommManager] 未知动画效果: %s" % effect_name)
+
+# ══════════════════════════════════════════
 #  Meeting 模式 API
 # ══════════════════════════════════════════
 
@@ -528,9 +489,9 @@ func set_display_mode(mode: String) -> void:
 
 ## 设置 meeting 模式下角色位置 (slot: "left"/"center"/"right")
 func set_meeting_char(char_id: String, slot: String) -> void:
-	if not _characters.has(char_id):
+	var character: CommCharacter = _registry.get_character(char_id)
+	if character == null:
 		return
-	var character: CommCharacter = _characters[char_id]
 	_ui.ensure_meeting_char(character, slot)
 
 ## 播放 meeting 模式动画
@@ -562,9 +523,7 @@ func notify_condition(condition_type: String, value: String = "") -> void:
 func on_command_executed(cmd_name: String, cmd_args: Array = []) -> void:
 	if not is_active:
 		return
-	# 精确匹配
 	notify_condition("command", cmd_name)
-	# 前缀匹配
 	if not cmd_args.is_empty():
 		var full_cmd: String = cmd_name
 		var str_args: PackedStringArray = PackedStringArray()
@@ -572,7 +531,6 @@ func on_command_executed(cmd_name: String, cmd_args: Array = []) -> void:
 			str_args.append(str(a))
 		full_cmd += " " + " ".join(str_args)
 		_player.notify_condition_met("command:" + full_cmd)
-	# ★ 命令执行后，如果对话框是自动收起的，自动展开
 	if _ui._auto_collapsed:
 		_ui.auto_expand()
 
@@ -588,7 +546,6 @@ func on_directory_entered(dir_path: String) -> void:
 #  每帧更新
 # ══════════════════════════════════════════
 func process(delta: float) -> void:
-	# ★ 始终驱动 UI（即使对话未激活，按钮位置也需要更新）
 	if _ui:
 		_ui.process(delta)
 	if not is_active:
@@ -603,18 +560,19 @@ func process(delta: float) -> void:
 #  信号回调
 # ══════════════════════════════════════════
 func _on_dialogue_started(dialogue_id: String) -> void:
-	# ★ 设置当前对话 ID，用于历史分组
 	_ui.set_current_dialogue_id(dialogue_id)
 	comm_started.emit(dialogue_id)
 
 
 func _on_dialogue_finished(dialogue_id: String) -> void:
-	# 对话自然结束时将历史写入磁盘
 	_ui.flush_history_to_disk()
 	_ui.clear_cards()
 
-	# ★ 记录是否为拨号通话（在 is_active 置 false 之前判断）
 	var is_dial_call: bool = _main.dial_mgr != null and _main.dial_mgr.is_active()
+
+	# 清除角色动画状态
+	if _active_character:
+		_active_character.clear_all_overrides()
 
 	_ui.hide()
 	is_active = false
@@ -622,14 +580,12 @@ func _on_dialogue_finished(dialogue_id: String) -> void:
 	comm_finished.emit(dialogue_id)
 
 	if is_dial_call:
-		# ★ 延迟 1.0 秒，等对话框收起动画完全结束后再播放挂机音
 		if _main and _main.get_tree():
 			_main.get_tree().create_timer(1.0).timeout.connect(func():
 				if _main.dial_mgr and _main.dial_mgr.is_active():
 					_main.dial_mgr.on_voice_call_ended()
 			)
 
-	# 检查队列中的后续对话
 	if not _dialogue_queue.is_empty():
 		var next_id: String = _dialogue_queue.pop_front()
 		if _main:
@@ -642,12 +598,10 @@ func _on_line_started(_line_index: int) -> void:
 	_ui.show_continue_prompt(false)
 	_ui.hide_wait_prompt()
 	_pending_choice_id = ""
-	# ★ 新行开始时确保对话框展开
 	if _ui._collapsed:
 		_ui.auto_expand()
 
 func _on_line_finished(_line_index: int) -> void:
-	# ★ 记录历史对话
 	if _active_character and _player:
 		var displayed: String = _player.get_displayed_text()
 		if not displayed.is_empty():
@@ -656,13 +610,11 @@ func _on_line_finished(_line_index: int) -> void:
 		_ui.show_continue_prompt(true)
 
 func _on_waiting_for_condition(condition: String) -> void:
-	# ── 选项条件 ──
 	if condition.begins_with("choice:"):
 		_pending_choice_id = condition.substr(7)
 		_ui.show_wait_prompt_custom("按数字键选择 | ESC 跳过")
 		return
 
-	# ── 需要用户操作的条件：自动收起对话框 ──
 	if condition.begins_with("command:") or condition.begins_with("open_file:") or condition.begins_with("enter_dir:"):
 		_ui.show_wait_prompt(condition)
 		_ui.auto_collapse()
@@ -670,7 +622,6 @@ func _on_waiting_for_condition(condition: String) -> void:
 
 	_ui.show_wait_prompt(condition)
 
-	# timer 自动定时器
 	if condition.begins_with("timer:"):
 		var seconds: float = float(condition.substr(6))
 		if seconds > 0.0 and _main:
@@ -682,29 +633,24 @@ func _on_waiting_for_condition(condition: String) -> void:
 #  完成状态持久化
 # ══════════════════════════════════════════
 
-## 标记对话为已完成
 func _mark_dialogue_completed(dialogue_id: String) -> void:
 	if dialogue_id.is_empty():
 		return
-	# ★ tutorial_ask 只是询问，不标记为完成
 	if dialogue_id == "tutorial_ask":
 		return
 	_completed_dialogues[dialogue_id] = true
 	_save_completed()
 
 
-## 查询对话是否已完成
 func is_dialogue_completed(dialogue_id: String) -> bool:
 	return _completed_dialogues.has(dialogue_id)
 
-## 登录后重新加载完成状态
 func reload_user_data() -> void:
 	_load_completed()
 
 func _get_save_path() -> String:
 	if _main and _main.user_mgr and _main.user_mgr.is_logged_in:
 		var username: String = _main.user_mgr.get_username()
-		# ★ 与其他存档一致：res://saves/用户名/（编辑器）或 exe目录/saves/用户名/（导出后）
 		var base_dir: String = ""
 		if OS.has_feature("editor"):
 			base_dir = ProjectSettings.globalize_path("res://")
@@ -742,26 +688,15 @@ func _load_completed() -> void:
 # ══════════════════════════════════════════
 #  磁盘对话加载/卸载
 # ══════════════════════════════════════════
-## 从磁盘 manifest 加载通讯角色和对话（不覆盖教程数据）
 var _disc_dialogue_ids: Array[String] = []
-var _disc_character_ids: Array[String] = []
 
 func load_disc_dialogues(manifest_data: Dictionary) -> void:
-	# 加载磁盘角色
+	# 加载磁盘角色（委托给 registry）
 	var chars_data: Dictionary = manifest_data.get("comm_characters", {}) as Dictionary
-	for char_id in chars_data.keys():
-		if _characters.has(char_id):
-			print("[CommManager] 磁盘角色覆盖已有角色: ", char_id)
-		var char_dict: Dictionary = chars_data[char_id] as Dictionary
-		char_dict["id"] = char_id
-		var character := CommCharacter.new()
-		character.load_from_config(char_dict, null)
-		# 加载头像（从虚拟文件系统中查找）
-		_load_character_portrait(character, char_dict)
-		_characters[char_id] = character
-		_disc_character_ids.append(char_id)
-		print("[CommManager] 磁盘角色已加载: ", char_id)
-	
+	if not chars_data.is_empty():
+		var loaded_ids: Array[String] = _registry.load_disc_characters(chars_data)
+		# loaded_ids 由 registry 追踪
+
 	# 加载磁盘对话
 	var dialogues_data: Dictionary = manifest_data.get("comm_dialogues", {}) as Dictionary
 	for dlg_id in dialogues_data.keys():
@@ -771,62 +706,24 @@ func load_disc_dialogues(manifest_data: Dictionary) -> void:
 		_disc_dialogue_ids.append(dlg_id)
 		print("[CommManager] 磁盘对话已加载: ", dlg_id)
 
-## 从虚拟文件系统或资源路径加载角色头像
-func _load_character_portrait(character: CommCharacter, char_dict: Dictionary) -> void:
-	var portrait_path: String = str(char_dict.get("portrait", ""))
-	if portrait_path.is_empty():
-		return
-	
-	# 尝试从虚拟文件系统加载（磁盘内资源）
-	if _main and _main.fs:
-		var normalized: String = _main.fs.normalize_path(portrait_path)
-		var binary: PackedByteArray = _main.fs.get_binary_data(normalized)
-		if not binary.is_empty():
-			var img := Image.new()
-			var ext: String = portrait_path.get_extension().to_lower()
-			var err: Error = ERR_FILE_UNRECOGNIZED
-			match ext:
-				"png":
-					err = img.load_png_from_buffer(binary)
-				"jpg", "jpeg":
-					err = img.load_jpg_from_buffer(binary)
-				"webp":
-					err = img.load_webp_from_buffer(binary)
-			if err == OK:
-				character.static_portrait = ImageTexture.create_from_image(img)
-				print("[CommManager] 磁盘角色头像已加载: ", character.id)
-				return
-	
-	# 尝试从 res:// 路径加载
-	if portrait_path.begins_with("res://") and ResourceLoader.exists(portrait_path):
-		var tex = load(portrait_path)
-		if tex is Texture2D:
-			character.static_portrait = tex
-			print("[CommManager] 角色头像已加载(res): ", character.id)
 
-
-## 卸载磁盘对话数据（弹出磁盘时调用）
 func unload_disc_dialogues() -> void:
-	# 如果当前正在播放磁盘对话，先停止
 	var active_dlg: String = _player.current_dialogue_id if _player else ""
 	if is_active and active_dlg in _disc_dialogue_ids:
 		stop_dialogue()
-	
+
 	# 移除磁盘对话
 	for dlg_id in _disc_dialogue_ids:
 		_dialogues.erase(dlg_id)
 	_disc_dialogue_ids.clear()
-	
-	# 移除磁盘角色
-	for char_id in _disc_character_ids:
-		_characters.erase(char_id)
-	_disc_character_ids.clear()
-	
+
+	# 移除磁盘角色（委托给 registry）
+	_registry.unload_by_source(CharacterRegistry.CharacterSource.DISC)
+
 	print("[CommManager] 磁盘通讯数据已卸载")
 
 
 
-## 获取当前对话 ID（供外部查询）
 var current_dialogue_id: String:
 	get:
 		return _player.current_dialogue_id if _player else ""
@@ -838,11 +735,9 @@ var current_dialogue_id: String:
 # ══════════════════════════════════════════
 func try_trigger_tutorial() -> void:
 	reload_user_data()
-	# 检查教程是否完成
 	var tutorial_done: bool = is_dialogue_completed("tutorial_main") or \
 							  is_dialogue_completed("tutorial_skip")
 	if not tutorial_done:
-		# 教程未完成，触发教程
 		if not _dialogues.has("tutorial_ask"):
 			push_warning("[CommManager] tutorial_ask 对话不存在！检查 tutorial.json")
 			return
@@ -851,10 +746,8 @@ func try_trigger_tutorial() -> void:
 				trigger_dialogue("tutorial_ask")
 			)
 	else:
-		# 教程已完成，触发 AVA 登录欢迎
 		_try_ava_login_welcome()
 
-## 教程完成后触发 AVA 登录欢迎（每次登录一次）
 func _try_ava_login_welcome() -> void:
 	if not _dialogues.has("ava_login_welcome"):
 		return
@@ -871,14 +764,12 @@ func _try_ava_login_welcome() -> void:
 #  触发系统集成
 # ══════════════════════════════════════════
 
-## 处理 trigger 动作字符串 "comm:dialogue_id"
 func handle_trigger_action(action: String) -> bool:
 	if not action.begins_with("comm:"):
 		return false
 	var dialogue_id: String = action.substr(5).strip_edges()
 	return trigger_dialogue(dialogue_id)
 
-## 检查自动触发的对话（首次启动等）
 func check_auto_triggers(story_manifest: Dictionary) -> void:
 	for dlg_id in _dialogues.keys():
 		var dlg: Dictionary = _dialogues[dlg_id] as Dictionary
@@ -896,7 +787,6 @@ func check_auto_triggers(story_manifest: Dictionary) -> void:
 			"incoming_call":
 				_show_incoming_call(dlg_id, dlg)
 
-## 来电提示
 func _show_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
 	if _main == null:
 		return
@@ -905,8 +795,9 @@ func _show_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
 	var caller_name: String = "UNKNOWN"
 	if lines.size() > 0:
 		var first_char_id: String = str(lines[0].get("character", "op7"))
-		if _characters.has(first_char_id):
-			caller_name = _characters[first_char_id].display_name
+		var ch: CommCharacter = _registry.get_character(first_char_id)
+		if ch:
+			caller_name = ch.display_name
 	var c_hex: String = _T.warning_hex if _T else "#ffff00"
 	var m_hex: String = _T.muted_hex if _T else "#888888"
 	_main.append_output("\n[color=" + c_hex + "]╔══════════════════════════════════╗[/color]\n", false)
@@ -914,40 +805,27 @@ func _show_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
 	_main.append_output("[color=" + m_hex + "]║  输入 [color=" + c_hex + "]comm answer[/color] 接听通讯[/color]\n", false)
 	_main.append_output("[color=" + c_hex + "]╚══════════════════════════════════╝[/color]\n\n", false)
 
-## 来电等待 ID
 var _pending_incoming_call: String = ""
 
 # ══════════════════════════════════════════
 #  主动通讯系统（玩家呼叫联络员）
 # ══════════════════════════════════════════
 
-## 判断对话是否可被用户通过 comm 命令触发
-## 规则：排除教程内部对话和选项分支对话，其余均可调用
 func _is_user_callable(dlg_id: String) -> bool:
-	# 教程内部对话不可手动调用
 	if dlg_id.begins_with("tutorial_"):
 		return false
-	# 检查对话数据是否存在
 	if not _dialogues.has(dlg_id):
 		return false
 	var dlg: Dictionary = _dialogues[dlg_id] as Dictionary
-	# 明确标记为不可调用的对话
 	if dlg.has("callable") and not dlg.get("callable", true):
 		return false
-	# 没有 description 且没有 callable=true 的对话视为分支/内部对话
-	# （分支对话通常只有 lines，没有 description）
 	var has_description: bool = not str(dlg.get("description", "")).is_empty()
 	var explicitly_callable: bool = dlg.get("callable", false)
-	# 有描述 或 明确标记callable 或 以comm_开头 → 可调用
 	if has_description or explicitly_callable or dlg_id.begins_with("comm_"):
 		return true
 	return false
 
 
-## comm 命令入口
-## 用法: comm			→ 列出通讯状态与号码簿摘要
-##	   comm answer	 → 接听来电
-##	   comm phonebook  → 查看号码簿
 func handle_comm_command(args: Array = []) -> void:
 	if _main == null:
 		return
@@ -960,16 +838,13 @@ func handle_comm_command(args: Array = []) -> void:
 		_main.append_output("[color=" + m + "]通讯频道正在使用中。[/color]\n", false)
 		return
 
-	# ── 有参数 ──
 	if not args.is_empty():
 		var target_id: String = str(args[0]).strip_edges()
 
-		# comm phonebook / pb → 号码簿
 		if target_id == "phonebook" or target_id == "pb":
 			_show_phonebook()
 			return
 
-		# comm answer → 接听来电
 		if target_id == "answer":
 			if _pending_incoming_call.is_empty():
 				_main.append_output("[color=" + m + "]当前没有待接听的通讯。[/color]\n", false)
@@ -979,7 +854,6 @@ func handle_comm_command(args: Array = []) -> void:
 				trigger_dialogue(call_id)
 			return
 
-		# comm video / meeting → 直接进入视频通讯（meeting 模式）
 		if target_id == "video" or target_id == "meeting":
 			var meeting_dlg: String = _find_meeting_dialogue()
 			if meeting_dlg.is_empty():
@@ -988,7 +862,6 @@ func handle_comm_command(args: Array = []) -> void:
 				trigger_dialogue(meeting_dlg)
 			return
 
-		# comm <号码格式> → 通过 dial_manager 拨号
 		if _main.dial_mgr != null and _main.dial_mgr.is_number_format(target_id):
 			if _main.dial_mgr.is_active():
 				_main.append_output("[color=" + m + "]线路忙，请稍后再试。[/color]\n", false)
@@ -996,25 +869,20 @@ func handle_comm_command(args: Array = []) -> void:
 			_main.dial_mgr.dial(target_id)
 			return
 
-		# 其他参数 → 提示使用 dial 命令
 		_main.append_output("[color=" + e + "]未知参数: " + target_id + "[/color]\n", false)
 		_main.append_output("[color=" + m + "]用法: comm / comm answer / comm phonebook / comm video[/color]\n", false)
 		_main.append_output("[color=" + m + "]如需联络，请使用 dial <号码> 拨号呼叫。[/color]\n", false)
 		return
 
-	# ── 无参数：显示通讯系统概览 ──
 	_main.append_output("\n[color=" + p + "]═══════════ 通讯系统 ═══════════[/color]\n\n", false)
 
-	# 待接听来电
 	if not _pending_incoming_call.is_empty():
 		_main.append_output("  [color=" + w + "]★ 待接听来电[/color]  [color=" + m + "]输入 comm answer 接听[/color]\n\n", false)
 
-	# 显示号码簿摘要
 	if _main.dial_mgr:
 		var all_numbers: Array[String] = _main.dial_mgr.get_all_numbers()
 		if not all_numbers.is_empty():
 			_main.append_output("  [color=" + p + "]已知号码:[/color]\n", false)
-			# 最多显示 5 个，超出提示查看号码簿
 			var show_count: int = mini(all_numbers.size(), 5)
 			for i in range(show_count):
 				var num: String = all_numbers[i]
@@ -1043,14 +911,11 @@ func handle_comm_command(args: Array = []) -> void:
 #  拨号系统集成
 # ══════════════════════════════════════════
 
-## ★ 查找可用的 meeting 模式对话（优先 ava_meeting，然后扫描含 meeting 字段的对话）
 func _find_meeting_dialogue() -> String:
-	# 优先查找以 _meeting 结尾的对话
 	var meeting_candidates: Array[String] = ["ava_meeting"]
 	for candidate in meeting_candidates:
 		if _dialogues.has(candidate) and _is_user_callable(candidate):
 			return candidate
-	# 扫描所有 callable 对话，查找含 display_mode: meeting 的
 	for dlg_id in _dialogues.keys():
 		if not _is_user_callable(dlg_id):
 			continue
@@ -1061,21 +926,17 @@ func _find_meeting_dialogue() -> String:
 				return dlg_id
 	return ""
 
-## ★ 显示号码簿
 func _show_phonebook() -> void:
 	if _main.dial_mgr:
 		var text: String = _main.dial_mgr.get_phonebook_text()
 		_main.append_output(text, false)
 	else:
-		var m: String = _T.muted_hex if _T else "#888888"
-		_main.append_output("[color=" + m + "]拨号系统未初始化。[/color]\n", false)
+		var m_str: String = _T.muted_hex if _T else "#888888"
+		_main.append_output("[color=" + m_str + "]拨号系统未初始化。[/color]\n", false)
 
-## ★ 由 DialManager 调用：拨号流程接通后启动语音对话（跳过拨号动画）
 func start_dialogue_from_dial(character_id: String) -> void:
-	# 查找该角色的可用对话
 	var target_dlg_id: String = ""
 
-	# 策略1：查找以角色名为前缀的对话（如 ava_chat, ava_greeting）
 	var candidates: Array[String] = [
 		character_id + "_chat",
 		character_id + "_greeting",
@@ -1087,7 +948,6 @@ func start_dialogue_from_dial(character_id: String) -> void:
 			target_dlg_id = candidate
 			break
 
-	# 策略2：查找首行角色匹配的对话
 	if target_dlg_id.is_empty():
 		for dlg_id in _dialogues.keys():
 			var dlg: Dictionary = _dialogues[dlg_id] as Dictionary
@@ -1099,8 +959,8 @@ func start_dialogue_from_dial(character_id: String) -> void:
 					break
 
 	if target_dlg_id.is_empty():
-		var m: String = _T.muted_hex if _T else "#888888"
-		_main.append_output("[color=" + m + "]联络员 " + character_id + " 当前不可用。[/color]\n", false)
+		var m_str: String = _T.muted_hex if _T else "#888888"
+		_main.append_output("[color=" + m_str + "]联络员 " + character_id + " 当前不可用。[/color]\n", false)
 		if _main.dial_mgr:
 			_main.dial_mgr.on_voice_call_ended()
 		return
@@ -1111,13 +971,10 @@ func start_dialogue_from_dial(character_id: String) -> void:
 #  查询接口
 # ══════════════════════════════════════════
 func get_character_ids() -> Array[String]:
-	var result: Array[String] = []
-	for key in _characters.keys():
-		result.append(str(key))
-	return result
+	return _registry.get_character_ids()
 
 func get_character(char_id: String) -> CommCharacter:
-	return _characters.get(char_id) as CommCharacter
+	return _registry.get_character(char_id)
 
 func get_dialogue_ids() -> Array[String]:
 	var result: Array[String] = []
@@ -1125,10 +982,15 @@ func get_dialogue_ids() -> Array[String]:
 		result.append(str(key))
 	return result
 
+func has_dialogue(dialogue_id: String) -> bool:
+	return _dialogues.has(dialogue_id)
+
+func get_dialogue_data(dialogue_id: String) -> Dictionary:
+	return _dialogues.get(dialogue_id, {}) as Dictionary
+
 func is_dialogue_active() -> bool:
 	return is_active
 
-## 查询是否正在等待用户执行操作（命令/打开文件/进入目录），不应阻断终端输入
 func is_waiting_for_command() -> bool:
 	if _player and _player._waiting:
 		var cond: String = _player._wait_condition
@@ -1136,7 +998,6 @@ func is_waiting_for_command() -> bool:
 			return true
 	return false
 
-## 查询是否正在等待选项选择
 func is_waiting_for_choice() -> bool:
 	return not _pending_choice_id.is_empty()
 
@@ -1148,15 +1009,7 @@ func get_current_dialogue_id() -> String:
 #  ModAPI 扩展接口
 # ══════════════════════════════════════════
 func register_mod_character(char_id: String, config: Dictionary) -> bool:
-	if _characters.has(char_id):
-		push_warning("[CommManager] 角色已存在: %s" % char_id)
-		return false
-	config["id"] = char_id
-	var character := CommCharacter.new()
-	character.load_from_config(config, _fs)
-	_characters[char_id] = character
-	print("[CommManager] 模组注册角色: %s" % char_id)
-	return true
+	return _registry.register_mod_character(char_id, config)
 
 func register_mod_dialogue(dialogue_id: String, dialogue_data: Dictionary) -> bool:
 	if _dialogues.has(dialogue_id):
@@ -1167,7 +1020,7 @@ func register_mod_dialogue(dialogue_id: String, dialogue_data: Dictionary) -> bo
 	return true
 
 func unregister_mod_character(char_id: String) -> void:
-	_characters.erase(char_id)
+	_registry.unregister_mod_character(char_id)
 
 func unregister_mod_dialogue(dialogue_id: String) -> void:
 	_dialogues.erase(dialogue_id)
@@ -1184,6 +1037,7 @@ func cleanup() -> void:
 		_ui.flush_history_to_disk()
 		_ui.cleanup()
 	_voice.cleanup()
-	_characters.clear()
-	_dialogues.clear()
+	if _registry:
+		_registry.cleanup()
 	_active_character = null
+	_dialogues.clear()

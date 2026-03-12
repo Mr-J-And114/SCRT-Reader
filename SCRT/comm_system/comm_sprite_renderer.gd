@@ -137,15 +137,15 @@ func _show_programmatic_mouth(mouth_key: String) -> void:
 func _update_blink() -> void:
 	if _character == null:
 		return
-	# ★ 预留：有眨眼素材时切换 eyes 层
-	pass
+	# 眨眼由 CharacterAnimator 驱动，通过 blink_phase 控制
+	# 实际渲染在 CommUI._update_layered_portrait() 中处理
 
 ## 更新动作动画
 func _update_action() -> void:
 	if _character == null:
 		return
-	# ★ 预留：有动作帧时切换 body 层
-	pass
+	# 动作帧由 CharacterAnimator 驱动，通过 action_frame 控制
+	# 实际渲染在 CommUI._update_layered_portrait() 中处理
 
 # ══════════════════════════════════════════
 #  布局辅助

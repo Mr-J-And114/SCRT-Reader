@@ -121,17 +121,16 @@ func load_from_manifest(manifest: Dictionary) -> void:
 func register_dialogues_to_comm() -> void:
 	if main == null or main.comm_mgr == null:
 		return
-	# 注册角色
+	# 注册角色（通过 registry API）
+	var registry: CharacterRegistry = main.comm_mgr.get_registry()
 	for char_id in _characters.keys():
-		if not main.comm_mgr._characters.has(char_id):
+		if registry and not registry.has_character(char_id):
 			var char_config: Dictionary = _characters[char_id].duplicate()
-			char_config["id"] = char_id
-			var character = CommCharacter.new()
-			character.load_from_config(char_config, null)
-			main.comm_mgr._characters[char_id] = character
-	# 注册对话
+			registry.register_character(char_id, char_config, CharacterRegistry.CharacterSource.BUILTIN)
+	# 注册对话（通过公共 API）
 	for dlg_id in _dialogues.keys():
-		main.comm_mgr._dialogues[dlg_id] = _dialogues[dlg_id]
+		if not main.comm_mgr.get_dialogue_ids().has(dlg_id):
+			main.comm_mgr.register_mod_dialogue(dlg_id, _dialogues[dlg_id])
 
 # ══════════════════════════════════════════
 #  触发接口
@@ -349,12 +348,12 @@ func _trigger_dialogues(dlg_ids: Array) -> void:
 	var valid_ids: Array = []
 	for dlg_id in dlg_ids:
 		var sid: String = str(dlg_id)
-		if main.comm_mgr._dialogues.has(sid):
-			var dlg_data: Dictionary = main.comm_mgr._dialogues[sid]
+		if main.comm_mgr.has_dialogue(sid):
+			var dlg_data: Dictionary = main.comm_mgr.get_dialogue_data(sid)
 			var repeatable: bool = dlg_data.get("repeatable", false)
 			if not repeatable and sid in _completed_dialogues:
 				continue
-			if not repeatable and main.comm_mgr._completed_dialogues.has(sid):
+			if not repeatable and main.comm_mgr.is_dialogue_completed(sid):
 				continue
 			# ★ 检查前置条件（需要某个选项或标记）
 			if not _check_conditions(dlg_data):
