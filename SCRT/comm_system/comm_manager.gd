@@ -950,11 +950,12 @@ func handle_comm_command(args: Array = []) -> void:
 			return
 
 		if target_id == "video" or target_id == "meeting":
-			var meeting_dlg: String = _find_meeting_dialogue()
-			if meeting_dlg.is_empty():
-				_main.append_output("[color=" + m + "]当前没有可用的视频通讯频道。[/color]\n", false)
+			# 支持 comm video <号码> 直接拨号
+			if args.size() >= 2:
+				var video_number: String = str(args[1]).strip_edges()
+				_dial_video_call(video_number)
 			else:
-				trigger_dialogue(meeting_dlg)
+				_show_video_channels()
 			return
 
 		if _main.dial_mgr != null and _main.dial_mgr.is_number_format(target_id):
@@ -965,7 +966,7 @@ func handle_comm_command(args: Array = []) -> void:
 			return
 
 		_main.append_output("[color=" + e + "]未知参数: " + target_id + "[/color]\n", false)
-		_main.append_output("[color=" + m + "]用法: comm / comm answer / comm phonebook / comm video[/color]\n", false)
+		_main.append_output("[color=" + m + "]用法: comm / comm answer / comm reject / comm video / comm video <号码>[/color]\n", false)
 		_main.append_output("[color=" + m + "]如需联络，请使用 dial <号码> 拨号呼叫。[/color]\n", false)
 		return
 
@@ -997,7 +998,8 @@ func handle_comm_command(args: Array = []) -> void:
 
 	_main.append_output("\n[color=" + p + "]════════════════════════════════════[/color]\n", false)
 	_main.append_output("[color=" + m + "]拨号联络: dial <号码>  (如 dial 1001-0001)[/color]\n", false)
-	_main.append_output("[color=" + m + "]视频通讯: comm video[/color]\n", false)
+	_main.append_output("[color=" + m + "]视频通讯: comm video  (查看频道列表)[/color]\n", false)
+	_main.append_output("[color=" + m + "]视频拨号: comm video <号码>  (如 comm video 1001-0001)[/color]\n", false)
 	_main.append_output("[color=" + m + "]查看号码簿: phonebook[/color]\n", false)
 	if has_pending:
 		_main.append_output("[color=" + m + "]接听来电: comm answer  拒绝: comm reject[/color]\n", false)
@@ -1007,20 +1009,102 @@ func handle_comm_command(args: Array = []) -> void:
 #  拨号系统集成
 # ══════════════════════════════════════════
 
-func _find_meeting_dialogue() -> String:
-	var meeting_candidates: Array[String] = ["ava_meeting"]
-	for candidate in meeting_candidates:
-		if _dialogues.has(candidate) and _is_user_callable(candidate):
-			return candidate
+## 获取所有可用的视频通讯频道
+## 返回 Array[Dictionary]，每项: { "dlg_id", "title", "character", "number" }
+func _get_video_channels() -> Array[Dictionary]:
+	var channels: Array[Dictionary] = []
 	for dlg_id in _dialogues.keys():
+		var dlg: Dictionary = _dialogues[dlg_id] as Dictionary
+		# 标记了 video_call 的对话
+		if dlg.get("video_call", false):
+			if not _is_user_callable(dlg_id):
+				continue
+			var title: String = str(dlg.get("title", dlg_id))
+			var number: String = str(dlg.get("video_number", ""))
+			var lines: Array = dlg.get("lines", []) as Array
+			var char_name: String = ""
+			if lines.size() > 0:
+				var first_cid: String = str((lines[0] as Dictionary).get("character", ""))
+				var ch: CommCharacter = _registry.get_character(first_cid)
+				if ch:
+					char_name = ch.display_name
+			channels.append({
+				"dlg_id": dlg_id,
+				"title": title,
+				"character": char_name,
+				"number": number,
+			})
+			continue
+		# 兼容：没有 video_call 标记但含 meeting display_mode 的对话
 		if not _is_user_callable(dlg_id):
 			continue
-		var dlg: Dictionary = _dialogues[dlg_id] as Dictionary
-		var lines: Array = dlg.get("lines", []) as Array
-		for line in lines:
+		var lines2: Array = dlg.get("lines", []) as Array
+		for line in lines2:
 			if line is Dictionary and str(line.get("display_mode", "")) == "meeting":
-				return dlg_id
-	return ""
+				var title2: String = str(dlg.get("title", dlg_id))
+				channels.append({
+					"dlg_id": dlg_id,
+					"title": title2,
+					"character": "",
+					"number": "",
+				})
+				break
+	return channels
+
+## 显示视频通讯频道列表
+func _show_video_channels() -> void:
+	var p: String = _T.primary_hex if _T else "#00ff00"
+	var m: String = _T.muted_hex if _T else "#888888"
+	var w: String = _T.warning_hex if _T else "#ffaa00"
+
+	var channels: Array[Dictionary] = _get_video_channels()
+	if channels.is_empty():
+		_main.append_output("[color=" + m + "]当前没有可用的视频通讯频道。[/color]\n", false)
+		return
+
+	_main.append_output("\n[color=" + p + "]═══════════ 视频通讯频道 ═══════════[/color]\n\n", false)
+	for i in range(channels.size()):
+		var ch: Dictionary = channels[i]
+		var num_str: String = str(ch.get("number", ""))
+		var title_str: String = str(ch.get("title", ""))
+		var char_str: String = str(ch.get("character", ""))
+		var line: String = "  [color=" + p + "]" + str(i + 1) + ".[/color] "
+		line += "[color=" + w + "]" + title_str + "[/color]"
+		if not char_str.is_empty():
+			line += "  [color=" + m + "](" + char_str + ")[/color]"
+		if not num_str.is_empty():
+			line += "  [color=" + m + "]" + num_str + "[/color]"
+		_main.append_output(line + "\n", false)
+	_main.append_output("\n[color=" + m + "]拨号连接: [color=" + p + "]comm video <号码>[/color]  或  [color=" + p + "]dial <号码>[/color][/color]\n", false)
+	_main.append_output("[color=" + m + "]所有视频通讯均通过拨号系统建立连接。[/color]\n", false)
+
+## 通过拨号系统发起视频通讯
+func _dial_video_call(number: String) -> void:
+	var p: String = _T.primary_hex if _T else "#00ff00"
+	var m: String = _T.muted_hex if _T else "#888888"
+	if _main.dial_mgr == null:
+		_main.append_output("[color=" + m + "]拨号系统未初始化。[/color]\n", false)
+		return
+	if _main.dial_mgr.is_active():
+		_main.append_output("[color=" + m + "]线路忙，请稍后再试。[/color]\n", false)
+		return
+	# 验证号码是否有效
+	if _main.dial_mgr.is_number_format(number):
+		_main.dial_mgr.dial(number)
+	else:
+		# 尝试匹配视频频道名称或序号
+		var channels: Array[Dictionary] = _get_video_channels()
+		var idx: int = number.to_int() - 1
+		if idx >= 0 and idx < channels.size():
+			var ch_number: String = str(channels[idx].get("number", ""))
+			if not ch_number.is_empty():
+				_main.dial_mgr.dial(ch_number)
+			else:
+				# 无号码的频道直接触发
+				trigger_dialogue(str(channels[idx].get("dlg_id", "")))
+		else:
+			_main.append_output("[color=" + m + "]无效的频道号码或序号: " + number + "[/color]\n", false)
+			_main.append_output("[color=" + m + "]输入 [color=" + p + "]comm video[/color] 查看可用频道列表。[/color]\n", false)
 
 func _show_phonebook() -> void:
 	if _main.dial_mgr:
@@ -1030,19 +1114,29 @@ func _show_phonebook() -> void:
 		var m_str: String = _T.muted_hex if _T else "#888888"
 		_main.append_output("[color=" + m_str + "]拨号系统未初始化。[/color]\n", false)
 
-func start_dialogue_from_dial(character_id: String) -> void:
+func start_dialogue_from_dial(character_id: String, dialed_number: String = "") -> void:
 	var target_dlg_id: String = ""
 
-	var candidates: Array[String] = [
-		character_id + "_chat",
-		character_id + "_greeting",
-		character_id + "_main",
-		"comm_" + character_id,
-	]
-	for candidate in candidates:
-		if _dialogues.has(candidate):
-			target_dlg_id = candidate
-			break
+	# ★ 优先按 video_number 精确匹配（支持视频频道拨号）
+	if not dialed_number.is_empty():
+		for dlg_id in _dialogues.keys():
+			var dlg: Dictionary = _dialogues[dlg_id] as Dictionary
+			if str(dlg.get("video_number", "")) == dialed_number:
+				target_dlg_id = dlg_id
+				break
+
+	# 按角色名模式匹配
+	if target_dlg_id.is_empty():
+		var candidates: Array[String] = [
+			character_id + "_chat",
+			character_id + "_greeting",
+			character_id + "_main",
+			"comm_" + character_id,
+		]
+		for candidate in candidates:
+			if _dialogues.has(candidate):
+				target_dlg_id = candidate
+				break
 
 	if target_dlg_id.is_empty():
 		for dlg_id in _dialogues.keys():

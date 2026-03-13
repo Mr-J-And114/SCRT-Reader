@@ -181,6 +181,8 @@ func _ready() -> void:
 	dial_mgr.setup(self, comm_mgr, audio_manager, T)
 	# 注册系统内置号码
 	dial_mgr.register_system_voice("1001-0001", "ava", "系统联络员 (AVA)")
+	dial_mgr.register_system_voice("1002-0001", "researcher", "高级研究员 (Dr. Zhang)")
+	dial_mgr.register_system_voice("1000-9999", "ava", "多方视频会议室")
 
 	# ★ 触发器系统
 	trigger_sys = TriggerSystem.new()

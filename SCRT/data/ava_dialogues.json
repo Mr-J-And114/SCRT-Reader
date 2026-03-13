@@ -195,6 +195,8 @@
 			"description": "与AVA建立全息视频通讯（大图模式）",
 			"callable": true,
 			"repeatable": true,
+			"video_call": true,
+			"video_number": "1001-0001",
 			"lines": [
 				{
 					"character": "ava",
@@ -338,6 +340,222 @@
 					"character": "ava",
 					"text": "AVA 持续监控中。祝你工作顺利，特工。",
 					"speed": 30
+				}
+			]
+		},
+
+		"researcher_meeting": {
+			"title": "Dr. Zhang - 视频会议",
+			"description": "与Dr. Zhang建立视频会议",
+			"callable": true,
+			"repeatable": true,
+			"video_call": true,
+			"video_number": "1002-0001",
+			"lines": [
+				{
+					"character": "researcher",
+					"text": "……Zhang 接收。你好，操作员。",
+					"speed": 30,
+					"display_mode": "meeting",
+					"meeting_slot": "center",
+					"char_anim": "slide_in_center"
+				},
+				{
+					"character": "researcher",
+					"text": "有什么事需要汇报的吗？我手上的研究项目正处于关键阶段，时间有限。",
+					"speed": 25
+				},
+				{
+					"character": "researcher",
+					"text": "……没什么事？那我先挂了。有进展记得通过终端发送报告。",
+					"speed": 25
+				},
+				{
+					"character": "researcher",
+					"text": "Zhang 关闭链路。",
+					"char_anim": "fade_out",
+					"speed": 30,
+					"auto_next": 0.8
+				},
+				{
+					"character": "researcher",
+					"text": "[color=#888888]视频通讯已结束。[/color]",
+					"display_mode": "card",
+					"speed": 0
+				}
+			]
+		},
+
+		"multi_meeting_demo": {
+			"title": "多人视频会议",
+			"description": "AVA与Dr. Zhang双人视频会议演示",
+			"callable": true,
+			"repeatable": true,
+			"video_call": true,
+			"video_number": "1000-9999",
+			"lines": [
+				{
+					"character": "ava",
+					"text": "正在建立多方加密视频链路……接入参与者。",
+					"speed": 28,
+					"auto_next": 1.5
+				},
+				{
+					"character": "ava",
+					"text": "[color=#00ff00]▶ 多方链路已建立 — 参与者: A.V.A. / Dr. Zhang[/color]",
+					"speed": 0,
+					"auto_next": 0.5,
+					"screen_effect": "noise"
+				},
+				{
+					"character": "ava",
+					"text": "操作员，这是一次多方视频会议。我将出现在画面左侧。",
+					"display_mode": "meeting",
+					"meeting_slot": "left",
+					"char_anim": "slide_in_left",
+					"speed": 22
+				},
+				{
+					"character": "researcher",
+					"text": "……我也接入了。Dr. Zhang 报到。",
+					"display_mode": "meeting",
+					"meeting_slot": "right",
+					"char_anim": "slide_in_right",
+					"speed": 25
+				},
+				{
+					"character": "ava",
+					"text": "如你所见，在多人会议模式下，不同参与者占据画面的不同位置。当前说话的角色会被高亮到前景，非活跃角色会降低亮度。",
+					"speed": 18
+				},
+				{
+					"character": "researcher",
+					"text": "AVA 说得对。注意观察——当我说话时，我这边变亮了，而 AVA 那边会暗下去。这帮助你分辨谁在发言。",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "多人模式还支持同位置重叠。如果两个角色被分配到相同的位置，系统会自动错开显示，避免完全遮挡。",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "让我展示一下——我现在移动到 Dr. Zhang 的位置。",
+					"display_mode": "meeting",
+					"meeting_slot": "right",
+					"speed": 22
+				},
+				{
+					"character": "researcher",
+					"text": "……你挤到我这边来了。不过系统自动做了偏移处理，所以我们不会完全重叠。",
+					"speed": 22
+				},
+				{
+					"character": "ava",
+					"text": "正确。这就是同位置重叠和 Z 排序功能的效果。现在让我回到正确的位置。",
+					"display_mode": "meeting",
+					"meeting_slot": "left",
+					"speed": 22
+				},
+				{
+					"character": "researcher",
+					"text": "好多了。各就各位。",
+					"speed": 28
+				},
+				{
+					"character": "ava",
+					"text": "多人会议演示完毕。每位联络人都可以通过各自的号码单独呼叫，也可以通过会议频道进行多方通讯。",
+					"speed": 18
+				},
+				{
+					"character": "researcher",
+					"text": "我先退出了。有需要再联络。",
+					"char_anim": "slide_out_right",
+					"speed": 25,
+					"auto_next": 0.8
+				},
+				{
+					"character": "ava",
+					"text": "Dr. Zhang 已断开。我也准备关闭链路。",
+					"speed": 25
+				},
+				{
+					"character": "ava",
+					"text": "关闭全息链路……",
+					"char_anim": "fade_out",
+					"speed": 28,
+					"auto_next": 0.8
+				},
+				{
+					"character": "ava",
+					"text": "已回到常规通讯模式。\n输入 [color=#ffaa00]comm video[/color] 查看视频频道列表，或 [color=#ffaa00]dial 号码[/color] 直接拨号。",
+					"display_mode": "card",
+					"speed": 22
+				}
+			]
+		},
+
+		"forced_call_demo": {
+			"title": "紧急强制通讯演示",
+			"description": "强制来电模式演示（铃声后自动接通）",
+			"trigger": "incoming_call",
+			"call_mode": "forced",
+			"callable": false,
+			"repeatable": false,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "[color=#ff4444]▶ 紧急频道激活[/color]",
+					"speed": 0,
+					"screen_effect": "glitch",
+					"auto_next": 0.5
+				},
+				{
+					"character": "ava",
+					"text": "操作员，这是一条强制通讯——系统检测到需要立即传达的信息。",
+					"speed": 22
+				},
+				{
+					"character": "ava",
+					"text": "在强制模式下，来电无法拒绝。铃声响起后系统会自动接通。这种模式通常用于紧急事态或关键任务通报。",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "本次演示到此结束。正常情况下，强制通讯只会在紧急状况时触发。",
+					"speed": 22
+				}
+			]
+		},
+
+		"answerable_call_demo": {
+			"title": "可接听来电演示",
+			"description": "可接听来电模式演示（玩家可选择接听或拒绝）",
+			"trigger": "incoming_call",
+			"call_mode": "answerable",
+			"reject_consequence": "",
+			"callable": false,
+			"repeatable": false,
+			"lines": [
+				{
+					"character": "researcher",
+					"text": "这里是 Dr. Zhang。操作员，收到了吗？",
+					"speed": 25
+				},
+				{
+					"character": "researcher",
+					"text": "你刚才接听了一次「可接听模式」的来电。在这种模式下，铃声响起后你可以选择：\n  [color=#ffaa00]comm answer[/color]  —— 接听\n  [color=#ffaa00]comm reject[/color]  —— 拒绝",
+					"speed": 18
+				},
+				{
+					"character": "researcher",
+					"text": "如果超时未响应，来电会自动挂断。拒绝来电可能影响后续剧情——具体取决于故事作者的设定。",
+					"speed": 20
+				},
+				{
+					"character": "researcher",
+					"text": "好了，测试通讯结束。Zhang 断开。",
+					"speed": 28
 				}
 			]
 		}
