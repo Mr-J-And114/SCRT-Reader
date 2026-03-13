@@ -1,5 +1,20 @@
 {
-	"comm_characters": {},
+	"comm_characters": {
+		"researcher": {
+			"id": "researcher",
+			"name": "Dr. Zhang",
+			"title": "高级研究员",
+			"sprite_mode": "layered",
+			"default_expression": "neutral",
+			"name_color": "#88ccff",
+			"voice": {
+				"tone": "sine",
+				"base_pitch": 0.75,
+				"pitch_variance": 0.1,
+				"speed": "normal"
+			}
+		}
+	},
 	"comm_dialogues": {
 		"ava_greeting": {
 			"title": "AVA - 日常问候",
@@ -340,6 +355,30 @@
 					"character": "ava",
 					"text": "AVA 持续监控中。祝你工作顺利，特工。",
 					"speed": 30
+				}
+			]
+		},
+
+		"researcher_chat": {
+			"title": "Dr. Zhang - 语音通话",
+			"description": "与Dr. Zhang的普通语音通话（无视频）",
+			"callable": true,
+			"repeatable": true,
+			"lines": [
+				{
+					"character": "researcher",
+					"text": "……Zhang 接收。什么事？",
+					"speed": 28
+				},
+				{
+					"character": "researcher",
+					"text": "我现在手头有实验要处理，长话短说。如果需要视频通讯，请拨打 [color=#ffaa00]comm video 1002-0001[/color]。",
+					"speed": 22
+				},
+				{
+					"character": "researcher",
+					"text": "好了，先挂了。Zhang 断开。",
+					"speed": 28
 				}
 			]
 		},

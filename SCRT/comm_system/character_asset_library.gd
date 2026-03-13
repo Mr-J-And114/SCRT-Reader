@@ -400,11 +400,9 @@ static func create_ava_profile() -> AssetProfile:
 	return p
 
 ## 创建 Researcher 的素材 profile
+## ★ 暂时复用 AVA 的分层素材演示多人会议，后续替换为独立素材
 static func create_researcher_profile() -> AssetProfile:
-	var p := AssetProfile.new()
-	p.base_dir = "res://images/character/"
-	p.mode = "static"
-	p.static_image = "researcher-tmp.png"
+	var p: AssetProfile = create_ava_profile()
 	return p
 
 
