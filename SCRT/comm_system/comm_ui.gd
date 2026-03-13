@@ -37,6 +37,7 @@ const MEETING_BRIGHTNESS: float = 0.5             # ★ 大图亮度 (0.0=全黑
 const MEETING_SLIDE_DURATION: float = 0.4          # ★ 入场/退场动画时长 (秒)
 const MEETING_SHAKE_INTENSITY: float = 8.0         # ★ 震动幅度 (px)
 const MEETING_SHAKE_DURATION: float = 0.3          # ★ 震动时长 (秒)
+const MEETING_OVERLAP: float = 40.0                 # ★ 同位置多角色水平叠放偏移 (px)
 const _MEETING_BASE_ASPECT: float = 1216.0 / 1803.0  # 标准图层宽高比（用于容器定位）
 
 # ══════════════════════════════════════════
@@ -71,9 +72,10 @@ var _portrait_cards: Dictionary = {}
 var _current_character: CommCharacter = null
 
 # ── Meeting Mode ──
-var _display_mode: String = "card"                 # "card" | "meeting"
+var _display_mode: String = "card"                 # "card" | "meeting" | "presentation"
 var _meeting_chars: Dictionary = {}                # { char_id: { "container", "layer_rects", "slot" } }
 var _meeting_tween: Tween = null
+var _presentation: PresentationOverlay = null
 
 # ── 动态状态 ──
 var _current_bar_height: float = 100.0             # 对话栏当前实际高度
@@ -98,6 +100,7 @@ var _target_y_collapsed: float = 800.0
 func setup(main: Control, theme) -> void:
 	_main = main
 	_T = theme
+	_presentation = PresentationOverlay.new()
 
 
 # ══════════════════════════════════════════
@@ -119,6 +122,10 @@ func _build_ui() -> void:
 	_root.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	_root.z_index = 10
 	_main.add_child(_root)
+
+	# ═══ 0.5 演示模式幻灯片叠加层 ═══
+	if _presentation:
+		_presentation.setup(_main, _root)
 
 	# ═══ 1. 对话栏主体 ═══
 	_dialog_bar = PanelContainer.new()
@@ -878,7 +885,7 @@ func _update_mouth_animations() -> void:
 					var tex_rect: TextureRect = layer_rects.get("static")
 					if tex_rect and character.static_portrait:
 						tex_rect.texture = character.static_portrait
-	elif _display_mode == "meeting":
+	elif _display_mode == "meeting" or _display_mode == "presentation":
 		for cid in _meeting_chars.keys():
 			var mdata: Dictionary = _meeting_chars[cid]
 			var character: CommCharacter = _get_character_by_id(cid)
@@ -1026,19 +1033,25 @@ func process(delta: float) -> void:
 #  Meeting 模式 — galgame 风格大图角色展示
 # ══════════════════════════════════════════
 
-## 切换显示模式: "card" (小头像卡片) | "meeting" (大图)
+## 切换显示模式: "card" (小头像卡片) | "meeting" (大图) | "presentation" (演示)
 func set_display_mode(mode: String) -> void:
 	if mode == _display_mode:
 		return
+	var old_mode: String = _display_mode
 	_display_mode = mode
-	if mode == "meeting":
+
+	# 退出旧模式：清理演示幻灯片
+	if old_mode == "presentation" and _presentation and _presentation.is_active():
+		_presentation.hide_slide("fade")
+
+	if mode == "meeting" or mode == "presentation":
 		# 隐藏卡片
 		for cid in _portrait_cards.keys():
 			var card_data: Dictionary = _portrait_cards[cid]
 			var card: Control = card_data["card"]
 			if is_instance_valid(card):
 				card.visible = false
-		# Meeting 角色在 _ensure_meeting_char 中按需创建
+		# Meeting/Presentation 角色在 _ensure_meeting_char 中按需创建
 	elif mode == "card":
 		# 隐藏 meeting 角色
 		for cid in _meeting_chars.keys():
@@ -1046,9 +1059,23 @@ func set_display_mode(mode: String) -> void:
 			var container: Control = mdata.get("container")
 			if container and is_instance_valid(container):
 				container.visible = false
+		# 隐藏演示幻灯片
+		if _presentation and _presentation.is_active():
+			_presentation.hide_slide("fade")
 		# 重新显示卡片
 		if not _collapsed:
 			_update_card_layout()
+
+## 显示演示模式幻灯片
+func show_presentation_slide(config: Dictionary) -> void:
+	_build_ui()
+	if _presentation:
+		_presentation.show_slide(config)
+
+## 隐藏演示模式幻灯片
+func hide_presentation_slide(transition: String = "fade") -> void:
+	if _presentation:
+		_presentation.hide_slide(transition)
 
 ## 创建/显示 meeting 模式下的角色大图
 func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
@@ -1125,8 +1152,11 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 		var tex_rect: TextureRect = layer_rects.get("static")
 		if tex_rect:
 			tex_rect.texture = character.static_portrait
+	# ★ 新角色加入后，重新布局同 slot 的所有角色（更新重叠偏移）并提到前面
+	_update_meeting_layout()
+	bring_meeting_to_front(cid)
 
-## 计算 meeting 角色的位置和大小
+## 计算 meeting 角色的位置和大小（含同位置重叠偏移）
 func _layout_meeting_char(mdata: Dictionary) -> void:
 	var container: Control = mdata.get("container")
 	if container == null or not is_instance_valid(container):
@@ -1149,6 +1179,10 @@ func _layout_meeting_char(mdata: Dictionary) -> void:
 		"right": center_x = screen_w * MEETING_POS_RIGHT_X
 		"center": center_x = screen_w * MEETING_POS_CENTER_X
 
+	# ★ 计算同 slot 重叠偏移
+	var overlap_offset: float = _compute_meeting_overlap_offset(str(mdata.get("character_id", "")), slot)
+	center_x += overlap_offset
+
 	var x: float = center_x - char_w / 2.0
 
 	# ★ Y 位置：底部对齐对话栏顶部
@@ -1161,6 +1195,28 @@ func _layout_meeting_char(mdata: Dictionary) -> void:
 	mdata["base_pos"] = container.position
 	# 根据每个图层纹理的实际宽高比调整 TextureRect 大小
 	_resize_meeting_rects(mdata)
+
+## 计算 meeting 模式下同 slot 角色的水平偏移
+func _compute_meeting_overlap_offset(cid: String, slot: String) -> float:
+	# 收集同 slot 的角色 ID 列表
+	var same_slot: Array[String] = []
+	for other_cid in _meeting_chars.keys():
+		var other_data: Dictionary = _meeting_chars[other_cid]
+		if str(other_data.get("slot", "center")) == slot:
+			same_slot.append(str(other_cid))
+	if same_slot.size() <= 1:
+		return 0.0
+	var idx: int = same_slot.find(cid)
+	if idx < 0:
+		return 0.0
+	# 居中分布偏移
+	var center_idx: float = (same_slot.size() - 1) / 2.0
+	var direction: float = 1.0
+	match slot:
+		"left": direction = 1.0    # 左侧向右展开
+		"right": direction = -1.0  # 右侧向左展开
+		"center": direction = 1.0  # 中间向右展开
+	return (idx - center_idx) * MEETING_OVERLAP * direction
 
 ## 根据每个图层纹理的实际宽高比单独调整 TextureRect 大小和位置
 ## 所有图层同高度（= 容器高度），宽度按纹理比例自适应，水平居中
@@ -1192,6 +1248,34 @@ func _resize_meeting_rects(mdata: Dictionary) -> void:
 		var rect_x: float = (cw - rect_w) / 2.0  # 水平居中
 		rect.position = Vector2(rect_x, 0.0)
 		rect.size = Vector2(rect_w, ch)
+
+## 将活跃角色的 meeting 容器提到最前面（z_index 最高）
+func bring_meeting_to_front(active_cid: String) -> void:
+	if not _meeting_chars.has(active_cid):
+		return
+	var active_data: Dictionary = _meeting_chars[active_cid]
+	var active_slot: String = str(active_data.get("slot", "center"))
+	# 收集同 slot 的角色
+	var same_slot_ids: Array[String] = []
+	for cid in _meeting_chars.keys():
+		var data: Dictionary = _meeting_chars[cid]
+		if str(data.get("slot", "center")) == active_slot:
+			same_slot_ids.append(str(cid))
+	# 设置 z_index: 活跃角色最高
+	var base_z: int = 0
+	for cid in same_slot_ids:
+		var container: Control = _meeting_chars[cid].get("container")
+		if container == null or not is_instance_valid(container):
+			continue
+		if cid == active_cid:
+			container.z_index = base_z + same_slot_ids.size()
+			# ★ 活跃角色恢复全亮度
+			container.modulate = Color(1.0, 1.0, 1.0, container.modulate.a)
+		else:
+			container.z_index = base_z
+			base_z += 1
+			# ★ 非活跃角色降低亮度
+			container.modulate = Color(MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, container.modulate.a)
 
 ## 更新所有 meeting 角色布局（在对话栏高度变化时调用）
 func _update_meeting_layout() -> void:
@@ -1292,6 +1376,8 @@ func cleanup() -> void:
 	if _meeting_tween:
 		_meeting_tween.kill()
 		_meeting_tween = null
+	if _presentation:
+		_presentation.cleanup()
 	_display_mode = "card"
 	if _root and is_instance_valid(_root):
 		_root.queue_free()

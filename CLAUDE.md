@@ -10,7 +10,7 @@ tune radio signals, and decode ciphers.
 ## WHAT (Repo Map)
 - `SCRT/` — Godot project root
   - `scripts/` — Core scripts (main.gd is the god object, ~1939 lines)
-  - `comm_system/` — Dialogue/character/dial system (8 scripts)
+  - `comm_system/` — Dialogue/character/dial system (13 scripts, incl. call_handler + presentation_overlay)
   - `camera_system/` — CCTV surveillance (4 files incl. shader)
   - `env_system/` — Environmental monitoring (env_monitor, env_task_manager, env_viewer)
   - `radio/` — Radio receiver/signals (radio_receiver ~1700 lines + 5 support scripts)
@@ -44,7 +44,10 @@ tune radio signals, and decode ciphers.
   `trigger_system.load_from_manifest()`.
 - **Save data**: Add to `save_manager.auto_save()`/`load_save()`.
 - **Settings**: Register via `settings_manager.register_category()`/`register_setting()`.
-- **Input priority**: boot_sequence > comm > viewers > password > login > normal.
+  Built-in categories: display, audio, effect, terminal, comm.
+- **Call modes**: `CallHandler` manages SILENT/FORCED/ANSWERABLE incoming calls.
+  Set `"call_mode"` in dialogue JSON or use trigger format `comm:id:forced`.
+- **Input priority**: boot_sequence > call_handler(ringing) > comm > viewers > password > login > normal.
 - **CommDialoguePlayer**: `stop_dialogue(silent=true)` for transitions;
   `silent=false` for natural completion. Voice calls delay 1.0s before
   `dial_mgr` callback.

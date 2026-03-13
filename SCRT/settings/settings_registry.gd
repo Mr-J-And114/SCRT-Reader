@@ -37,6 +37,12 @@ static func get_categories() -> Array[Dictionary]:
 			"icon": "TER",
 			"order": 40,
 		},
+		{
+			"id": "comm",
+			"display_name": "通讯设置",
+			"icon": "COM",
+			"order": 50,
+		},
 	]
 
 # ============================================================
@@ -204,6 +210,16 @@ static func get_settings() -> Array[Dictionary]:
 			"max": 10.0,
 			"step": 0.5,
 			"unit": "x",
+			"user_bound": true,
+		},
+
+		# ── comm 分类 ──
+		{
+			"key": "comm.clear_before_dialogue",
+			"display_name": "对话前清屏",
+			"description": "开启后，进入通讯对话前自动清除终端输出，提供更沉浸的视觉体验。",
+			"type": "bool",
+			"default": false,
 			"user_bound": true,
 		},
 	]

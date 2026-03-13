@@ -179,6 +179,27 @@ func _play_current_line() -> void:
 		if not char_anim.is_empty() and not char_id.is_empty():
 			_comm_mgr.play_meeting_anim(char_id, char_anim)
 
+		# ── 演示模式幻灯片 ──
+		# JSON: "slide_image": "images/slide1.png"
+		#        "slide_position": [0.55, 0.1]  (归一化坐标，可选)
+		#        "slide_size": [0.4, 0.5]  (归一化尺寸，可选)
+		#        "slide_transition": "fade"  (可选: fade/instant/slide_left/slide_right)
+		var slide_image: String = str(line.get("slide_image", ""))
+		if not slide_image.is_empty():
+			var slide_config: Dictionary = {
+				"image": slide_image,
+				"position": line.get("slide_position", [0.55, 0.1]),
+				"size": line.get("slide_size", [0.4, 0.5]),
+				"transition": str(line.get("slide_transition", "fade")),
+			}
+			_comm_mgr.show_presentation_slide(slide_config)
+		elif line.has("slide_hide"):
+			# JSON: "slide_hide": true  或 "slide_hide": "slide_left"
+			var hide_transition: String = str(line.get("slide_hide", "fade"))
+			if hide_transition == "true" or hide_transition == "True":
+				hide_transition = "fade"
+			_comm_mgr.hide_presentation_slide(hide_transition)
+
 	# 屏幕效果
 	var screen_effect: String = str(line.get("screen_effect", ""))
 	if not screen_effect.is_empty() and _main:
