@@ -459,7 +459,7 @@ func _process_voice_connecting(_delta: float) -> void:
 		# 转交给 comm_manager 启动对话
 		state = DialState.VOICE_ACTIVE
 		if comm_mgr and _resolved_character != "":
-			comm_mgr.start_dialogue_from_dial(_resolved_character)
+			comm_mgr.start_dialogue_from_dial(_resolved_character, _current_number)
 
 ## 语音对话结束回调（由 comm_manager 在对话框关闭后调用）
 func on_voice_call_ended() -> void:

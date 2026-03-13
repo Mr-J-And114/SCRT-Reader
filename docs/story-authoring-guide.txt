@@ -444,17 +444,132 @@
   · requires_command: 要求玩家已执行某个命令
 
 
-  6.6 来电对话
+  6.6 来电对话与呼叫模式
   ──────────────────────────────────────────
 
-  在对话数据中设置 "trigger": "incoming_call" 会显示来电通知：
+  在对话数据中设置 "trigger": "incoming_call" 会触发来电。
+  通过 "call_mode" 字段控制来电行为：
 
-  ╔══════════════════════════════════╗
-  ║  来电通讯 — AVA
-  ║  输入 comm answer 接听通讯
-  ╚══════════════════════════════════╝
+  ┌──────────────┬───────────────────────────────────────┐
+  │  call_mode   │  行为说明                             │
+  ├──────────────┼───────────────────────────────────────┤
+  │  "silent"    │  静默接入，无铃声，直接开始对话       │
+  │  "forced"    │  播放铃声后自动接通，玩家无法拒绝     │
+  │  "answerable"│  播放铃声后等待玩家操作：              │
+  │              │  comm answer 接听 / comm reject 拒绝  │
+  └──────────────┴───────────────────────────────────────┘
 
-  玩家必须输入 comm answer 才能接听。
+  默认值：incoming_call 触发器默认使用 "answerable" 模式。
+
+  示例（强制来电）：
+
+  "emergency_call": {
+      "trigger": "incoming_call",
+      "call_mode": "forced",
+      "lines": [
+          { "character": "hq_control", "text": "紧急通讯！" }
+      ]
+  }
+
+  示例（可拒绝来电，带拒绝后果）：
+
+  "optional_call": {
+      "trigger": "incoming_call",
+      "call_mode": "answerable",
+      "reject_consequence": "comm:miss_call_dialogue",
+      "lines": [
+          { "character": "ava", "text": "操作员，有一条消息。" }
+      ]
+  }
+
+  reject_consequence 可以是任何触发器动作字符串。
+
+
+  6.7 视频通讯 / 大图模式（Meeting Mode）
+  ──────────────────────────────────────────
+
+  大图模式让角色以 galgame 风格全身像显示在屏幕上。
+
+  在对话台词中设置 display_mode 和 meeting_slot：
+
+  {
+      "character": "ava",
+      "text": "切换到视频通讯模式。",
+      "display_mode": "meeting",
+      "meeting_slot": "center",
+      "char_anim": "slide_in_center"
+  }
+
+  位置选项（meeting_slot）：
+  · "left"   — 画面左侧 (x=15%)
+  · "center" — 画面中央 (x=50%)
+  · "right"  — 画面右侧 (x=85%)
+
+  入场/退场动画（char_anim）：
+  · "slide_in_left"  / "slide_out_left"
+  · "slide_in_right" / "slide_out_right"
+  · "slide_in_center"
+  · "fade_in" / "fade_out"
+  · "shake"
+
+  多角色同屏：
+  · 不同角色分配不同 slot，系统自动管理显示层级
+  · 当前说话角色自动高亮（全亮度），其他角色降暗
+  · 同一 slot 多角色时自动水平错开，避免重叠
+
+  将对话标记为视频频道（可通过 comm video 列表选择）：
+
+  "ava_meeting": {
+      "title": "AVA - 视频通讯",
+      "callable": true,
+      "repeatable": true,
+      "video_call": true,
+      "video_number": "1001-0001",
+      "lines": [ ... ]
+  }
+
+  · video_call: true — 标记为视频通讯频道
+  · video_number — 对应的拨号号码，玩家可用 dial 或 comm video 呼叫
+
+  玩家使用方式：
+  · comm video        — 显示所有视频频道列表
+  · comm video <号码> — 通过拨号系统呼叫指定频道
+  · dial <号码>       — 直接拨号呼叫
+
+
+  6.8 演示模式（Presentation Mode）
+  ──────────────────────────────────────────
+
+  在 meeting 模式基础上，可以同时显示幻灯片/PPT 图片：
+
+  {
+      "character": "ava",
+      "text": "请看这份数据报告——",
+      "display_mode": "presentation",
+      "meeting_slot": "left",
+      "slide_image": "images/slide1.png",
+      "slide_position": [0.55, 0.1],
+      "slide_size": [0.4, 0.5],
+      "slide_transition": "fade"
+  }
+
+  · slide_image: 幻灯片图片路径（从 .scp 包或 res:// 加载）
+  · slide_position: [x, y] 归一化坐标 (0.0-1.0)
+  · slide_size: [w, h] 归一化尺寸 (0.0-1.0)
+  · slide_transition: 过渡动画
+    "fade" / "instant" / "slide_left" / "slide_right"
+
+  隐藏幻灯片：
+
+  {
+      "character": "ava",
+      "text": "报告展示完毕。",
+      "slide_hide": true
+  }
+
+  或指定退出动画：
+
+  { "slide_hide": "slide_left" }
 
 
 ================================================================
