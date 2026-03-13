@@ -189,11 +189,25 @@ func set_default_portrait(texture: ImageTexture) -> void:
 #  对话控制
 # ══════════════════════════════════════════
 ## 触发一段对话
-func trigger_dialogue(dialogue_id: String) -> bool:
-	print("[CommManager] trigger_dialogue: ", dialogue_id)
+## skip_call_mode: 为 true 时跳过 call_mode 检查（已经经过 call_handler 或拨号系统的回调应传 true）
+func trigger_dialogue(dialogue_id: String, skip_call_mode: bool = false) -> bool:
+	print("[CommManager] trigger_dialogue: ", dialogue_id, " skip_call_mode=", skip_call_mode)
 	if not _dialogues.has(dialogue_id):
 		push_warning("[CommManager] 对话不存在: %s (已有: %s)" % [dialogue_id, str(_dialogues.keys())])
 		return false
+
+	# ★ 检查 call_mode：如果对话有 forced/answerable 模式且未跳过，路由到 call_handler
+	if not skip_call_mode:
+		var dlg_data: Dictionary = _dialogues[dialogue_id] as Dictionary
+		var call_mode_str: String = str(dlg_data.get("call_mode", "silent"))
+		if call_mode_str != "silent" and _call_handler:
+			var call_mode: CallHandler.CallMode = CallHandler.parse_call_mode(call_mode_str)
+			if call_mode != CallHandler.CallMode.SILENT:
+				var caller_name: String = _get_caller_name_for_dialogue(dialogue_id)
+				var reject_consequence: String = str(dlg_data.get("reject_consequence", ""))
+				_call_handler.initiate_call(dialogue_id, call_mode, reject_consequence, caller_name)
+				return true
+
 	# 记录 UI 是否已经在展开状态
 	var ui_already_showing: bool = is_active and _ui.is_visible and not _ui._collapsed
 
@@ -379,11 +393,11 @@ func _handle_tutorial_choice(choice_num: int) -> void:
 	_pending_choice_id = ""
 	match choice_num:
 		1:
-			trigger_dialogue("tutorial_main")
+			trigger_dialogue("tutorial_main", true)
 		2:
-			trigger_dialogue("tutorial_skip")
+			trigger_dialogue("tutorial_skip", true)
 		_:
-			trigger_dialogue("tutorial_ask")
+			trigger_dialogue("tutorial_ask", true)
 
 
 ## 处理通用对话选项（非教程）
@@ -409,7 +423,7 @@ func _handle_generic_choice(choice_id: String, choice_num: int) -> void:
 
 	for candidate in candidates:
 		if _dialogues.has(candidate):
-			trigger_dialogue(candidate)
+			trigger_dialogue(candidate, true)  # skip_call_mode: 选项分支续播
 			return
 
 	if _main:
@@ -590,7 +604,7 @@ func process(delta: float) -> void:
 #  呼叫处理器回调
 # ══════════════════════════════════════════
 func _on_call_accepted(dialogue_id: String) -> void:
-	trigger_dialogue(dialogue_id)
+	trigger_dialogue(dialogue_id, true)  # skip_call_mode: 已经过 call_handler
 
 func _on_call_rejected(dialogue_id: String) -> void:
 	var consequence: String = _call_handler.get_pending_reject_consequence() if _call_handler else ""
@@ -639,7 +653,7 @@ func _on_dialogue_finished(dialogue_id: String) -> void:
 		var next_id: String = _dialogue_queue.pop_front()
 		if _main:
 			_main.get_tree().create_timer(0.3).timeout.connect(func():
-				trigger_dialogue(next_id)
+				trigger_dialogue(next_id, true)  # skip_call_mode: 对话链续播
 			)
 
 
@@ -792,7 +806,7 @@ func try_trigger_tutorial() -> void:
 			return
 		if _main:
 			_main.get_tree().create_timer(1.5).timeout.connect(func():
-				trigger_dialogue("tutorial_ask")
+				trigger_dialogue("tutorial_ask", true)
 			)
 	else:
 		_try_ava_login_welcome()
@@ -938,7 +952,7 @@ func handle_comm_command(args: Array = []) -> void:
 			elif not _pending_incoming_call.is_empty():
 				var call_id: String = _pending_incoming_call
 				_pending_incoming_call = ""
-				trigger_dialogue(call_id)
+				trigger_dialogue(call_id, true)  # skip_call_mode: 手动接听
 			else:
 				_main.append_output("[color=" + m + "]当前没有待接听的通讯。[/color]\n", false)
 			return
@@ -1104,7 +1118,7 @@ func _dial_video_call(number: String) -> void:
 				_main.dial_mgr.dial(ch_number)
 			else:
 				# 无号码的频道直接触发
-				trigger_dialogue(str(channels[idx].get("dlg_id", "")))
+				trigger_dialogue(str(channels[idx].get("dlg_id", "")), true)  # skip: 视频直连
 		else:
 			_main.append_output("[color=" + m + "]无效的频道号码或序号: " + number + "[/color]\n", false)
 			_main.append_output("[color=" + m + "]输入 [color=" + p + "]comm video[/color] 查看可用频道列表。[/color]\n", false)
@@ -1160,7 +1174,7 @@ func start_dialogue_from_dial(character_id: String, dialed_number: String = "") 
 			_main.dial_mgr.on_voice_call_ended()
 		return
 
-	trigger_dialogue(target_dlg_id)
+	trigger_dialogue(target_dlg_id, true)  # skip_call_mode: 已经过拨号系统
 
 # ══════════════════════════════════════════
 #  查询接口
