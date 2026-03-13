@@ -51,6 +51,55 @@ CharacterRegistry          — Central registry: create, lookup, lifecycle
 Available `anim_effect` values: `wink_left`, `wink_right`, `eyes_closed`, `surprised`
 (all accept optional `:duration` suffix, default 2.0s)
 
+## Call Modes (CallHandler)
+
+CallHandler manages three incoming call modes, extracted from CommManager:
+
+| Mode | Behavior |
+|---|---|
+| SILENT | Direct dialogue start, no ring. Default for `comm:dialogue_id` triggers |
+| FORCED | Ring sound → auto-answer after N rings. Player cannot refuse |
+| ANSWERABLE | Ring sound → prompt. Player types `comm answer` / `comm reject` |
+
+State machine: `IDLE → RINGING → WAITING_ANSWER → IDLE`
+
+### JSON format (dialogue-level)
+```json
+{
+  "dialogue_id": {
+    "trigger": "incoming_call",
+    "call_mode": "forced",
+    "reject_consequence": "some_action",
+    "lines": [...]
+  }
+}
+```
+
+### Trigger action format
+`comm:dialogue_id:forced` or `comm:dialogue_id:answerable`
+
+## Presentation Mode
+
+Presentation mode shows a PPT/slide image alongside a character in meeting mode.
+
+### Dialogue line fields
+```json
+{
+  "character": "ava",
+  "text": "Let me show you the data...",
+  "display_mode": "presentation",
+  "meeting_slot": "left",
+  "slide_image": "images/slide1.png",
+  "slide_position": [0.55, 0.1],
+  "slide_size": [0.4, 0.5],
+  "slide_transition": "fade"
+}
+```
+
+To hide a slide: `"slide_hide": true` or `"slide_hide": "slide_left"`
+
+Transitions: `fade`, `instant`, `slide_left`, `slide_right`
+
 ## Dial State Machine
 
 ```
@@ -80,14 +129,16 @@ IDLE → DTMF_PLAYING → RINGING → VOICE_ACTIVE / MODEM_* → CALL_ENDED → 
 
 | File | Purpose |
 |---|---|
-| comm_manager.gd | Dialogue orchestration, tutorial flow, delegates to registry |
-| comm_dialogue_player.gd | Dialogue playback (line-by-line, choices, conditions, character tags) |
+| comm_manager.gd | Dialogue orchestration, tutorial flow, call routing, delegates to registry |
+| comm_dialogue_player.gd | Dialogue playback (line-by-line, choices, conditions, character tags, slides) |
 | comm_character.gd | Lightweight character data model (delegates to animator) |
-| character_registry.gd | **NEW** Character lifecycle, registration (builtin/disc/mod) |
-| character_asset_library.gd | **NEW** Asset profiles, modular texture loading |
-| character_animator.gd | **NEW** Animation engine (mouth, blink, action, layer overrides, costumes) |
+| call_handler.gd | **NEW** Call mode handler: SILENT/FORCED/ANSWERABLE ring + answer flow |
+| presentation_overlay.gd | **NEW** Presentation mode slide overlay (image display + transitions) |
+| character_registry.gd | Character lifecycle, registration (builtin/disc/mod) |
+| character_asset_library.gd | Asset profiles, modular texture loading |
+| character_animator.gd | Animation engine (mouth, blink, action, layer overrides, costumes) |
 | comm_sprite_renderer.gd | Character sprite rendering (card mode) |
-| comm_ui.gd | Comm overlay UI (text, portrait, choices, meeting mode) |
+| comm_ui.gd | Comm overlay UI (text, portrait, choices, meeting/presentation mode) |
 | comm_voice.gd | Procedural voice synthesis (sine/square/saw tones) |
 | dial_manager.gd | DTMF dial state machine, call routing, modem download |
-| dial_tone_generator.gd | Procedural DTMF/ringback/busy/modem/hangup audio |
+| dial_tone_generator.gd | Procedural DTMF/ringback/busy/modem/hangup/ring audio |

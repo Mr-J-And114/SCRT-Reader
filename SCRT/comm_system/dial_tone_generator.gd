@@ -315,6 +315,40 @@ func generate_data_noise(duration_sec: float = 2.0) -> AudioStreamWAV:
 	return _samples_to_wav(base_noise)
 
 
+## 生成来电铃声（区别于回铃音 ringback，更高频更急促）
+## 模拟老式电话铃声: 高频双音脉冲
+func generate_phone_ring(ring_count: int = 2) -> Dictionary:
+	var segments: Array[PackedFloat32Array] = []
+	# 单次铃声: 两组短促高频脉冲 (模拟机械铃声)
+	# 铃声频率: 2000Hz + 400Hz 混合，产生金属感
+	var pulse_on: float = 0.08    # 单个脉冲持续时间
+	var pulse_gap: float = 0.04   # 脉冲间隔
+	var group_gap: float = 0.12   # 组间间隔
+	var pulses_per_group: int = 5 # 每组脉冲数
+	var ring_gap: float = 1.5     # 两次铃声间的静音
+
+	for r in range(ring_count):
+		# 每次铃声包含 2 组脉冲
+		for g in range(2):
+			for p in range(pulses_per_group):
+				var tone: PackedFloat32Array = _generate_dual_tone(
+					2000.0, 400.0, pulse_on, MAX_AMPLITUDE * 0.45)
+				tone = _apply_envelope(tone, 0.002, 0.002)
+				segments.append(tone)
+				if p < pulses_per_group - 1:
+					segments.append(_generate_silence(pulse_gap))
+			if g == 0:
+				segments.append(_generate_silence(group_gap))
+		if r < ring_count - 1:
+			segments.append(_generate_silence(ring_gap))
+
+	var combined: PackedFloat32Array = _concat_samples(segments)
+	var total_dur: float = float(combined.size()) / SAMPLE_RATE
+	return {
+		"stream": _samples_to_wav(combined),
+		"duration": total_dur
+	}
+
 ## 生成电话挂机音（短促双频嘟嘟声）
 func generate_hangup_tone() -> Dictionary:
 	var segments: Array[PackedFloat32Array] = []

@@ -18,6 +18,7 @@ var _T = null
 var _ui: CommUI = null
 var _player: CommDialoguePlayer = null
 var _voice: CommVoice = null
+var _call_handler: CallHandler = null
 
 # ── 角色管理（委托给 CharacterRegistry） ──
 var _registry: CharacterRegistry = null
@@ -57,6 +58,12 @@ func setup(main, fs: FileSystem, theme) -> void:
 
 	_voice = CommVoice.new()
 	_voice.setup(main)
+
+	# 呼叫处理器
+	_call_handler = CallHandler.new()
+	_call_handler.setup(main, self, main.audio_manager if main else null, theme)
+	_call_handler.call_accepted.connect(_on_call_accepted)
+	_call_handler.call_rejected.connect(_on_call_rejected)
 
 	# 信号连接
 	_player.dialogue_started.connect(_on_dialogue_started)
@@ -199,6 +206,13 @@ func trigger_dialogue(dialogue_id: String) -> bool:
 		_pending_choice_id = ""
 
 	var dialogue_data: Dictionary = _dialogues[dialogue_id]
+
+	# ★ 对话前清屏（设置项）
+	if _main and _main.settings_mgr and _main.settings_mgr.get_bool("comm.clear_before_dialogue"):
+		_main.output_text.text = ""
+		if _main.tw:
+			_main.tw.clear_queue()
+
 	is_active = true
 
 	# 确定初始角色
@@ -417,6 +431,9 @@ func _set_active_character(char_id: String) -> void:
 	_active_character = _registry.get_character(char_id)
 	_voice.apply_config(_active_character.voice_config)
 	_ui.set_character(_active_character)
+	# Meeting 模式下：活跃角色提到最前面
+	if _ui._display_mode == "meeting":
+		_ui.bring_meeting_to_front(char_id)
 
 func _set_expression(expression: String) -> void:
 	if _active_character:
@@ -506,6 +523,16 @@ func hide_meeting_char(char_id: String) -> void:
 func clear_meeting() -> void:
 	_ui.clear_meeting_chars()
 
+## 显示演示模式幻灯片
+func show_presentation_slide(config: Dictionary) -> void:
+	if _ui:
+		_ui.show_presentation_slide(config)
+
+## 隐藏演示模式幻灯片
+func hide_presentation_slide(transition: String = "fade") -> void:
+	if _ui:
+		_ui.hide_presentation_slide(transition)
+
 # ══════════════════════════════════════════
 #  条件系统
 # ══════════════════════════════════════════
@@ -548,6 +575,8 @@ func on_directory_entered(dir_path: String) -> void:
 func process(delta: float) -> void:
 	if _ui:
 		_ui.process(delta)
+	if _call_handler:
+		_call_handler.process(delta)
 	if not is_active:
 		return
 	_player.process(delta)
@@ -555,6 +584,25 @@ func process(delta: float) -> void:
 		_active_character.process(delta)
 	_ui.update_text(_player.get_displayed_text())
 
+
+# ══════════════════════════════════════════
+#  呼叫处理器回调
+# ══════════════════════════════════════════
+func _on_call_accepted(dialogue_id: String) -> void:
+	trigger_dialogue(dialogue_id)
+
+func _on_call_rejected(dialogue_id: String) -> void:
+	var consequence: String = _call_handler.get_pending_reject_consequence() if _call_handler else ""
+	if not consequence.is_empty() and _main and _main.trigger_sys:
+		_main.trigger_sys.execute_action(consequence)
+	print("[CommManager] 来电已拒绝: %s" % dialogue_id)
+
+## 呼叫处理器查询
+func is_call_ringing() -> bool:
+	return _call_handler != null and _call_handler.is_ringing()
+
+func has_pending_call_answer() -> bool:
+	return _call_handler != null and _call_handler.has_pending_answer()
 
 # ══════════════════════════════════════════
 #  信号回调
@@ -767,8 +815,30 @@ func _try_ava_login_welcome() -> void:
 func handle_trigger_action(action: String) -> bool:
 	if not action.begins_with("comm:"):
 		return false
-	var dialogue_id: String = action.substr(5).strip_edges()
+	# 支持格式: "comm:dialogue_id" 或 "comm:dialogue_id:forced" 或 "comm:dialogue_id:answerable"
+	var parts: PackedStringArray = action.substr(5).strip_edges().split(":")
+	var dialogue_id: String = parts[0]
+	if parts.size() >= 2:
+		var call_mode_str: String = parts[1]
+		var call_mode: CallHandler.CallMode = CallHandler.parse_call_mode(call_mode_str)
+		if call_mode != CallHandler.CallMode.SILENT and _call_handler:
+			var caller_name: String = _get_caller_name_for_dialogue(dialogue_id)
+			_call_handler.initiate_call(dialogue_id, call_mode, "", caller_name)
+			return true
 	return trigger_dialogue(dialogue_id)
+
+## 从对话数据中提取来电者名称
+func _get_caller_name_for_dialogue(dialogue_id: String) -> String:
+	if not _dialogues.has(dialogue_id):
+		return "UNKNOWN"
+	var dlg: Dictionary = _dialogues[dialogue_id] as Dictionary
+	var lines: Array = dlg.get("lines", []) as Array
+	if lines.size() > 0:
+		var first_char_id: String = str((lines[0] as Dictionary).get("character", "op7"))
+		var ch: CommCharacter = _registry.get_character(first_char_id)
+		if ch:
+			return ch.display_name
+	return "UNKNOWN"
 
 func check_auto_triggers(story_manifest: Dictionary) -> void:
 	for dlg_id in _dialogues.keys():
@@ -785,12 +855,12 @@ func check_auto_triggers(story_manifest: Dictionary) -> void:
 					if _main and _main.pkg_mgr:
 						_main.pkg_mgr._api_save_mod_data("_comm_system", played_key, true)
 			"incoming_call":
-				_show_incoming_call(dlg_id, dlg)
+				_initiate_incoming_call(dlg_id, dlg)
 
-func _show_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
+## 发起来电（根据 call_mode 路由到 CallHandler 或兼容旧逻辑）
+func _initiate_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
 	if _main == null:
 		return
-	_pending_incoming_call = dialogue_id
 	var lines: Array = dlg_data.get("lines", []) as Array
 	var caller_name: String = "UNKNOWN"
 	if lines.size() > 0:
@@ -798,6 +868,21 @@ func _show_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
 		var ch: CommCharacter = _registry.get_character(first_char_id)
 		if ch:
 			caller_name = ch.display_name
+
+	# 读取 call_mode 字段（默认 "answerable" 以保持向后兼容）
+	var call_mode_str: String = str(dlg_data.get("call_mode", "answerable"))
+	var call_mode: CallHandler.CallMode = CallHandler.parse_call_mode(call_mode_str)
+	var reject_consequence: String = str(dlg_data.get("reject_consequence", ""))
+
+	if _call_handler:
+		_call_handler.initiate_call(dialogue_id, call_mode, reject_consequence, caller_name)
+	else:
+		# 降级：直接显示旧式提示
+		_show_incoming_call_legacy(dialogue_id, caller_name)
+
+## 旧式来电提示（无 CallHandler 时的兼容路径）
+func _show_incoming_call_legacy(dialogue_id: String, caller_name: String) -> void:
+	_pending_incoming_call = dialogue_id
 	var c_hex: String = _T.warning_hex if _T else "#ffff00"
 	var m_hex: String = _T.muted_hex if _T else "#888888"
 	_main.append_output("\n[color=" + c_hex + "]╔══════════════════════════════════╗[/color]\n", false)
@@ -846,12 +931,22 @@ func handle_comm_command(args: Array = []) -> void:
 			return
 
 		if target_id == "answer":
-			if _pending_incoming_call.is_empty():
-				_main.append_output("[color=" + m + "]当前没有待接听的通讯。[/color]\n", false)
-			else:
+			# 优先通过 CallHandler 接听
+			if _call_handler and _call_handler.has_pending_answer():
+				_call_handler.accept_call()
+			elif not _pending_incoming_call.is_empty():
 				var call_id: String = _pending_incoming_call
 				_pending_incoming_call = ""
 				trigger_dialogue(call_id)
+			else:
+				_main.append_output("[color=" + m + "]当前没有待接听的通讯。[/color]\n", false)
+			return
+
+		if target_id == "reject":
+			if _call_handler and _call_handler.has_pending_answer():
+				_call_handler.reject_call()
+			else:
+				_main.append_output("[color=" + m + "]当前没有待拒绝的通讯。[/color]\n", false)
 			return
 
 		if target_id == "video" or target_id == "meeting":
@@ -876,8 +971,9 @@ func handle_comm_command(args: Array = []) -> void:
 
 	_main.append_output("\n[color=" + p + "]═══════════ 通讯系统 ═══════════[/color]\n\n", false)
 
-	if not _pending_incoming_call.is_empty():
-		_main.append_output("  [color=" + w + "]★ 待接听来电[/color]  [color=" + m + "]输入 comm answer 接听[/color]\n\n", false)
+	var has_pending: bool = not _pending_incoming_call.is_empty() or (_call_handler and _call_handler.has_pending_answer())
+	if has_pending:
+		_main.append_output("  [color=" + w + "]★ 待接听来电[/color]  [color=" + m + "]输入 comm answer 接听 / comm reject 拒绝[/color]\n\n", false)
 
 	if _main.dial_mgr:
 		var all_numbers: Array[String] = _main.dial_mgr.get_all_numbers()
@@ -903,8 +999,8 @@ func handle_comm_command(args: Array = []) -> void:
 	_main.append_output("[color=" + m + "]拨号联络: dial <号码>  (如 dial 1001-0001)[/color]\n", false)
 	_main.append_output("[color=" + m + "]视频通讯: comm video[/color]\n", false)
 	_main.append_output("[color=" + m + "]查看号码簿: phonebook[/color]\n", false)
-	if not _pending_incoming_call.is_empty():
-		_main.append_output("[color=" + m + "]接听来电: comm answer[/color]\n", false)
+	if has_pending:
+		_main.append_output("[color=" + m + "]接听来电: comm answer  拒绝: comm reject[/color]\n", false)
 
 
 # ══════════════════════════════════════════
@@ -1033,6 +1129,8 @@ func cleanup() -> void:
 	_dialogue_queue.clear()
 	_pending_choice_id = ""
 	_pending_incoming_call = ""
+	if _call_handler:
+		_call_handler.cleanup()
 	if _ui:
 		_ui.flush_history_to_disk()
 		_ui.cleanup()

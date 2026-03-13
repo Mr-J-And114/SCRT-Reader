@@ -1166,6 +1166,12 @@ func _input(event: InputEvent) -> void:
 	if pkg_mgr and pkg_mgr.handle_input(event):
 		get_viewport().set_input_as_handled()
 		return
+	# ★ 呼叫处理器：铃声/等待接听状态下拦截输入
+	if comm_mgr and comm_mgr.is_call_ringing():
+		# 铃声播放中，吞掉所有按键
+		if event is InputEventKey and event.pressed:
+			get_viewport().set_input_as_handled()
+			return
 	# ★ 通讯系统输入处理（模组之后，viewer 之前）
 	if comm_mgr and comm_mgr.is_active:
 		# 等待命令/文件操作时，放行键盘事件给终端
