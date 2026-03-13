@@ -19,6 +19,7 @@ var _ui: CommUI = null
 var _player: CommDialoguePlayer = null
 var _voice: CommVoice = null
 var _call_handler: CallHandler = null
+var _pending_video_dial: bool = false  # ★ 标记下次 start_dialogue_from_dial 为视频呼叫
 
 # ── 角色管理（委托给 CharacterRegistry） ──
 var _registry: CharacterRegistry = null
@@ -1090,6 +1091,7 @@ func _dial_video_call(number: String) -> void:
 		return
 	# 验证号码是否有效
 	if _main.dial_mgr.is_number_format(number):
+		_pending_video_dial = true
 		_main.dial_mgr.dial(number)
 	else:
 		# 尝试匹配视频频道名称或序号
@@ -1098,6 +1100,7 @@ func _dial_video_call(number: String) -> void:
 		if idx >= 0 and idx < channels.size():
 			var ch_number: String = str(channels[idx].get("number", ""))
 			if not ch_number.is_empty():
+				_pending_video_dial = true
 				_main.dial_mgr.dial(ch_number)
 			else:
 				# 无号码的频道直接触发
@@ -1116,9 +1119,11 @@ func _show_phonebook() -> void:
 
 func start_dialogue_from_dial(character_id: String, dialed_number: String = "") -> void:
 	var target_dlg_id: String = ""
+	var is_video: bool = _pending_video_dial
+	_pending_video_dial = false
 
-	# ★ 优先按 video_number 精确匹配（支持视频频道拨号）
-	if not dialed_number.is_empty():
+	# ★ 视频呼叫时按 video_number 精确匹配
+	if is_video and not dialed_number.is_empty():
 		for dlg_id in _dialogues.keys():
 			var dlg: Dictionary = _dialogues[dlg_id] as Dictionary
 			if str(dlg.get("video_number", "")) == dialed_number:

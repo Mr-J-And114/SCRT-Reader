@@ -167,6 +167,7 @@ func _build_ui() -> void:
 	_name_label.add_theme_font_size_override("bold_font_size", 13)
 	if _T:
 		_name_label.add_theme_color_override("default_color", _T.primary)
+	UIManager._apply_bold_font(_name_label)
 	top_row.add_child(_name_label)
 
 	# History 按钮（对话栏内）
@@ -199,6 +200,7 @@ func _build_ui() -> void:
 	_text_label.add_theme_font_size_override("normal_font_size", 13)
 	if _T:
 		_text_label.add_theme_color_override("default_color", Color.WHITE)
+	UIManager._apply_bold_font(_text_label)
 	vbox.add_child(_text_label)
 
 	# 继续提示
@@ -693,6 +695,9 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 	name_lbl.offset_top = -16
 	name_lbl.offset_bottom = -2
 	card.add_child(name_lbl)
+	# ★ 有人物素材时隐藏卡片底部名称（避免遮挡立绘）
+	if character.sprite_mode != CommCharacter.SpriteMode.MINIMAL:
+		name_lbl.visible = false
 
 	_root.add_child(card)
 	# ★ 应用卡片亮度（调整 CARD_BRIGHTNESS 常量来改变）
@@ -1269,13 +1274,14 @@ func bring_meeting_to_front(active_cid: String) -> void:
 			continue
 		if cid == active_cid:
 			container.z_index = base_z + same_slot_ids.size()
-			# ★ 活跃角色恢复全亮度
-			container.modulate = Color(1.0, 1.0, 1.0, container.modulate.a)
+			# ★ 活跃角色使用 MEETING_BRIGHTNESS
+			container.modulate = Color(MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, container.modulate.a)
 		else:
 			container.z_index = base_z
 			base_z += 1
-			# ★ 非活跃角色降低亮度
-			container.modulate = Color(MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, container.modulate.a)
+			# ★ 非活跃角色降低亮度 (活跃亮度 × 0.7)
+			var dim: float = MEETING_BRIGHTNESS * 0.7
+			container.modulate = Color(dim, dim, dim, container.modulate.a)
 
 ## 更新所有 meeting 角色布局（在对话栏高度变化时调用）
 func _update_meeting_layout() -> void:
