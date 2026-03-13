@@ -45,6 +45,7 @@
 			"description": "每次登录时的欢迎通讯",
 			"callable": false,
 			"repeatable": true,
+			"call_mode": "forced",
 			"lines": [
 				{
 					"character": "ava",
