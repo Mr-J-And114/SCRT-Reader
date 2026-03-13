@@ -21,6 +21,7 @@
 			"description": "联络员AVA的日常问候",
 			"callable": true,
 			"repeatable": true,
+			"call_mode": "forced",
 			"lines": [
 				{
 					"character": "ava",
@@ -91,6 +92,7 @@
 			"description": "与联络员AVA进行简短交流",
 			"callable": true,
 			"repeatable": true,
+			"call_mode": "forced",
 			"lines": [
 				{
 					"character": "ava",
@@ -364,6 +366,7 @@
 			"description": "与Dr. Zhang的普通语音通话（无视频）",
 			"callable": true,
 			"repeatable": true,
+			"call_mode": "forced",
 			"lines": [
 				{
 					"character": "researcher",

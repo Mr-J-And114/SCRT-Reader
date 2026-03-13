@@ -74,6 +74,7 @@ var _current_character: CommCharacter = null
 # ── Meeting Mode ──
 var _display_mode: String = "card"                 # "card" | "meeting" | "presentation"
 var _meeting_chars: Dictionary = {}                # { char_id: { "container", "layer_rects", "slot" } }
+var _meeting_slot_front: Dictionary = {}           # { slot_name: char_id } 每个位置最近发言的角色
 var _meeting_tween: Tween = null
 var _presentation: PresentationOverlay = null
 
@@ -1093,6 +1094,10 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 	# 已存在则更新 slot 并显示
 	if _meeting_chars.has(cid):
 		var mdata: Dictionary = _meeting_chars[cid]
+		var old_slot: String = str(mdata.get("slot", ""))
+		# ★ slot 变更时清理旧 slot 的 front 记录
+		if old_slot != slot and str(_meeting_slot_front.get(old_slot, "")) == cid:
+			_meeting_slot_front.erase(old_slot)
 		mdata["slot"] = slot
 		var container: Control = mdata.get("container")
 		if container and is_instance_valid(container):
@@ -1107,6 +1112,9 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 				var tex_rect: TextureRect = layer_rects.get("static")
 				if tex_rect:
 					tex_rect.texture = character.static_portrait
+		# ★ slot 变更后刷新所有位置的堆叠
+		_update_meeting_layout()
+		_refresh_meeting_z_order()
 		return
 
 	# 创建新容器（普通 Control，不自动填充子节点，每个图层单独定位/缩放）
@@ -1255,33 +1263,52 @@ func _resize_meeting_rects(mdata: Dictionary) -> void:
 		rect.size = Vector2(rect_w, ch)
 
 ## 将活跃角色的 meeting 容器提到最前面（z_index 最高）
+## ★ 同时维护所有位置的堆叠和亮度逻辑：
+##   每个 slot 独立管理，只有该 slot 最近发言的角色在最前且明亮，其余变暗
 func bring_meeting_to_front(active_cid: String) -> void:
 	if not _meeting_chars.has(active_cid):
 		return
-	var active_data: Dictionary = _meeting_chars[active_cid]
-	var active_slot: String = str(active_data.get("slot", "center"))
-	# 收集同 slot 的角色
-	var same_slot_ids: Array[String] = []
+	# 记录该 slot 最近发言的角色
+	var active_slot: String = str(_meeting_chars[active_cid].get("slot", "center"))
+	_meeting_slot_front[active_slot] = active_cid
+	# 刷新所有 slot 的 z-ordering 和亮度
+	_refresh_meeting_z_order()
+
+## 根据 _meeting_slot_front 刷新所有位置的堆叠和亮度
+func _refresh_meeting_z_order() -> void:
+	# 按 slot 分组
+	var slots: Dictionary = {}  # { slot: Array[String] }
 	for cid in _meeting_chars.keys():
-		var data: Dictionary = _meeting_chars[cid]
-		if str(data.get("slot", "center")) == active_slot:
-			same_slot_ids.append(str(cid))
-	# 设置 z_index: 活跃角色最高
-	var base_z: int = 0
-	for cid in same_slot_ids:
-		var container: Control = _meeting_chars[cid].get("container")
-		if container == null or not is_instance_valid(container):
-			continue
-		if cid == active_cid:
-			container.z_index = base_z + same_slot_ids.size()
-			# ★ 活跃角色使用 MEETING_BRIGHTNESS
-			container.modulate = Color(MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, container.modulate.a)
-		else:
-			container.z_index = base_z
-			base_z += 1
-			# ★ 非活跃角色降低亮度 (活跃亮度 × 0.7)
-			var dim: float = MEETING_BRIGHTNESS * 0.7
-			container.modulate = Color(dim, dim, dim, container.modulate.a)
+		var slot: String = str(_meeting_chars[cid].get("slot", "center"))
+		if not slots.has(slot):
+			slots[slot] = [] as Array[String]
+		(slots[slot] as Array[String]).append(str(cid))
+
+	# 每个 slot 的 z_index 区间互不重叠（slot 间隔 10）
+	var slot_idx: int = 0
+	for slot in slots.keys():
+		var ids: Array = slots[slot] as Array
+		var front_cid: String = str(_meeting_slot_front.get(slot, ""))
+		# 如果没有记录或记录的角色已不在该 slot，用第一个
+		if front_cid.is_empty() or not ids.has(front_cid):
+			front_cid = str(ids[0])
+			_meeting_slot_front[slot] = front_cid
+
+		var base_z: int = slot_idx * 10
+		var back_z: int = base_z
+		for cid in ids:
+			var container: Control = _meeting_chars[cid].get("container")
+			if container == null or not is_instance_valid(container):
+				continue
+			if str(cid) == front_cid:
+				container.z_index = base_z + ids.size()
+				container.modulate = Color(MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, container.modulate.a)
+			else:
+				container.z_index = back_z
+				back_z += 1
+				var dim: float = MEETING_BRIGHTNESS * 0.7
+				container.modulate = Color(dim, dim, dim, container.modulate.a)
+		slot_idx += 1
 
 ## 更新所有 meeting 角色布局（在对话栏高度变化时调用）
 func _update_meeting_layout() -> void:
@@ -1359,6 +1386,7 @@ func clear_meeting_chars() -> void:
 		if container and is_instance_valid(container):
 			container.queue_free()
 	_meeting_chars.clear()
+	_meeting_slot_front.clear()
 	_display_mode = "card"
 
 ## 隐藏指定 meeting 角色
