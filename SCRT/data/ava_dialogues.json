@@ -224,7 +224,7 @@
 				},
 				{
 					"character": "ava",
-					"text": "[color=#00ff00]▶ 视频链路已建立[/color]",
+					"text": "[color=#00ff00]>> 视频链路已建立[/color]",
 					"speed": 0,
 					"auto_next": 0.5,
 					"screen_effect": "noise"
@@ -325,7 +325,7 @@
 				},
 				{
 					"character": "ava",
-					"text": "[color=#ffaa00]⚠ 警告：检测到信道干扰——[/color]",
+					"text": "[color=#ffaa00][!] 警告：检测到信道干扰——[/color]",
 					"speed": 0,
 					"char_anim": "shake",
 					"screen_effect": "glitch",
@@ -445,7 +445,7 @@
 				},
 				{
 					"character": "ava",
-					"text": "[color=#00ff00]▶ 多方链路已建立 — 参与者: A.V.A. / Dr. Zhang[/color]",
+					"text": "[color=#00ff00]>> 多方链路已建立 -- 参与者: A.V.A. / Dr. Zhang[/color]",
 					"speed": 0,
 					"auto_next": 0.5,
 					"screen_effect": "noise"
@@ -538,6 +538,101 @@
 			]
 		},
 
+		"ava_presentation_demo": {
+			"title": "AVA - 设施简报",
+			"description": "AVA展示设施信息的演示模式简报",
+			"callable": true,
+			"repeatable": true,
+			"video_call": true,
+			"video_number": "1001-0002",
+			"call_mode": "forced",
+			"lines": [
+				{
+					"character": "ava",
+					"text": "收到简报请求。正在准备演示资料……",
+					"speed": 28,
+					"auto_next": 1.5
+				},
+				{
+					"character": "ava",
+					"text": "[color=#00ff00]>> 安全频道已建立 -- 演示模式启动[/color]",
+					"speed": 0,
+					"auto_next": 0.5,
+					"screen_effect": "noise"
+				},
+				{
+					"character": "ava",
+					"text": "操作员，欢迎参加本次设施人员简报。我将在左侧为你讲解，资料显示在右侧。",
+					"display_mode": "presentation",
+					"meeting_slot": "left",
+					"char_anim": "slide_in_left",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "首先是联络员档案。你的主要联络人就是我 -- A.V.A.，自适应虚拟助理。",
+					"slide_image": "res://images/character/ava-tmp.png",
+					"slide_position": [0.55, 0.05],
+					"slide_size": [0.4, 0.55],
+					"slide_transition": "fade",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "我的职责包括：任务协调、通讯管理、系统监控，以及为特工提供技术支援。你可以随时通过终端联络我。",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "接下来介绍高级研究员 Dr. Zhang。他负责本设施的核心研究项目。",
+					"slide_image": "res://images/character/researcher-tmp.png",
+					"slide_position": [0.55, 0.05],
+					"slide_size": [0.4, 0.55],
+					"slide_transition": "slide_left",
+					"speed": 20
+				},
+				{
+					"character": "ava",
+					"text": "Dr. Zhang 的研究内容属于高度机密。如需联络他，请拨打 [color=#ffaa00]1002-0001[/color]，或通过视频频道接入。",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "最后，本设施的整体外观概览。",
+					"slide_image": "res://images/backround.png",
+					"slide_position": [0.55, 0.05],
+					"slide_size": [0.4, 0.55],
+					"slide_transition": "slide_left",
+					"speed": 22
+				},
+				{
+					"character": "ava",
+					"text": "设施坐标已列入限制名单。未经授权的位置探测将触发安全协议。这是你需要了解的全部背景信息。",
+					"speed": 18
+				},
+				{
+					"character": "ava",
+					"text": "简报结束。关闭演示画面。",
+					"slide_hide": "fade",
+					"speed": 25,
+					"auto_next": 1.0
+				},
+				{
+					"character": "ava",
+					"text": "如有疑问，随时呼叫。AVA 关闭演示链路。",
+					"char_anim": "fade_out",
+					"speed": 25,
+					"auto_next": 0.8
+				},
+				{
+					"character": "ava",
+					"text": "已回到常规通讯模式。",
+					"display_mode": "card",
+					"speed": 0
+				}
+			]
+		},
+
 		"forced_call_demo": {
 			"title": "紧急强制通讯演示",
 			"description": "强制来电模式演示（铃声后自动接通）",
@@ -548,7 +643,7 @@
 			"lines": [
 				{
 					"character": "ava",
-					"text": "[color=#ff4444]▶ 紧急频道激活[/color]",
+					"text": "[color=#ff4444]>> EMERGENCY CHANNEL ACTIVE[/color]",
 					"speed": 0,
 					"screen_effect": "glitch",
 					"auto_next": 0.5

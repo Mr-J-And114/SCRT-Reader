@@ -901,7 +901,7 @@ func _show_incoming_call_legacy(dialogue_id: String, caller_name: String) -> voi
 	var c_hex: String = _T.warning_hex if _T else "#ffff00"
 	var m_hex: String = _T.muted_hex if _T else "#888888"
 	_main.append_output("\n[color=" + c_hex + "]╔══════════════════════════════════╗[/color]\n", false)
-	_main.append_output("[color=" + c_hex + "]║  ☎ INCOMING COMM — " + caller_name + "[/color]\n", false)
+	_main.append_output("[color=" + c_hex + "]║  INCOMING COMM -- " + caller_name + "[/color]\n", false)
 	_main.append_output("[color=" + m_hex + "]║  输入 [color=" + c_hex + "]comm answer[/color] 接听通讯[/color]\n", false)
 	_main.append_output("[color=" + c_hex + "]╚══════════════════════════════════╝[/color]\n\n", false)
 
@@ -989,7 +989,7 @@ func handle_comm_command(args: Array = []) -> void:
 
 	var has_pending: bool = not _pending_incoming_call.is_empty() or (_call_handler and _call_handler.has_pending_answer())
 	if has_pending:
-		_main.append_output("  [color=" + w + "]★ 待接听来电[/color]  [color=" + m + "]输入 comm answer 接听 / comm reject 拒绝[/color]\n\n", false)
+		_main.append_output("  [color=" + w + "][!] 待接听来电[/color]  [color=" + m + "]输入 comm answer 接听 / comm reject 拒绝[/color]\n\n", false)
 
 	if _main.dial_mgr:
 		var all_numbers: Array[String] = _main.dial_mgr.get_all_numbers()
