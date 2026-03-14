@@ -40,6 +40,8 @@
 
 **Desktop:** help, clear, status, whoami, settings, theme, volume, reboot, exit, logout, passwd, birthday, users, deluser, profile, comm, mail, scan, load, vdisc, explore, dial, phonebook, env, camera
 
+**Comm subcommands:** comm (status), comm answer, comm reject, comm video, comm phonebook, comm history/log
+
 **Disc (story loaded):** ls, cd, back, open, unlock, eject, save, clearsave, radio, fx, sound, decode, install, uninstall, packages
 
 **Env subcommands:** env status, env view, env tasks, env check, env read, env calibrate, env anomaly, env report, env repair, env advance, env sensor, env weather, env events

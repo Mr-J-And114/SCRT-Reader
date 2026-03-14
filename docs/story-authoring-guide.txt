@@ -532,8 +532,13 @@
   · video_number — 对应的拨号号码，玩家可用 dial 或 comm video 呼叫
 
   玩家使用方式：
+  · comm              — 显示通讯状态
+  · comm answer       — 接听来电
+  · comm reject       — 拒绝来电
   · comm video        — 显示所有视频频道列表
   · comm video <号码> — 通过拨号系统呼叫指定频道
+  · comm phonebook    — 显示通讯录
+  · comm history      — 查看通讯历史记录
   · dial <号码>       — 直接拨号呼叫
 
 
@@ -550,12 +555,26 @@
       "slide_image": "images/slide1.png",
       "slide_position": [0.55, 0.1],
       "slide_size": [0.4, 0.5],
+      "slide_fit": "contain",
+      "slide_align": "center",
       "slide_transition": "fade"
   }
 
+  字段说明：
+
   · slide_image: 幻灯片图片路径（从 .scp 包或 res:// 加载）
-  · slide_position: [x, y] 归一化坐标 (0.0-1.0)
-  · slide_size: [w, h] 归一化尺寸 (0.0-1.0)
+  · slide_position: [x, y] 归一化坐标 (0.0-1.0)，默认 [0.55, 0.1]
+  · slide_size: [w, h] 归一化尺寸 (0.0-1.0)，默认 [0.4, 0.5]
+  · slide_area: [x, y, w, h] 展示区域，覆盖 position+size（可选）
+  · slide_fit: 图片适配模式（可选）
+    "contain" — 保持比例完整显示（默认）
+    "cover"   — 保持比例填满区域（可能裁剪）
+    "stretch" — 拉伸填满区域（可能变形）
+    "actual"  — 原始尺寸居中显示
+  · slide_align: 图片在展示区域内的对齐方式（可选）
+    "center"（默认） / "top_left" / "top_center" / "top_right"
+    "center_left" / "center_right"
+    "bottom_left" / "bottom_center" / "bottom_right"
   · slide_transition: 过渡动画
     "fade" / "instant" / "slide_left" / "slide_right"
 

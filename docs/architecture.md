@@ -17,7 +17,12 @@ main.gd (extends Control) — the god object
 ├─ crtml: CrtmlParser — Markdown-like markup → BBCode for RichTextLabel
 ├─ pkg_mgr: PackageManager — mod .scp install/uninstall/runtime
 ├─ settings_mgr: SettingsManager — registry-based settings with TUI
-├─ comm_mgr: CommManager — dialogue/comm system (characters, choices)
+├─ comm_mgr: CommManager — dialogue/comm system (characters, calls, presentation)
+│  ├─ call_handler: CallHandler — SILENT/FORCED/ANSWERABLE incoming call flow
+│  ├─ comm_ui: CommUI — dialogue bar, card/meeting/presentation modes, history
+│  │  └─ presentation: PresentationOverlay — slide display with fit/align/transitions
+│  ├─ character_registry: CharacterRegistry — character lifecycle (builtin/disc/mod)
+│  │  └─ asset_library: CharacterAssetLibrary — asset profiles, texture loading
 │  ├─ dial_mgr: DialManager — DTMF dialing, voice call routing, modem download state machine
 │  ├─ tone_gen: DialToneGenerator — procedural DTMF/ringback/busy/modem/hangup audio synthesis (owned by dial_mgr)
 ├─ trigger_sys: TriggerSystem — event-driven triggers (enter dir, open file, etc.)
@@ -127,14 +132,19 @@ Main (Control, fullrect) [main.gd]
 
 | File | Class | Purpose |
 |---|---|---|
-| comm_manager.gd | CommManager | Dialogue orchestration, character management, tutorial flow, disc dialogues |
-| comm_dialogue_player.gd | CommDialoguePlayer | Dialogue playback engine (line-by-line, choices, conditions, silent stop for seamless transitions) |
-| comm_character.gd | — | Character data (portrait, expressions, voice config) |
-| comm_sprite_renderer.gd | — | Character sprite rendering |
-| comm_ui.gd | — | Comm overlay UI (text display, portrait, choices) |
+| comm_manager.gd | CommManager | Dialogue orchestration, call routing, tutorial flow, `comm` command handler |
+| comm_dialogue_player.gd | CommDialoguePlayer | Dialogue playback engine (line-by-line, choices, conditions, slides, silent stop) |
+| comm_character.gd | CommCharacter | Lightweight character data model (identity, voice, state, delegates to animator) |
+| character_registry.gd | CharacterRegistry | Character lifecycle, registration (builtin/disc/mod sources) |
+| character_asset_library.gd | CharacterAssetLibrary | Asset profiles, modular texture loading (res:// + virtual FS) |
+| character_animator.gd | CharacterAnimator | Animation engine (mouth, blink, action, layer overrides, costumes) |
+| call_handler.gd | CallHandler | Call mode handler: SILENT/FORCED/ANSWERABLE ring + answer flow |
+| presentation_overlay.gd | PresentationOverlay | Presentation mode slide overlay (image display, fit/align, transitions) |
+| comm_sprite_renderer.gd | — | Character sprite rendering (card mode) |
+| comm_ui.gd | CommUI | Comm overlay UI (dialogue bar, card/meeting/presentation mode, history) |
 | comm_voice.gd | — | Procedural voice synthesis (sine/square/saw tones) |
 | dial_manager.gd | DialManager | DTMF dial state machine, voice call routing, modem handshake/download, phonebook |
-| dial_tone_generator.gd | DialToneGenerator | Procedural audio: DTMF keys, ringback, busy tone, modem handshake, data noise, hangup |
+| dial_tone_generator.gd | DialToneGenerator | Procedural audio: DTMF keys, ringback, busy tone, modem handshake, data noise, hangup, ring |
 
 ### Mod System (`res://modder/`)
 
@@ -259,7 +269,7 @@ modder/mod_api.gd|997  modder/mod_base.gd|93
 | Story Loading | ✅ Complete | ZIP parsing, GBK support |
 | User System | ✅ Complete | Multi-user, profiles, stats |
 | Save System | ✅ Complete | Per-user per-story |
-| Comm System | ✅ Complete | Dialogues, characters, tutorial, dial-initiated voice calls, silent stop for seamless transitions |
+| Comm System | ✅ Complete | Dialogues, characters, call modes (silent/forced/answerable), card/meeting/presentation display, layered sprites, history, video calls |
 | Mail System | ✅ Complete | Inbox, delayed delivery |
 | Radio System | ✅ Complete | Tuning, morse, SSTV, audio stations, hidden signals, waterfall, progressive perception |
 | Mod System | ✅ Complete | Install, lifecycle, API |

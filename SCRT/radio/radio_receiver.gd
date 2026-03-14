@@ -307,10 +307,6 @@ func open() -> void:
 	main.output_text.text = ""
 	main.path_label.text = "RADIO RECEIVER | Q/Esc 退出"
 
-	# ★ 隐藏 COMM 按钮（避免遮挡）
-	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
-		main.comm_mgr._ui._toggle_btn.visible = false
-
 	_init_waterfall()
 
 	overlay.visible = true
@@ -366,10 +362,6 @@ func close() -> void:
 	_cached_output_text = ""
 	main.input_field.visible = _cached_input_visible
 	main.prompt_label.visible = _cached_prompt_visible
-
-	# ★ 恢复 COMM 按钮
-	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
-		main.comm_mgr._ui._toggle_btn.visible = true
 
 	main._update_status_bar()
 	main.input_field.grab_focus()

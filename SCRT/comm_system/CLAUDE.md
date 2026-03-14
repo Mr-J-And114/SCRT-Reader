@@ -92,13 +92,49 @@ Presentation mode shows a PPT/slide image alongside a character in meeting mode.
   "slide_image": "images/slide1.png",
   "slide_position": [0.55, 0.1],
   "slide_size": [0.4, 0.5],
+  "slide_area": [0.5, 0.05, 0.45, 0.6],
+  "slide_fit": "contain",
+  "slide_align": "center",
   "slide_transition": "fade"
 }
 ```
 
+| Field | Type | Default | Description |
+|---|---|---|---|
+| slide_image | String | — | Image path (res:// or story pack path) |
+| slide_position | [x, y] | [0.55, 0.1] | Normalized position (0.0~1.0) |
+| slide_size | [w, h] | [0.4, 0.5] | Normalized size (0.0~1.0) |
+| slide_area | [x, y, w, h] | — | Display area (overrides position+size) |
+| slide_fit | String | "contain" | Image fitting: contain/cover/stretch/actual |
+| slide_align | String | "center" | Alignment within area: center/top_left/top_center/top_right/center_left/center_right/bottom_left/bottom_center/bottom_right |
+| slide_transition | String | "fade" | Transition: fade/instant/slide_left/slide_right |
+
 To hide a slide: `"slide_hide": true` or `"slide_hide": "slide_left"`
 
 Transitions: `fade`, `instant`, `slide_left`, `slide_right`
+
+## Display Modes (CommUI)
+
+| Mode | Description |
+|---|---|
+| `"card"` | Small portrait cards beside dialogue bar (default) |
+| `"meeting"` | Galgame-style large character sprites, per-slot z-ordering |
+| `"presentation"` | Meeting mode + slide overlay with configurable fit/align/area |
+
+Set via `"display_mode"` field in dialogue line JSON. Card/meeting chars share the same
+`ensure_meeting_char()` infrastructure. Presentation mode adds `PresentationOverlay` for slides.
+
+## Comm Commands
+
+| Command | Description |
+|---|---|
+| `comm` | Show comm status |
+| `comm answer` | Answer incoming call |
+| `comm reject` | Reject incoming call |
+| `comm video` | List video channels |
+| `comm video <num>` | Call video channel by number |
+| `comm phonebook` | Show phonebook |
+| `comm history` / `comm log` | View communication history |
 
 ## Dial State Machine
 
@@ -132,8 +168,8 @@ IDLE → DTMF_PLAYING → RINGING → VOICE_ACTIVE / MODEM_* → CALL_ENDED → 
 | comm_manager.gd | Dialogue orchestration, tutorial flow, call routing, delegates to registry |
 | comm_dialogue_player.gd | Dialogue playback (line-by-line, choices, conditions, character tags, slides) |
 | comm_character.gd | Lightweight character data model (delegates to animator) |
-| call_handler.gd | **NEW** Call mode handler: SILENT/FORCED/ANSWERABLE ring + answer flow |
-| presentation_overlay.gd | **NEW** Presentation mode slide overlay (image display + transitions) |
+| call_handler.gd | Call mode handler: SILENT/FORCED/ANSWERABLE ring + answer flow |
+| presentation_overlay.gd | Presentation mode slide overlay (fit/align/area config + transitions) |
 | character_registry.gd | Character lifecycle, registration (builtin/disc/mod) |
 | character_asset_library.gd | Asset profiles, modular texture loading |
 | character_animator.gd | Animation engine (mouth, blink, action, layer overrides, costumes) |

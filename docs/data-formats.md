@@ -131,13 +131,16 @@ Multiple characters share the screen with overlap offset (40px). Active speaker 
 
 ### Presentation Mode (per-line)
 
-| Field | Type | Description |
-|---|---|---|
-| `slide_image` | string | Path to slide image (relative to story pack or `res://`) |
-| `slide_position` | array | `[x, y]` normalized position, e.g. `[0.55, 0.1]` |
-| `slide_size` | array | `[w, h]` normalized size, e.g. `[0.4, 0.5]` |
-| `slide_transition` | string | `"fade"`, `"instant"`, `"slide_left"`, `"slide_right"` |
-| `slide_hide` | string | Hide current slide with transition (e.g. `"fade"`) |
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `slide_image` | string | — | Path to slide image (relative to story pack or `res://`) |
+| `slide_position` | array | `[0.55, 0.1]` | `[x, y]` normalized position (0.0~1.0) |
+| `slide_size` | array | `[0.4, 0.5]` | `[w, h]` normalized size (0.0~1.0) |
+| `slide_area` | array | — | `[x, y, w, h]` display area (overrides position+size) |
+| `slide_fit` | string | `"contain"` | Image fitting: `"contain"` / `"cover"` / `"stretch"` / `"actual"` |
+| `slide_align` | string | `"center"` | Image alignment within area: `"center"` / `"top_left"` / `"top_center"` / `"top_right"` / `"center_left"` / `"center_right"` / `"bottom_left"` / `"bottom_center"` / `"bottom_right"` |
+| `slide_transition` | string | `"fade"` | Transition: `"fade"` / `"instant"` / `"slide_left"` / `"slide_right"` |
+| `slide_hide` | bool/string | — | Hide current slide with transition (e.g. `true` or `"slide_left"`) |
 
 ### Clear-Before-Dialogue Setting
 
@@ -170,8 +173,9 @@ Registered in settings as `comm.clear_before_dialogue` (bool, default `false`). 
       "character": "ava",
       "meeting_slot": "left",
       "slide_image": "slides/plan.png",
-      "slide_position": [0.55, 0.1],
-      "slide_size": [0.4, 0.5],
+      "slide_area": [0.5, 0.05, 0.45, 0.6],
+      "slide_fit": "contain",
+      "slide_align": "center",
       "slide_transition": "fade",
       "text": "请看这份计划。"
     }
