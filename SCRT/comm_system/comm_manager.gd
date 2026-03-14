@@ -964,6 +964,10 @@ func handle_comm_command(args: Array = []) -> void:
 				_main.append_output("[color=" + m + "]当前没有待拒绝的通讯。[/color]\n", false)
 			return
 
+		if target_id == "history" or target_id == "log":
+			_ui.show_history()
+			return
+
 		if target_id == "video" or target_id == "meeting":
 			# 支持 comm video <号码> 直接拨号
 			if args.size() >= 2:
@@ -981,7 +985,7 @@ func handle_comm_command(args: Array = []) -> void:
 			return
 
 		_main.append_output("[color=" + e + "]未知参数: " + target_id + "[/color]\n", false)
-		_main.append_output("[color=" + m + "]用法: comm / comm answer / comm reject / comm video / comm video <号码>[/color]\n", false)
+		_main.append_output("[color=" + m + "]用法: comm / comm answer / comm reject / comm video / comm history[/color]\n", false)
 		_main.append_output("[color=" + m + "]如需联络，请使用 dial <号码> 拨号呼叫。[/color]\n", false)
 		return
 
@@ -1015,6 +1019,7 @@ func handle_comm_command(args: Array = []) -> void:
 	_main.append_output("[color=" + m + "]拨号联络: dial <号码>  (如 dial 1001-0001)[/color]\n", false)
 	_main.append_output("[color=" + m + "]视频通讯: comm video  (查看频道列表)[/color]\n", false)
 	_main.append_output("[color=" + m + "]视频拨号: comm video <号码>  (如 comm video 1001-0001)[/color]\n", false)
+	_main.append_output("[color=" + m + "]通讯历史: comm history[/color]\n", false)
 	_main.append_output("[color=" + m + "]查看号码簿: phonebook[/color]\n", false)
 	if has_pending:
 		_main.append_output("[color=" + m + "]接听来电: comm answer  拒绝: comm reject[/color]\n", false)

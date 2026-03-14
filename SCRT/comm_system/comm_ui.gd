@@ -15,8 +15,6 @@ extends RefCounted
 ## ── 对话栏 ──
 const DIALOG_BAR_HEIGHT_MIN: float = 100.0         # 对话栏最小高度 (px)
 const DIALOG_BAR_HEIGHT_MAX: float = 300.0         # 对话栏最大高度 (约屏幕 1/3)
-const TOGGLE_BTN_SIZE: float = 24.0                # COMM 按钮高度
-const TOGGLE_BTN_GAP: float = 6.0                  # 按钮与对话栏间距
 const SLIDE_DURATION: float = 0.3                  # 对话栏展开/收起动画时长 (秒)
 const PADDING: float = 12.0                        # 对话栏内边距
 
@@ -51,7 +49,6 @@ var _T: Variant = null
 # ── 节点 ──
 var _root: Control = null          # 裁剪容器，底部 = 输入框上沿（消失线）
 var _dialog_bar: PanelContainer = null
-var _toggle_btn: Button = null
 
 # ── 对话栏内部 ──
 var _name_label: RichTextLabel = null
@@ -59,7 +56,6 @@ var _text_label: RichTextLabel = null
 var _text_scroll: ScrollContainer = null
 var _continue_label: Label = null
 var _wait_label: RichTextLabel = null
-var _history_btn: Button = null
 
 # ── 状态 ──
 var is_visible: bool = false
@@ -171,25 +167,6 @@ func _build_ui() -> void:
 	UIManager._apply_bold_font(_name_label)
 	top_row.add_child(_name_label)
 
-	# History 按钮（对话栏内）
-	_history_btn = Button.new()
-	_history_btn.text = "[History]"
-	_history_btn.flat = true
-	_history_btn.custom_minimum_size = Vector2(64, 20)
-	_history_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	_history_btn.add_theme_font_size_override("font_size", 11)
-	if _T:
-		_history_btn.add_theme_color_override("font_color", _T.muted)
-		_history_btn.add_theme_color_override("font_hover_color", _T.primary)
-		_history_btn.add_theme_color_override("font_pressed_color", _T.primary)
-	var empty_style := StyleBoxEmpty.new()
-	_history_btn.add_theme_stylebox_override("normal", empty_style)
-	_history_btn.add_theme_stylebox_override("hover", empty_style)
-	_history_btn.add_theme_stylebox_override("pressed", empty_style)
-	_history_btn.add_theme_stylebox_override("focus", empty_style)
-	_history_btn.pressed.connect(_on_history_btn_pressed)
-	top_row.add_child(_history_btn)
-
 # 对话文本区域（★ 不使用 ScrollContainer，改为自动变高）
 	_text_label = RichTextLabel.new()
 	_text_label.bbcode_enabled = true
@@ -226,38 +203,6 @@ func _build_ui() -> void:
 	_wait_label.visible = false
 	_wait_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(_wait_label)
-
-	# ═══ 2. COMM 按钮（也在 _root 裁剪容器内） ═══
-	_toggle_btn = Button.new()
-	_toggle_btn.name = "CommToggleBtn"
-	_toggle_btn.text = "▲ COMM"
-	_toggle_btn.custom_minimum_size = Vector2(90, TOGGLE_BTN_SIZE)
-	_toggle_btn.size = Vector2(90, TOGGLE_BTN_SIZE)
-	_toggle_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	var btn_style := StyleBoxFlat.new()
-	btn_style.bg_color = Color(0.02, 0.02, 0.02, 0.92)
-	btn_style.border_color = _T.primary.darkened(0.3) if _T else Color(0.0, 0.5, 0.0, 0.5)
-	btn_style.border_width_top = 1
-	btn_style.border_width_bottom = 0
-	btn_style.border_width_left = 1
-	btn_style.border_width_right = 1
-	_toggle_btn.add_theme_stylebox_override("normal", btn_style)
-	var btn_hover := btn_style.duplicate() as StyleBoxFlat
-	btn_hover.bg_color = Color(0.04, 0.08, 0.04, 0.95)
-	btn_hover.border_color = _T.primary if _T else Color(0.0, 0.8, 0.0, 0.7)
-	_toggle_btn.add_theme_stylebox_override("hover", btn_hover)
-	var btn_pressed := btn_style.duplicate() as StyleBoxFlat
-	btn_pressed.bg_color = Color(0.06, 0.12, 0.06, 0.95)
-	_toggle_btn.add_theme_stylebox_override("pressed", btn_pressed)
-	_toggle_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	_toggle_btn.add_theme_font_size_override("font_size", 12)
-	if _T:
-		_toggle_btn.add_theme_color_override("font_color", _T.primary)
-		_toggle_btn.add_theme_color_override("font_hover_color", _T.primary)
-		_toggle_btn.add_theme_color_override("font_pressed_color", _T.primary)
-	_toggle_btn.pressed.connect(_on_toggle_btn_pressed)
-	_toggle_btn.visible = true
-	_root.add_child(_toggle_btn)
 
 	# 初始隐藏对话栏
 	_dialog_bar.visible = false
@@ -347,9 +292,9 @@ func _get_timestamp() -> String:
 
 
 # ══════════════════════════════════════════
-#  History 按钮回调
+#  通讯历史查看（由 comm history 命令触发）
 # ══════════════════════════════════════════
-func _on_history_btn_pressed() -> void:
+func show_history() -> void:
 	if _main == null:
 		return
 	# ★ 打开 History 前自动收起对话框和立绘
@@ -420,21 +365,16 @@ func show() -> void:
 	_auto_collapsed = false
 	_root.visible = true
 	_dialog_bar.visible = true
-	if _toggle_btn:
-		_toggle_btn.visible = true
-		_toggle_btn.text = "▼ COMM"
 	if _main:
 		(func():
 			_update_positions()
 			if _dialog_bar and is_instance_valid(_dialog_bar):
-				# ★ 只在对话栏不在展开位置时才从底部弹出
 				var dist: float = absf(_dialog_bar.position.y - _target_y_expanded)
 				if dist > 2.0:
 					_dialog_bar.position.y = _target_y_collapsed
 					_slide_to_expanded()
 				else:
 					_dialog_bar.position.y = _target_y_expanded
-					_sync_btn_to_bar()
 					_update_card_layout()
 		).call_deferred()
 
@@ -444,10 +384,6 @@ func hide() -> void:
 	is_visible = false
 	if _dialog_bar:
 		_dialog_bar.visible = false
-	if _toggle_btn:
-		_toggle_btn.visible = true
-		_toggle_btn.text = "▲ COMM"
-	_sync_btn_to_bar()
 
 
 # ══════════════════════════════════════════
@@ -459,8 +395,6 @@ func auto_collapse() -> void:
 	_collapsed = true
 	_auto_collapsed = true
 	_slide_to_collapsed()
-	if _toggle_btn:
-		_toggle_btn.text = "▲ COMM"
 
 func auto_expand() -> void:
 	if not _collapsed:
@@ -470,40 +404,14 @@ func auto_expand() -> void:
 	is_visible = true
 	_dialog_bar.visible = true
 	_slide_to_expanded()
-	if _toggle_btn:
-		_toggle_btn.text = "▼ COMM"
-
-
-func _on_toggle_btn_pressed() -> void:
-	if _collapsed:
-		_collapsed = false
-		_auto_collapsed = false
-		is_visible = true
-		_dialog_bar.visible = true
-		_slide_to_expanded()
-		_toggle_btn.text = "▼ COMM"
-	else:
-		_collapsed = true
-		_auto_collapsed = false
-		_slide_to_collapsed()
-		_toggle_btn.text = "▲ COMM"
-	if _main and _main.input_field:
-		_main.input_field.grab_focus()
 
 
 func _slide_to_collapsed() -> void:
 	if _slide_tween:
 		_slide_tween.kill()
-	if _toggle_btn:
-		_toggle_btn.text = "▲ COMM"
 	_slide_tween = _main.create_tween().set_parallel(true)
-	# ★ 对话栏和按钮一起滑动
 	_slide_tween.tween_property(_dialog_bar, "position:y", _target_y_collapsed, SLIDE_DURATION)\
 		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	if _toggle_btn:
-		var btn_target_y: float = _target_y_collapsed - TOGGLE_BTN_SIZE - TOGGLE_BTN_GAP
-		_slide_tween.tween_property(_toggle_btn, "position:y", btn_target_y, SLIDE_DURATION)\
-			.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 	# ★ 立绘淡出
 	for cid in _portrait_cards.keys():
 		var card_data: Dictionary = _portrait_cards[cid]
@@ -513,42 +421,24 @@ func _slide_to_collapsed() -> void:
 	# 动画完毕后隐藏
 	_slide_tween.chain().tween_callback(func():
 		_dialog_bar.visible = false
-		_sync_btn_to_bar()
 	)
 
 func _slide_to_expanded() -> void:
 	if _slide_tween:
 		_slide_tween.kill()
-	if _toggle_btn:
-		_toggle_btn.text = "▼ COMM"
 	_dialog_bar.visible = true
 
-	# ★ 只在对话栏不在展开位置附近时才做动画
 	var current_y: float = _dialog_bar.position.y
 	var dist: float = absf(current_y - _target_y_expanded)
 	if dist < 2.0:
-		# 已经在目标位置，直接定位，不做动画
 		_dialog_bar.position.y = _target_y_expanded
-		_sync_btn_to_bar()
 		_update_card_layout()
 		return
 
-	# ★ 不强制从底部开始，从当前位置滑到目标位置
 	_update_card_layout()
-
-	if _toggle_btn:
-		_toggle_btn.position.y = current_y - TOGGLE_BTN_SIZE - TOGGLE_BTN_GAP
-
 	_slide_tween = _main.create_tween().set_parallel(true)
 	_slide_tween.tween_property(_dialog_bar, "position:y", _target_y_expanded, SLIDE_DURATION)\
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	if _toggle_btn:
-		var btn_target_y: float = _target_y_expanded - TOGGLE_BTN_SIZE - TOGGLE_BTN_GAP
-		_slide_tween.tween_property(_toggle_btn, "position:y", btn_target_y, SLIDE_DURATION)\
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	_slide_tween.chain().tween_callback(func():
-		_sync_btn_to_bar()
-	)
 
 # ══════════════════════════════════════════
 #  角色 / 文本更新
@@ -977,28 +867,6 @@ func _update_positions() -> void:
 		_dialog_bar.position = Vector2(0, bar_y)
 	_dialog_bar.size = Vector2(bar_width, _current_bar_height)   # ★ 用动态高度
 
-	_sync_btn_to_bar()
-
-## 同步 COMM 按钮位置到对话栏当前位置
-func _sync_btn_to_bar() -> void:
-	if _toggle_btn == null or _root == null:
-		return
-
-	var bar_width: float = _root.size.x if _root.size.x > 0 else 800.0
-	var btn_x: float = bar_width - _toggle_btn.size.x - 12
-	var clip_h: float = _root.size.y
-
-	# 对话栏的当前 Y
-	var bar_y: float = clip_h  # 默认：消失线
-	if _dialog_bar and is_instance_valid(_dialog_bar) and _dialog_bar.visible:
-		bar_y = _dialog_bar.position.y
-	elif not _collapsed:
-		bar_y = _target_y_expanded
-
-	# 按钮在对话栏上方
-	var btn_y: float = bar_y - TOGGLE_BTN_SIZE - TOGGLE_BTN_GAP
-	_toggle_btn.position = Vector2(btn_x, btn_y)
-
 
 # ══════════════════════════════════════════
 #  每帧更新
@@ -1007,15 +875,10 @@ func process(delta: float) -> void:
 	if not _built:
 		return
 
-	# 动画中：每帧同步按钮和立绘跟随对话栏
+	# 动画中：每帧同步立绘跟随对话栏
 	if _slide_tween and _slide_tween.is_running():
-		_sync_btn_to_bar()
 		_update_card_layout()
 		return
-
-	# 非动画：正常更新
-	if _toggle_btn and is_instance_valid(_toggle_btn) and _toggle_btn.visible:
-		_sync_btn_to_bar()
 
 	if not is_visible:
 		return
@@ -1417,8 +1280,6 @@ func cleanup() -> void:
 		_root.queue_free()
 		_root = null
 	_dialog_bar = null
-	_toggle_btn = null
-	_history_btn = null
 	_name_label = null
 	_text_label = null
 	_continue_label = null
