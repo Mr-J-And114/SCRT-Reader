@@ -171,8 +171,8 @@ func _play_current_line() -> void:
 		if not display_mode.is_empty():
 			_comm_mgr.set_display_mode(display_mode)
 
-		# meeting 模式下设置角色位置
-		if display_mode == "meeting" and not char_id.is_empty():
+		# meeting/presentation 模式下设置角色位置
+		if (display_mode == "meeting" or display_mode == "presentation") and not char_id.is_empty():
 			_comm_mgr.set_meeting_char(char_id, meeting_slot)
 
 		# 播放角色动画（card/meeting 均可用）
