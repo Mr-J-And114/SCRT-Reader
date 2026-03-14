@@ -92,9 +92,22 @@ Presentation mode shows a PPT/slide image alongside a character in meeting mode.
   "slide_image": "images/slide1.png",
   "slide_position": [0.55, 0.1],
   "slide_size": [0.4, 0.5],
+  "slide_area": [0.5, 0.05, 0.45, 0.6],
+  "slide_fit": "contain",
+  "slide_align": "center",
   "slide_transition": "fade"
 }
 ```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| slide_image | String | — | Image path (res:// or story pack path) |
+| slide_position | [x, y] | [0.55, 0.1] | Normalized position (0.0~1.0) |
+| slide_size | [w, h] | [0.4, 0.5] | Normalized size (0.0~1.0) |
+| slide_area | [x, y, w, h] | — | Display area (overrides position+size) |
+| slide_fit | String | "contain" | Image fitting: contain/cover/stretch/actual |
+| slide_align | String | "center" | Alignment within area: center/top_left/top_center/top_right/center_left/center_right/bottom_left/bottom_center/bottom_right |
+| slide_transition | String | "fade" | Transition: fade/instant/slide_left/slide_right |
 
 To hide a slide: `"slide_hide": true` or `"slide_hide": "slide_left"`
 

@@ -964,7 +964,7 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 		mdata["slot"] = slot
 		var container: Control = mdata.get("container")
 		if container and is_instance_valid(container):
-			container.visible = _display_mode == "meeting"
+			container.visible = _display_mode == "meeting" or _display_mode == "presentation" or _display_mode == "presentation"
 			_layout_meeting_char(mdata)
 			# 更新纹理
 			var layer_rects: Dictionary = mdata.get("layer_rects", {})
@@ -1008,7 +1008,7 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 
 	# ★ 应用大图亮度
 	container.modulate = Color(MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, MEETING_BRIGHTNESS, 1.0)
-	container.visible = _display_mode == "meeting"
+	container.visible = _display_mode == "meeting" or _display_mode == "presentation"
 
 	var mdata: Dictionary = {
 		"container": container,
