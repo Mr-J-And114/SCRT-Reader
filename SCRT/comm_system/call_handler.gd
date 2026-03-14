@@ -128,7 +128,7 @@ func _show_ring_notification() -> void:
 	if _main == null:
 		return
 	var w_hex: String = _T.warning_hex if _T else "#ffff00"
-	_main.append_output("[color=%s]☎ RING... (%s)[/color]\n" % [w_hex, _pending_caller_name], false)
+	_main.append_output("[color=%s]RING... (%s)[/color]\n" % [w_hex, _pending_caller_name], false)
 
 # ══════════════════════════════════════════
 #  铃声结束处理
@@ -158,7 +158,7 @@ func _show_forced_connect_message() -> void:
 	if _main == null:
 		return
 	var p_hex: String = _T.primary_hex if _T else "#00ff00"
-	_main.append_output("[color=%s]☎ 通讯已接通 — %s[/color]\n\n" % [p_hex, _pending_caller_name], false)
+	_main.append_output("[color=%s]CONNECTED -- — %s[/color]\n\n" % [p_hex, _pending_caller_name], false)
 
 func _show_answer_prompt() -> void:
 	if _main == null:
@@ -167,11 +167,11 @@ func _show_answer_prompt() -> void:
 	var m_hex: String = _T.muted_hex if _T else "#888888"
 	var p_hex: String = _T.primary_hex if _T else "#00ff00"
 	_main.append_output("\n[color=%s]╔══════════════════════════════════════╗[/color]\n" % w_hex, false)
-	_main.append_output("[color=%s]║  ☎ 来电等待接听 — %s[/color]\n" % [w_hex, _pending_caller_name], false)
+	_main.append_output("[color=%s]║  INCOMING COMM -- — %s[/color]\n" % [w_hex, _pending_caller_name], false)
 	_main.append_output("[color=%s]║  输入 [color=%s]comm answer[/color] 接听[/color]\n" % [m_hex, p_hex], false)
 	_main.append_output("[color=%s]║  输入 [color=%s]comm reject[/color] 拒绝[/color]\n" % [m_hex, p_hex], false)
 	if not _pending_reject_consequence.is_empty():
-		_main.append_output("[color=%s]║  ⚠ 拒绝可能影响后续剧情[/color]\n" % w_hex, false)
+		_main.append_output("[color=%s]║  [!] 拒绝可能影响后续剧情[/color]\n" % w_hex, false)
 	_main.append_output("[color=%s]╚══════════════════════════════════════╝[/color]\n\n" % w_hex, false)
 
 # ══════════════════════════════════════════
@@ -185,7 +185,7 @@ func accept_call() -> void:
 	var dlg_id: String = _pending_dialogue_id
 	var p_hex: String = _T.primary_hex if _T else "#00ff00"
 	if _main:
-		_main.append_output("[color=%s]☎ 通讯已接通 — %s[/color]\n\n" % [p_hex, _pending_caller_name], false)
+		_main.append_output("[color=%s]CONNECTED -- — %s[/color]\n\n" % [p_hex, _pending_caller_name], false)
 	_reset_state()
 	call_accepted.emit(dlg_id)
 
@@ -197,7 +197,7 @@ func reject_call() -> void:
 	var consequence: String = _pending_reject_consequence
 	var m_hex: String = _T.muted_hex if _T else "#888888"
 	if _main:
-		_main.append_output("[color=%s]☎ 已拒绝来电 — %s[/color]\n\n" % [m_hex, _pending_caller_name], false)
+		_main.append_output("[color=%s]REJECTED -- — %s[/color]\n\n" % [m_hex, _pending_caller_name], false)
 	_reset_state()
 	call_rejected.emit(dlg_id)
 
@@ -222,7 +222,7 @@ func process(delta: float) -> void:
 		if _total_ring_timer >= RING_TIMEOUT:
 			var m_hex: String = _T.muted_hex if _T else "#888888"
 			if _main:
-				_main.append_output("[color=%s]☎ 来电已超时。[/color]\n\n" % m_hex, false)
+				_main.append_output("[color=%s]CALL TIMED OUT.[/color]\n\n" % m_hex, false)
 			reject_call()
 
 func _process_ringing(delta: float) -> void:

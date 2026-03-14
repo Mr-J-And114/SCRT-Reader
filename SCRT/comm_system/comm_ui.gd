@@ -206,7 +206,7 @@ func _build_ui() -> void:
 
 	# 继续提示
 	_continue_label = Label.new()
-	_continue_label.text = "▶ CONTINUE"
+	_continue_label.text = ">> CONTINUE"
 	_continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_continue_label.add_theme_font_size_override("font_size", 10)
 	if _T:
