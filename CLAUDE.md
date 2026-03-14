@@ -47,6 +47,10 @@ tune radio signals, and decode ciphers.
   Built-in categories: display, audio, effect, terminal, comm.
 - **Call modes**: `CallHandler` manages SILENT/FORCED/ANSWERABLE incoming calls.
   Set `"call_mode"` in dialogue JSON or use trigger format `comm:id:forced`.
+- **Display modes**: `"card"` (small portrait cards), `"meeting"` (galgame-style large
+  sprites), `"presentation"` (meeting + slide overlay with fit/align/area config).
+- **Comm commands**: `comm`, `comm answer/reject`, `comm video`, `comm phonebook`,
+  `comm history/log`.
 - **Input priority**: boot_sequence > call_handler(ringing) > comm > viewers > password > login > normal.
 - **CommDialoguePlayer**: `stop_dialogue(silent=true)` for transitions;
   `silent=false` for natural completion. Voice calls delay 1.0s before
