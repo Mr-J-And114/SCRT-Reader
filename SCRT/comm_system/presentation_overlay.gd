@@ -32,7 +32,7 @@ func show_slide(config: Dictionary) -> void:
 		return
 
 	_ensure_slide_rect()
-	var texture: ImageTexture = _load_slide_texture(image_path)
+	var texture: Texture2D = _load_slide_texture(image_path)
 	if texture == null:
 		push_warning("[PresentationOverlay] 无法加载幻灯片: %s" % image_path)
 		return
@@ -109,19 +109,17 @@ func _update_slide_layout(pos_arr: Array, size_arr: Array) -> void:
 	_slide_rect.position = Vector2(screen_w * norm_x, screen_h * norm_y)
 	_slide_rect.size = Vector2(screen_w * norm_w, screen_h * norm_h)
 
-func _load_slide_texture(path: String) -> ImageTexture:
-	# 尝试从虚拟文件系统加载
-	if _main and _main.fs:
-		var content: PackedByteArray = _main.fs.read_file_bytes(path)
-		if content.size() > 0:
-			return _bytes_to_texture(content, path)
-	# 尝试从 res:// 加载
-	if ResourceLoader.exists(path):
-		var res = ResourceLoader.load(path)
-		if res is ImageTexture:
-			return res as ImageTexture
+func _load_slide_texture(path: String) -> Texture2D:
+	# 尝试从 res:// 加载（编辑器 import 后的资源）
+	if path.begins_with("res://") and ResourceLoader.exists(path):
+		var res: Resource = ResourceLoader.load(path)
 		if res is Texture2D:
 			return res as Texture2D
+	# 尝试从虚拟文件系统加载（故事包内的图片）
+	if _main and _main.fs:
+		var content: PackedByteArray = _main.fs.get_binary_data(path)
+		if content.size() > 0:
+			return _bytes_to_texture(content, path)
 	return null
 
 func _bytes_to_texture(data: PackedByteArray, path: String) -> ImageTexture:
