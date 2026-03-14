@@ -325,10 +325,6 @@ func open_with_file(file_path: String, file_name: String, stream: AudioStream) -
 	var title: String = "OSCILLOSCOPE | " + file_name + " | Q/Esc 退出"
 	main.path_label.text = title
 
-	# ★ 隐藏 COMM 按钮（避免遮挡）
-	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
-		main.comm_mgr._ui._toggle_btn.visible = false
-
 	# 尝试加载同名 .txt 说明文件
 	audio_description = ""
 	var desc_path: String = file_path.get_basename() + ".txt"
@@ -394,10 +390,6 @@ func close() -> void:
 	main.input_field.visible = _cached_input_visible
 	main.prompt_label.visible = _cached_prompt_visible
 	main._update_status_bar()
-
-	# ★ 恢复 COMM 按钮
-	if main.comm_mgr and main.comm_mgr._ui and main.comm_mgr._ui._toggle_btn:
-		main.comm_mgr._ui._toggle_btn.visible = true
 
 	main.input_field.grab_focus()
 

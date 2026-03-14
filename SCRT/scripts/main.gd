@@ -537,14 +537,11 @@ func _enter_desktop_after_login(message: String) -> void:
 	# ★ 新用户教程触发
 	if comm_mgr:
 		comm_mgr.try_trigger_tutorial()
-	# ★ 确保 COMM UI 已构建（按钮始终可见）
+	# ★ 确保 COMM UI 已构建
 	if comm_mgr and comm_mgr._ui:
 		comm_mgr._ui._build_ui()
 		if comm_mgr._ui._root:
 			comm_mgr._ui._root.visible = true
-		if comm_mgr._ui._toggle_btn:
-			comm_mgr._ui._toggle_btn.visible = true
-			comm_mgr._ui._sync_btn_to_bar()
 	# ★ 登录后加载主线存档并触发每日剧情对话
 	if daily_dialogue_mgr:
 		daily_dialogue_mgr.load_main_storyline()  # 先加载主线剧情配置
