@@ -7,54 +7,86 @@
 		"version": "0.2.0"
 	},
 	"daily_dialogues": {
-		"_comment": "每日对话触发配置。day 编号对应 env_monitor.current_day。",
+		"_comment": "每日对话触发配置。day 编号对应 env_monitor.current_day。on_start_actions 用于触发器动作（如 radio 更新）。",
 		"1": {
-			"on_start": ["day1_briefing"],
-			"on_scan_complete": ["day1_scan_done"],
+			"on_start": [
+				"day1_briefing"
+			],
+			"on_scan_complete": [
+				"day1_scan_done"
+			],
 			"on_anomaly": [],
+			"on_start_actions": [
+				"radio_update:weather_broadcast:content_text=VVV DE OB7K WX REPORT DAY 1 SAKHALIN ISLAND TEMP MINUS 12C WIND NW 15KT VISIBILITY 8KM OVERCAST BAROMETER 1013HPA FORECAST STABLE NO PRECIPITATION EXPECTED AR",
+				"radio_reload"
+			],
 			"mail_deliveries": [
 				{
 					"id": "welcome_mail",
 					"title": "欢迎抵达 OB-7K",
 					"from": "AVA <ava@site-ob7k.scp>",
 					"persistent": true,
-					"body": "From: AVA <ava@site-ob7k.scp>\nTo: {username}@site-ob7k.scp\nSubject: 欢迎抵达 OB-7K\n---\n操作员，\n\n欢迎来到 OB-7K 观测站。作为新到任的环境监测操作员，以下是你的日常工作流程：\n\n1. 每天登录后执行 env scan 完成自动检测\n2. 查看 env view 仪表盘确认数据\n3. 完成所有任务后关闭终端，系统将自动推进至下一天\n\n如需帮助，输入 help 查看可用命令。\n\n祝工作顺利。\n\n—— AVA, 联络 AI"
+					"body": "From: AVA <ava@site-ob7k.scp>\nTo: {username}@site-ob7k.scp\nSubject: 欢迎抵达 OB-7K\n---\n操作员，\n\n欢迎来到 OB-7K 观测站。作为新到任的环境监测操作员，以下是你的日常工作流程：\n\n1. 每天登录后执行 env scan 完成自动检测\n2. 查看 env view 仪表盘确认数据\n3. 完成所有任务后关闭终端，系统将自动推进至下一天\n\n桌面模式下输入 [color=#ffaa00]radio[/color] 可启动无线电接收器，监听周边信号。\n如需帮助，输入 help 查看可用命令。\n\n祝工作顺利。\n\n—— AVA, 联络 AI"
 				}
 			]
 		},
 		"2": {
-			"on_start": ["day2_morning"],
+			"on_start": [
+				"day2_morning"
+			],
 			"on_scan_complete": [],
-			"on_anomaly": ["day2_anomaly_reaction"],
+			"on_anomaly": [
+				"day2_anomaly_reaction"
+			],
+			"on_start_actions": [
+				"radio_update:weather_broadcast:content_text=VVV DE OB7K WX REPORT DAY 2 SAKHALIN ISLAND TEMP MINUS 15C WIND NW 25KT GUSTING 35KT VISIBILITY 3KM HEAVY SNOW BAROMETER 998HPA STORM WARNING IN EFFECT SECURE ALL OUTDOOR EQUIPMENT AR",
+				"radio_visible:hq_directive:true",
+				"radio_reload"
+			],
 			"mail_deliveries": [
 				{
 					"id": "day2_report",
 					"title": "昨日数据汇总",
 					"from": "HQ-CONTROL <hq@foundation.scp>",
 					"persistent": true,
-					"body": "From: HQ-CONTROL <hq@foundation.scp>\nTo: OB-7K Operator\nSubject: 昨日数据汇总\n---\n操作员，\n\n总部已收到你第一天的环境监测报告。数据质量合格。\n\n请注意：昨晚自动气象站记录到微弱信号波动。\n可能是风暴前兆，也可能是其他因素。\n\n请保持警惕，继续执行日常监测。\n\n—— 总部管控中心"
+					"body": "From: HQ-CONTROL <hq@foundation.scp>\nTo: OB-7K Operator\nSubject: 昨日数据汇总\n---\n操作员，\n\n总部已收到你第一天的环境监测报告。数据质量合格。\n\n请注意：昨晚自动气象站记录到微弱信号波动。\n可能是风暴前兆，也可能是其他因素。\n\n另外，总部已开放 HF 14.300 MHz 通讯频道。\n你可以在桌面模式下使用 radio 命令尝试接收。\n\n请保持警惕，继续执行日常监测。\n\n—— 总部管控中心"
 				}
 			]
 		},
 		"3": {
-			"on_start": ["day3_morning"],
+			"on_start": [
+				"day3_morning"
+			],
 			"on_scan_complete": [],
 			"on_anomaly": [],
+			"on_start_actions": [
+				"radio_update:weather_broadcast:content_text=VVV DE OB7K WX REPORT DAY 3 SAKHALIN ISLAND TEMP MINUS 18C WIND N 40KT VISIBILITY 1KM BLIZZARD CONDITIONS BAROMETER 992HPA EXTREME WEATHER WARNING ALL PERSONNEL REMAIN INDOORS AR",
+				"radio_visible:numbers_station:true",
+				"radio_visible:emergency_beacon:true",
+				"radio_update:hq_directive:content_text=CQ CQ CQ DE HQ CONTROL PRIORITY MESSAGE ALL STATIONS ANOMALOUS READINGS CONFIRMED LEVEL 2 ALERT ACTIVATED INCREASE MONITORING FREQUENCY REPORT ANY UNUSUAL OBSERVATIONS IMMEDIATELY AR",
+				"radio_reload"
+			],
 			"mail_deliveries": [
 				{
 					"id": "day3_notice",
 					"title": "[机密] 异常评估报告",
 					"from": "Site Director <director@site-██.scp>",
 					"persistent": true,
-					"body": "From: Site Director\nTo: OB-7K Operator\nSubject: [机密] 异常评估报告\nPriority: HIGH\n---\n操作员，\n\n经过 48 小时的数据分析，总部对你提交的异常报告做出了初步评估：\n\n  分类：待定（暂标为 Euclid 级）\n  风险等级：中\n  建议措施：持续监测，保持每日报告\n\n此信息为 Level-2 机密。请勿在非加密信道讨论。\n\n—— Site Director"
+					"body": "From: Site Director\nTo: OB-7K Operator\nSubject: [机密] 异常评估报告\nPriority: HIGH\n---\n操作员，\n\n经过 48 小时的数据分析，总部对你提交的异常报告做出了初步评估：\n\n  分类：待定（暂标为 Euclid 级）\n  风险等级：中\n  建议措施：持续监测，保持每日报告\n\n此外，我们在 HF 5.473 MHz 频率上截获了来源不明的数字信号。\n同时国际遇险频率 2.182 MHz 出现了 SOS 信号。\n请使用 radio 命令调查这些信号来源。\n\n此信息为 Level-2 机密。请勿在非加密信道讨论。\n\n—— Site Director"
 				}
 			]
 		},
 		"default": {
 			"_comment": "没有特定定义的天数使用此默认配置",
-			"on_start": ["daily_routine_greeting"],
+			"on_start": [
+				"daily_routine_greeting"
+			],
 			"on_scan_complete": [],
-			"on_anomaly": []
+			"on_anomaly": [],
+			"on_start_actions": [
+				"radio_update:weather_broadcast:content_text=VVV DE OB7K WX REPORT SAKHALIN ISLAND CONDITIONS UNCHANGED MONITORING CONTINUES AR",
+				"radio_reload"
+			]
 		}
 	},
 	"comm_characters": {
@@ -89,6 +121,11 @@
 				{
 					"character": "ava",
 					"text": "流程很简单：输入 [color=#ffaa00]env scan[/color] 执行自动检测。也可以用 [color=#ffaa00]mail[/color] 查看邮件。",
+					"speed": 28.0
+				},
+				{
+					"character": "ava",
+					"text": "观测站配备了无线电接收器。回到桌面后输入 [color=#ffaa00]radio[/color] 即可启动。目前气象广播频道已就绪。",
 					"speed": 28.0
 				},
 				{
@@ -129,6 +166,11 @@
 					"character": "ava",
 					"text": "昨晚自动气象站记录到一些微弱的信号波动。请执行 [color=#ffaa00]env scan[/color] 确认状态。",
 					"speed": 28.0
+				},
+				{
+					"character": "ava",
+					"text": "对了，总部在 HF 14.300 MHz 开放了通讯频道。你可以用 [color=#ffaa00]radio[/color] 尝试接收。",
+					"speed": 28.0
 				}
 			]
 		},
@@ -164,6 +206,11 @@
 					"character": "ava",
 					"text": "总部对之前的异常做出了初步分类。请继续日常检测。",
 					"speed": 30.0
+				},
+				{
+					"character": "ava",
+					"text": "还有一件事——我们在无线电频谱上发现了异常信号。HF 5.473 MHz 有不明数字电台，2.182 MHz 遇险频率出现了 SOS。请用 [color=#ffaa00]radio[/color] 调查。",
+					"speed": 26.0
 				}
 			]
 		},
@@ -186,10 +233,21 @@
 		"defaults": {
 			"unlocked": false,
 			"online": true,
-			"viewport_size": [0.8, 0.6],
-			"viewport_pos": [0.5, 0.5],
+			"viewport_size": [
+				0.8,
+				0.6
+			],
+			"viewport_pos": [
+				0.5,
+				0.5
+			],
 			"pan_speed": 0.015,
-			"pan_bounds": [0.0, 0.0, 1.0, 1.0],
+			"pan_bounds": [
+				0.0,
+				0.0,
+				1.0,
+				1.0
+			],
 			"noise_intensity": 0.15,
 			"scanline_intensity": 0.3,
 			"vignette": 0.4,
@@ -214,11 +272,20 @@
 				"use_parallax": true,
 				"parallax_scale": 0.03,
 				"parallax_layers": 8,
-				"viewport_size": [0.9, 0.7],
-				"viewport_pos": [0.5, 0.5],
+				"viewport_size": [
+					0.9,
+					0.7
+				],
+				"viewport_pos": [
+					0.5,
+					0.5
+				],
 				"pan_speed": 0.02,
 				"rotation_enabled": true,
-				"rotation_center": [0.5, 0.5],
+				"rotation_center": [
+					0.5,
+					0.5
+				],
 				"rotation_radius": 0.25,
 				"rotation_angle_range": 60.0,
 				"light_mode": "none",
@@ -231,7 +298,10 @@
 						"probability": 0.03,
 						"duration": 2.0,
 						"min_interval": 10.0,
-						"effects": ["glitch:0.4", "noise_burst:0.3"],
+						"effects": [
+							"glitch:0.4",
+							"noise_burst:0.3"
+						],
 						"action": "trigger:event_anomaly_detected"
 					}
 				]

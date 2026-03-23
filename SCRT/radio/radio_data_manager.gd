@@ -89,7 +89,12 @@ func _load_signal_from_file(path: String) -> RadioConfigParser.RadioSignal:
 	sig.id = str(data.get("id", path.get_file().get_basename()))
 	RadioConfigParser._apply_manifest_entry(sig, data)
 
-	# 从本地文件系统加载资源内容
+	# 支持 JSON 内直接嵌入 content_text（摩斯文本内容）
+	var inline_text: String = str(data.get("content_text", ""))
+	if not inline_text.is_empty():
+		sig.content_text = inline_text
+
+	# 从本地文件系统加载资源内容（content_file 优先于 content_text）
 	if not sig.content_file.is_empty():
 		_load_content_from_local(sig)
 

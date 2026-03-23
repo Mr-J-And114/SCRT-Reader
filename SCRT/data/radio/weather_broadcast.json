@@ -1,0 +1,20 @@
+{
+	"id": "weather_broadcast",
+	"type": "morse",
+	"frequency": 8.495,
+	"band": "HF",
+	"azimuth": 270,
+	"elevation": 10,
+	"tolerance_freq": 0.08,
+	"tolerance_dir": 40,
+	"content_file": "",
+	"content_text": "VVV DE OB7K WX REPORT DAY 1 SAKHALIN ISLAND TEMP MINUS 12C WIND NW 15KT VISIBILITY 8KM OVERCAST BAROMETER 1013HPA FORECAST STABLE NO PRECIPITATION EXPECTED AR",
+	"label": "OB-7K 气象广播",
+	"hint": "基金会气象站日常天气通报",
+	"speed_wpm": 18,
+	"loop": true,
+	"beacon_id": "VVV DE OB7K",
+	"visible": true,
+	"hidden": false,
+	"proximity_range": 0.15
+}

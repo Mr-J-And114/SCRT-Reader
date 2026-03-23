@@ -1,0 +1,23 @@
+{
+	"id": "numbers_station",
+	"type": "morse",
+	"frequency": 5.473,
+	"band": "HF",
+	"azimuth": 135,
+	"elevation": 25,
+	"tolerance_freq": 0.03,
+	"tolerance_dir": 15,
+	"content_text": "83729 41056 29384 70162 58493 01827 63940 52718 39461 80275",
+	"label": "未知数字电台",
+	"hint": "来源不明的加密数字信号",
+	"speed_wpm": 12,
+	"loop": true,
+	"character_set": "numbers",
+	"group_size": 5,
+	"group_pause_ms": 2000.0,
+	"repeat_count": 3,
+	"visible": false,
+	"hidden": true,
+	"proximity_range": 0.1,
+	"discovered_flag": "numbers_station_found"
+}

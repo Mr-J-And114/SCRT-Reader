@@ -1,0 +1,19 @@
+{
+	"id": "emergency_beacon",
+	"type": "morse",
+	"frequency": 2.182,
+	"band": "HF",
+	"azimuth": 45,
+	"elevation": 5,
+	"tolerance_freq": 0.05,
+	"tolerance_dir": 30,
+	"content_text": "SOS SOS SOS DE UNIDENTIFIED VESSEL POSITION UNKNOWN REQUESTING IMMEDIATE ASSISTANCE SOS",
+	"label": "紧急求救信标",
+	"hint": "国际遇险频率上的 SOS 信号",
+	"speed_wpm": 20,
+	"loop": true,
+	"beacon_id": "SOS DE ???",
+	"visible": false,
+	"hidden": false,
+	"proximity_range": 0.2
+}
