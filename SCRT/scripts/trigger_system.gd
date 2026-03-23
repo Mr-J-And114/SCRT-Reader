@@ -299,6 +299,10 @@ func _exec_single(raw: String, ctx: Dictionary) -> void:
 		"camera_offline": _act_camera_offline(param)
 		"camera_anomaly": _act_camera_anomaly(param)
 		"camera_signal":  _act_camera_signal(param)
+		"radio_import":   _act_radio_import(param)
+		"radio_visible":  _act_radio_visible(param)
+		"radio_update":   _act_radio_update(param)
+		"radio_reload":   _act_radio_reload()
 		_:
 			push_warning("[TriggerSystem] 未知动作: " + raw)
 
@@ -551,6 +555,67 @@ func _act_camera_signal(param: String) -> void:
 		var quality: float = float(parts[1].strip_edges())
 		main.camera_mgr.set_signal_quality(cam_id, quality)
 
+
+# ── 无线电触发器动作 ──
+
+## 从当前 vdisc 导入信号到 data/radio/
+## 格式: radio_import:signal_id 或 radio_import:*（全部）
+func _act_radio_import(param: String) -> void:
+	if main.radio_receiver == null or main.radio_receiver.radio_data_mgr == null:
+		push_warning("[TriggerSystem] 无线电模块未初始化，无法导入")
+		return
+	var rdm: RadioDataManager = main.radio_receiver.radio_data_mgr
+	var signal_ids: Array = []
+	var import_id: String = param.strip_edges()
+	if import_id != "*" and not import_id.is_empty():
+		signal_ids = [import_id]
+	var count: int = rdm.import_from_vdisc(main.story_manifest, fs, signal_ids)
+	print("[TriggerSystem] radio_import: 导入了 %d 个信号" % count)
+
+## 设置信号可见性
+## 格式: radio_visible:signal_id:true/false
+func _act_radio_visible(param: String) -> void:
+	if main.radio_receiver == null or main.radio_receiver.radio_data_mgr == null:
+		push_warning("[TriggerSystem] 无线电模块未初始化")
+		return
+	var parts: PackedStringArray = param.split(":")
+	if parts.size() < 2:
+		push_warning("[TriggerSystem] radio_visible 格式错误: " + param)
+		return
+	var signal_id: String = parts[0].strip_edges()
+	var visible: bool = parts[1].strip_edges().to_lower() == "true"
+	main.radio_receiver.radio_data_mgr.set_signal_visible(signal_id, visible)
+	print("[TriggerSystem] radio_visible: %s = %s" % [signal_id, str(visible)])
+
+## 修改信号字段
+## 格式: radio_update:signal_id:field=value
+func _act_radio_update(param: String) -> void:
+	if main.radio_receiver == null or main.radio_receiver.radio_data_mgr == null:
+		push_warning("[TriggerSystem] 无线电模块未初始化")
+		return
+	# 解析 signal_id:field=value
+	var first_colon: int = param.find(":")
+	if first_colon <= 0:
+		push_warning("[TriggerSystem] radio_update 格式错误: " + param)
+		return
+	var signal_id: String = param.substr(0, first_colon).strip_edges()
+	var field_value: String = param.substr(first_colon + 1).strip_edges()
+	var eq_pos: int = field_value.find("=")
+	if eq_pos <= 0:
+		push_warning("[TriggerSystem] radio_update 缺少 field=value: " + param)
+		return
+	var field: String = field_value.substr(0, eq_pos).strip_edges()
+	var value: String = field_value.substr(eq_pos + 1).strip_edges()
+	main.radio_receiver.radio_data_mgr.update_signal_field(signal_id, field, value)
+	print("[TriggerSystem] radio_update: %s.%s = %s" % [signal_id, field, value])
+
+## 热重载无线电信号
+func _act_radio_reload() -> void:
+	if main.radio_receiver == null:
+		push_warning("[TriggerSystem] 无线电模块未初始化")
+		return
+	main.radio_receiver.reload_signals()
+	print("[TriggerSystem] radio_reload: 信号已重载")
 
 # ============================================================
 # ── .meta.cfg 解析与缓存 ──

@@ -11,6 +11,7 @@ extends RefCounted
 var main = null
 var audio_manager = null
 var T = null
+var radio_data_mgr: RadioDataManager = null
 
 # 子模块
 var signal_mgr: RadioSignalManager = null
@@ -179,6 +180,19 @@ func load_signals_from_manifest(manifest: Dictionary, fs) -> void:
 
 func load_signals_from_fs(fs) -> void:
 	signal_mgr.load_signals(fs)
+
+## ★ 从本地 data/radio/ 加载信号
+func load_local_signals() -> void:
+	if radio_data_mgr != null:
+		signal_mgr.load_local_signals(radio_data_mgr)
+
+## ★ 热重载本地信号（触发器修改后调用）
+func reload_signals() -> void:
+	if radio_data_mgr != null:
+		signal_mgr.reload_local_signals(radio_data_mgr)
+		# 如果当前正在显示，刷新画布
+		if is_active and radio_canvas != null:
+			radio_canvas.queue_redraw()
 
 # ══════════════════════════════════════════
 #  UI 构建
