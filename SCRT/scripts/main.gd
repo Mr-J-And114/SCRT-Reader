@@ -1519,6 +1519,7 @@ func _on_video_player_closed() -> void:
 func _on_radio_closed() -> void:
 	_radio_mode = false
 	input_field.editable = true
+	_update_status_bar()
 ## 打开无线电接收器
 func open_radio_receiver() -> void:
 	if radio_receiver == null:

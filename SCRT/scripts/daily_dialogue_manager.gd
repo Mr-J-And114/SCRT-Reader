@@ -151,17 +151,18 @@ func trigger_day_start(day: int) -> void:
 
 ## ★ 执行每日触发器动作（如 radio_update、radio_visible 等）
 func _execute_day_actions(day: int) -> void:
+	if main == null or main.trigger_sys == null:
+		return
 	var day_key: String = str(day)
-	var config: Dictionary = _daily_config.get(day_key, _daily_config.get("default", {})) as Dictionary
-	var actions: Array = []
+	var config: Dictionary = {}
+	if _daily_config.has(day_key):
+		config = _daily_config[day_key]
+	elif _daily_config.has("default"):
+		config = _daily_config["default"]
 	var raw = config.get("on_start_actions", [])
-	if raw is Array:
-		actions = raw
-	if actions.is_empty():
+	if not (raw is Array) or raw.is_empty():
 		return
-	if main.trigger_sys == null:
-		return
-	for action in actions:
+	for action in raw:
 		main.trigger_sys._execute(str(action), {})
 
 func trigger_scan_complete(day: int) -> void:
