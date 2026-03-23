@@ -43,6 +43,35 @@ func load_signals_from_manifest(manifest: Dictionary, fs) -> void:
 # ══════════════════════════════════════════
 func load_signals(fs) -> void:
 	signals = RadioConfigParser.parse_signals(fs)
+
+# ══════════════════════════════════════════
+# ★ 本地信号管理（data/radio/ 文件夹）
+# ══════════════════════════════════════════
+
+## 从本地 data/radio/ 加载信号（替换当前信号列表）
+func load_local_signals(radio_data_mgr: RadioDataManager) -> void:
+	signals = radio_data_mgr.scan_signals()
+
+## 重新扫描并加载本地信号（热重载）
+func reload_local_signals(radio_data_mgr: RadioDataManager) -> void:
+	signals = radio_data_mgr.scan_signals()
+
+## 动态添加单个信号
+func add_signal(sig: RadioConfigParser.RadioSignal) -> void:
+	# 避免重复添加
+	for existing in signals:
+		var s: RadioConfigParser.RadioSignal = existing as RadioConfigParser.RadioSignal
+		if s.id == sig.id:
+			return
+	signals.append(sig)
+
+## 动态移除信号
+func remove_signal(signal_id: String) -> void:
+	for i in range(signals.size() - 1, -1, -1):
+		var s: RadioConfigParser.RadioSignal = signals[i] as RadioConfigParser.RadioSignal
+		if s.id == signal_id:
+			signals.remove_at(i)
+			return
 func has_signals() -> bool:
 	return not signals.is_empty()
 func get_signal_count() -> int:

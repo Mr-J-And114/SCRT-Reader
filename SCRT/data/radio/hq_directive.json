@@ -1,0 +1,19 @@
+{
+	"id": "hq_directive",
+	"type": "morse",
+	"frequency": 14.300,
+	"band": "HF",
+	"azimuth": 180,
+	"elevation": 20,
+	"tolerance_freq": 0.05,
+	"tolerance_dir": 25,
+	"content_text": "CQ CQ CQ DE HQ CONTROL ALL STATIONS STANDBY FOR SCHEDULED TRANSMISSION NOTHING TO REPORT MAINTAIN NORMAL OPERATIONS AR",
+	"label": "总部定时通报",
+	"hint": "基金会总部的例行加密通讯",
+	"speed_wpm": 15,
+	"loop": true,
+	"beacon_id": "CQ DE HQ-CTRL",
+	"visible": false,
+	"hidden": false,
+	"proximity_range": 0.12
+}

@@ -93,6 +93,7 @@ func _register_commands() -> void:
 		"deluser": _cmd_deluser,
 		"explore": _cmd_explore,
 		"install": _cmd_install,
+		"radio": _cmd_radio,
 	}
 
 	# ── 磁盘模式专用命令 ──
@@ -107,7 +108,6 @@ func _register_commands() -> void:
 		"unlock": _cmd_unlock,
 		"eject": _cmd_eject,
 		"clearsave": _cmd_clearsave,
-		"radio": _cmd_radio,
 		"explore": _cmd_explore,
 	}
 
@@ -1599,8 +1599,10 @@ func _cmd_radio(_args: Array = []) -> void:
 	if main.radio_receiver == null:
 		main.append_output("[color=" + T.error_hex + "]无线电模块未初始化。[/color]\n", false)
 		return
+	# 从本地 data/radio/ 加载信号
+	main.radio_receiver.load_local_signals()
 	if not main.radio_receiver.has_signals():
-		main.append_output("[color=" + T.muted_hex + "]当前磁盘未包含无线电信号配置。[/color]\n", false)
+		main.append_output("[color=" + T.muted_hex + "]未检测到可用无线电信号。[/color]\n", false)
 		return
 	main.append_output("[color=" + T.muted_hex + "]正在启动无线电接收器...[/color]\n", false)
 	main.open_radio_receiver()

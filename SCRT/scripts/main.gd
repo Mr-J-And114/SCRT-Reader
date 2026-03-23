@@ -151,6 +151,10 @@ func _ready() -> void:
 	# 初始化无线电接收器
 	radio_receiver = RadioReceiver.new()
 	radio_receiver.setup(self, audio_manager)
+	# 初始化本地无线电数据管理器
+	var radio_data_mgr := RadioDataManager.new()
+	radio_data_mgr.setup(self)
+	radio_receiver.radio_data_mgr = radio_data_mgr
 	#初始化密码解码器
 	decode_viewer = DecodeViewer.new()
 	decode_viewer.setup(self)

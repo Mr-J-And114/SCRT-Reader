@@ -142,10 +142,27 @@ func trigger_day_start(day: int) -> void:
 	register_dialogues_to_comm()
 	# ★ 处理当日邮件投递
 	_deliver_day_mails(day)
+	# ★ 执行当日触发器动作（radio_update 等）
+	_execute_day_actions(day)
 	var dlg_ids: Array = _get_trigger_list(day, "on_start")
 	if dlg_ids.size() > 0 and not _triggered_today.has("on_start"):
 		_triggered_today["on_start"] = true
 		_trigger_dialogues(dlg_ids)
+
+## ★ 执行每日触发器动作（如 radio_update、radio_visible 等）
+func _execute_day_actions(day: int) -> void:
+	var day_key: String = str(day)
+	var config: Dictionary = _daily_config.get(day_key, _daily_config.get("default", {})) as Dictionary
+	var actions: Array = []
+	var raw = config.get("on_start_actions", [])
+	if raw is Array:
+		actions = raw
+	if actions.is_empty():
+		return
+	if main.trigger_sys == null:
+		return
+	for action in actions:
+		main.trigger_sys._execute(str(action), {})
 
 func trigger_scan_complete(day: int) -> void:
 	## env scan 完成后调用

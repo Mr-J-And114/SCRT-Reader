@@ -61,11 +61,7 @@ func reset_all() -> void:
 	main.story_manifest = {}
 	main.current_story_index = -1
 	main.audio_manager.stop_ambient(0.5)
-	# 关闭无线电接收器
-	if main.radio_receiver != null and main.radio_receiver.is_active:
-		main.radio_receiver.close()
-	if "_radio_mode" in main:
-		main._radio_mode = false
+	# 无线电接收器不再随 vdisc 关闭（radio 已独立于 vdisc）
 	# 重置触发器系统
 	if main.trigger_sys and main.trigger_sys.has_method("reset"):
 		main.trigger_sys.reset()
@@ -414,14 +410,9 @@ func load_story(args: Array) -> void:
 				var normalized: String = fs.normalize_path(str(fd_path))
 				fs.file_descriptions[normalized] = fd_cfg[fd_path]
 	print("[DiscManager] 文件描述: " + str(fs.file_descriptions.size()) + " 个目录")
-	# ── 加载无线电信号（优先 manifest 中的 radio_signals，回退旧版 signals.cfg）──
-	if main.radio_receiver != null:
-		if main.story_manifest.has("radio_signals"):
-			main.radio_receiver.load_signals_from_manifest(main.story_manifest, fs)
-		else:
-			main.radio_receiver.load_signals_from_fs(fs)
-		if main.radio_receiver.has_signals():
-			print("[DiscManager] 无线电信号源已加载: " + str(main.radio_receiver.signal_mgr.signals.size()) + " 个")
+	# ── 无线电信号不再自动加载到 radio_receiver ──
+	# radio 现在独立于 vdisc，通过 data/radio/ 管理
+	# 故事包可通过触发器 radio_import 将信号导入到 data/radio/
 
 	# ── 尝试加载存档 ──
 	var save_result = save_mgr.load_save(story_id)
@@ -447,7 +438,7 @@ func load_story(args: Array) -> void:
 				main.current_path = saved_path
 			else:
 				main.current_path = "/"
-		# 恢复无线电信号状态
+		# 无线电信号发现状态仍从存档恢复（兼容旧存档）
 		if save_data.has("radio_data"):
 			if main.radio_receiver and main.radio_receiver.signal_mgr:
 				main.radio_receiver.signal_mgr.load_save_data(save_data["radio_data"])

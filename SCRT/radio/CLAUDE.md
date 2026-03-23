@@ -37,11 +37,50 @@ Full radio tuning interface with morse code, SSTV image reception, and audio bro
 - OGG: `AudioStreamOggVorbis.load_from_buffer(bytes)`
 - WAV: manual PCM parsing (RIFF chunk traversal)
 
+## Local Signal Management (data/radio/)
+
+Radio signals are now managed independently from vdisc via `data/radio/` folder.
+
+- Each signal defined in its own JSON file (e.g. `data/radio/weather.json`)
+- `visible` field (default `true`): set to `false` to hide a signal without deleting
+- Resources (audio/images/text) stored alongside JSON files in `data/radio/`
+- `RadioDataManager` handles scanning, reading, writing, and importing
+- Radio command is **desktop-mode only** — unavailable during vdisc sessions
+
+### Trigger Actions
+
+| Trigger | Format | Description |
+|---|---|---|
+| `radio_import` | `radio_import:signal_id` or `radio_import:*` | Import signal from current vdisc to data/radio/ |
+| `radio_visible` | `radio_visible:signal_id:true/false` | Toggle signal visibility |
+| `radio_update` | `radio_update:signal_id:field=value` | Modify signal field (e.g. content_file) |
+| `radio_reload` | `radio_reload` | Hot-reload signal list from data/radio/ |
+
+### JSON Signal Definition Example
+
+```json
+{
+  "id": "weather_broadcast",
+  "type": "audio",
+  "frequency": 162.55,
+  "band": "VHF",
+  "azimuth": 180,
+  "elevation": 10,
+  "tolerance_freq": 0.1,
+  "tolerance_dir": 30,
+  "content_file": "weather_day1.ogg",
+  "label": "Weather Broadcast",
+  "visible": true,
+  "loop": true
+}
+```
+
 ## Supporting Scripts
 
 | File | Purpose |
 |---|---|
 | radio_receiver.gd | Full radio UI + _RadioCanvas (tuning, bands, waterfall, decode) |
+| radio_data_manager.gd | Local data/radio/ folder management, import, read/write JSON |
 | radio_config_parser.gd | Parse signal definitions from config/manifest |
 | radio_signal_manager.gd | Signal database, quality calculation, discovery, bookmarks |
 | radio_audio_generator.gd | Procedural noise/tone/SSTV audio generation |
