@@ -322,8 +322,14 @@ func load_story(args: Array) -> void:
 		"id": str(story_dict.get("id", "")),
 	})
 	# ★ 播放自定义载入画面（或内置默认）
+	# 优先级：manifest.loading_screen > vdisc 内 loading_screen.json > 内置默认
+	var ls_config: Dictionary = {}
 	if main.story_manifest.has("loading_screen") and main.story_manifest["loading_screen"] is Dictionary:
-		loading_screen.play(main.story_manifest["loading_screen"] as Dictionary)
+		ls_config = main.story_manifest["loading_screen"] as Dictionary
+	else:
+		ls_config = _try_load_loading_screen_json()
+	if not ls_config.is_empty():
+		loading_screen.play(ls_config)
 	else:
 		loading_screen.play_default()
 	# ★ 等待载入画面完成
@@ -522,6 +528,25 @@ func load_story(args: Array) -> void:
 
 	# ★ 外部模组包：加载完故事后尝试编译并启动模组脚本
 	_try_load_external_mod(path, main.story_manifest)
+
+## 尝试从 vdisc 虚拟文件系统加载 loading_screen.json
+func _try_load_loading_screen_json() -> Dictionary:
+	if fs == null or fs.file_system.is_empty():
+		return {}
+	var node: FileSystem.FSNode = fs.get_node_at_path("/loading_screen.json")
+	if node == null or node.type != "file":
+		return {}
+	var content: String = node.content
+	if content.is_empty():
+		return {}
+	var json := JSON.new()
+	if json.parse(content) != OK:
+		push_warning("[DiscManager] loading_screen.json 解析失败: " + json.get_error_message())
+		return {}
+	if json.data is Dictionary:
+		print("[DiscManager] 从 vdisc 加载自定义载入画面: /loading_screen.json")
+		return json.data as Dictionary
+	return {}
 
 # ══════════════════════════════════════════
 #  弹出磁盘
