@@ -1,0 +1,43 @@
+{
+	"skippable": true,
+	"total_duration": 10.0,
+	"keyframes": [
+		{ "time": 0.0, "action": "clear" },
+		{ "time": 0.0, "action": "screen_flash", "params": { "duration": 0.1 } },
+		{ "time": 0.2, "action": "glitch", "params": { "intensity": 0.5, "duration": 0.4 } },
+		{ "time": 0.3, "action": "text_center", "params": {
+			"content": "══════════════════════════════════════", "color": "warning" } },
+		{ "time": 0.5, "action": "text_center", "params": {
+			"content": "██  CLASSIFIED MEDIA DETECTED  ██", "color": "error" } },
+		{ "time": 0.7, "action": "text_center", "params": {
+			"content": "══════════════════════════════════════", "color": "warning" } },
+		{ "time": 1.0, "action": "beep" },
+		{ "time": 1.2, "action": "text", "params": {
+			"content": "" } },
+		{ "time": 1.5, "action": "text", "params": {
+			"content": "SECURITY CLEARANCE ... VERIFIED", "color": "success" } },
+		{ "time": 2.0, "action": "text", "params": {
+			"content": "OPERATOR ID ......... {username}", "color": "primary" } },
+		{ "time": 2.5, "action": "text", "params": {
+			"content": "DISC SERIAL ......... {disc_id}", "color": "primary" } },
+		{ "time": 3.0, "action": "glitch", "params": { "intensity": 0.2, "duration": 0.2 } },
+		{ "time": 3.0, "action": "text", "params": {
+			"content": "" } },
+		{ "time": 3.2, "action": "separator", "params": { "char": "─", "width": 50, "color": "muted" } },
+		{ "time": 3.5, "action": "disc_title" },
+		{ "time": 4.0, "action": "disc_info" },
+		{ "time": 4.5, "action": "separator", "params": { "char": "─", "width": 50, "color": "muted" } },
+		{ "time": 4.8, "action": "text", "params": {
+			"content": "" } },
+		{ "time": 5.0, "action": "beep" },
+		{ "time": 5.0, "action": "text", "params": {
+			"content": "DECRYPTING FILESYSTEM ...", "color": "warning" } },
+		{ "time": 5.5, "action": "progress_bar", "params": { "duration": 3.5, "label": "DECRYPT" } },
+		{ "time": 9.0, "action": "screen_flash", "params": { "duration": 0.08 } },
+		{ "time": 9.0, "action": "beep" },
+		{ "time": 9.2, "action": "text", "params": {
+			"content": "DECRYPTION COMPLETE. DISC MOUNTED.", "color": "success" } },
+		{ "time": 9.5, "action": "glitch", "params": { "intensity": 0.15, "duration": 0.3 } },
+		{ "time": 10.0, "action": "complete" }
+	]
+}

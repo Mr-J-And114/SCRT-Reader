@@ -86,6 +86,7 @@ var _skippable: bool = true
 var _audio_player: AudioStreamPlayer = null
 var _audio_started: bool = false
 var _audio_base_volume_db: float = -6.0
+var _audio_path: String = ""  # 顶层 audio 字段路径
 
 # ── 进度条 ──
 var _progress_bar_active: bool = false
@@ -146,6 +147,7 @@ func play(config: Dictionary) -> void:
 	# 解析配置
 	_skippable = bool(config.get("skippable", true))
 	_total_duration = float(config.get("total_duration", 8.0))
+	_audio_path = str(config.get("audio", ""))
 	var audio_volume: float = float(config.get("audio_volume", 0.6))
 	_audio_base_volume_db = linear_to_db(maxf(audio_volume, 0.01))
 
@@ -392,8 +394,10 @@ func _action_sound(path: String) -> void:
 func _action_audio_play(kf: Dictionary) -> void:
 	if _audio_started or _audio_player == null:
 		return
-	# 从顶层配置或 kf params 获取音频路径
+	# 优先从 kf params 获取路径，回退到顶层 audio 字段
 	var audio_path: String = str(kf.get("params", {}).get("path", ""))
+	if audio_path.is_empty():
+		audio_path = _audio_path
 	if audio_path.is_empty():
 		return
 	var stream: AudioStream = null
