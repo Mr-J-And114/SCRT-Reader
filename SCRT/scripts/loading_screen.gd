@@ -6,35 +6,32 @@
 #
 # ── 配置来源（优先级从高到低）──
 #   1. vdisc 根目录的 loading_screen.json（独立配置文件）
-#   2. manifest.json 的 "loading_screen" 字段（内联配置）
-#   3. 内置默认载入画面
+#   2. 内置默认载入画面
 #
-# ── manifest.json 配置示例 ──
+# ── loading_screen.json 配置示例 ──
 # {
-#   "loading_screen": {
-#     "skippable": true,
-#     "audio": "/audio/loading_theme.ogg",
-#     "audio_volume": 0.6,
-#     "total_duration": 8.0,
-#     "keyframes": [
-#       { "time": 0.0, "action": "clear" },
-#       { "time": 0.0, "action": "text", "params": {
-#           "content": "INSERTING VIRTUAL DISC...", "color": "muted" } },
-#       { "time": 0.5, "action": "glitch", "params": {
-#           "intensity": 0.2, "duration": 0.3 } },
-#       { "time": 1.0, "action": "disc_title" },
-#       { "time": 1.5, "action": "disc_info" },
-#       { "time": 2.0, "action": "separator" },
-#       { "time": 2.5, "action": "text", "params": {
-#           "content": "LOADING FILE SYSTEM...", "color": "muted" } },
-#       { "time": 3.0, "action": "progress_bar", "params": {
-#           "duration": 4.0 } },
-#       { "time": 7.0, "action": "text", "params": {
-#           "content": "READY.", "color": "success" } },
-#       { "time": 7.5, "action": "clear" },
-#       { "time": 8.0, "action": "complete" }
-#     ]
-#   }
+#   "skippable": true,
+#   "audio": "/audio/loading_theme.ogg",
+#   "audio_volume": 0.6,
+#   "total_duration": 8.0,
+#   "keyframes": [
+#     { "time": 0.0, "action": "clear" },
+#     { "time": 0.0, "action": "text", "params": {
+#         "content": "INSERTING VIRTUAL DISC...", "color": "muted" } },
+#     { "time": 0.5, "action": "glitch", "params": {
+#         "intensity": 0.2, "duration": 0.3 } },
+#     { "time": 1.0, "action": "disc_title" },
+#     { "time": 1.5, "action": "disc_info" },
+#     { "time": 2.0, "action": "separator" },
+#     { "time": 2.5, "action": "text", "params": {
+#         "content": "LOADING FILE SYSTEM...", "color": "muted" } },
+#     { "time": 3.0, "action": "progress_bar", "params": {
+#         "duration": 4.0 } },
+#     { "time": 7.0, "action": "text", "params": {
+#         "content": "READY.", "color": "success" } },
+#     { "time": 7.5, "action": "clear" },
+#     { "time": 8.0, "action": "complete" }
+#   ]
 # }
 #
 # ── 支持的关键帧动作 ──
@@ -89,12 +86,17 @@ var _audio_started: bool = false
 var _audio_base_volume_db: float = -6.0
 var _audio_path: String = ""  # 顶层 audio 字段路径
 
+# ── BBCode 缓冲区（用于可靠的进度条原地更新） ──
+# append_text() 不会同步到 RichTextLabel.text 属性，
+# 因此自行追踪所有输出的 BBCode，进度条更新时基于此缓冲区重绘。
+var _bbcode_buffer: String = ""
+
 # ── 进度条 ──
 var _progress_bar_active: bool = false
 var _progress_bar_start: float = 0.0
 var _progress_bar_duration: float = 4.0
 var _progress_bar_last_percent: int = -1
-var _progress_bar_text_snapshot: String = ""  # 进度条开始前的 BBCode 快照（用于原地更新）
+var _progress_bar_snapshot: String = ""  # 进度条开始前的 buffer 快照
 
 # ── 磁盘信息（由 disc_manager 在播放前注入） ──
 var _disc_title: String = ""
@@ -145,7 +147,8 @@ func play(config: Dictionary) -> void:
 	_audio_started = false
 	_progress_bar_active = false
 	_progress_bar_last_percent = -1
-	_progress_bar_text_snapshot = ""
+	_progress_bar_snapshot = ""
+	_bbcode_buffer = ""
 
 	# 解析配置
 	_skippable = bool(config.get("skippable", true))
@@ -289,6 +292,14 @@ func _execute_keyframe(kf: Dictionary) -> void:
 			push_warning("[LoadingScreen] Unknown action: " + action)
 
 # ============================================================
+# 渲染：将 BBCode 缓冲区同步到 RichTextLabel
+# ============================================================
+func _render() -> void:
+	if main and main.output_text:
+		main.output_text.text = _bbcode_buffer
+		main._request_scroll()
+
+# ============================================================
 # 动作实现
 # ============================================================
 
@@ -299,18 +310,18 @@ func _action_text(content: String, color_name: String) -> void:
 	content = _replace_vars(content)
 	var color_hex: String = _resolve_color(color_name)
 	if content.is_empty():
-		main.output_text.append_text("\n")
+		_bbcode_buffer += "\n"
 	else:
-		main.output_text.append_text("[color=" + color_hex + "]" + content + "[/color]\n")
-	main._request_scroll()
+		_bbcode_buffer += "[color=" + color_hex + "]" + content + "[/color]\n"
+	_render()
 
 func _action_text_center(content: String, color_name: String) -> void:
 	if main == null or main.output_text == null:
 		return
 	content = _replace_vars(content)
 	var color_hex: String = _resolve_color(color_name)
-	main.output_text.append_text("[center][color=" + color_hex + "]" + content + "[/color][/center]\n")
-	main._request_scroll()
+	_bbcode_buffer += "[center][color=" + color_hex + "]" + content + "[/color][/center]\n"
+	_render()
 
 func _action_disc_title(color_name: String) -> void:
 	if main == null or main.output_text == null:
@@ -324,36 +335,33 @@ func _action_disc_title(color_name: String) -> void:
 		if not _disc_description.is_empty():
 			box_lines.append(_disc_description)
 		var box: String = fs.build_box(box_lines, color_hex)
-		main.output_text.append_text(box + "\n")
+		_bbcode_buffer += box + "\n"
 	else:
-		main.output_text.append_text("[color=" + color_hex + "][b]" + _disc_title + "[/b][/color]\n")
+		_bbcode_buffer += "[color=" + color_hex + "][b]" + _disc_title + "[/b][/color]\n"
 		if not _disc_description.is_empty():
-			main.output_text.append_text("[color=" + m + "]" + _disc_description + "[/color]\n")
-	main._request_scroll()
+			_bbcode_buffer += "[color=" + m + "]" + _disc_description + "[/color]\n"
+	_render()
 
 func _action_disc_info(color_name: String) -> void:
 	if main == null or main.output_text == null:
 		return
 	var c: String = _resolve_color(color_name)
 	var p: String = _resolve_color("primary")
-	var lines: Array[String] = []
 	if not _disc_author.is_empty():
-		lines.append("  [color=" + c + "]Author:[/color]  [color=" + p + "]" + _disc_author + "[/color]")
+		_bbcode_buffer += "  [color=" + c + "]Author:[/color]  [color=" + p + "]" + _disc_author + "[/color]\n"
 	if not _disc_version.is_empty():
-		lines.append("  [color=" + c + "]Version:[/color] [color=" + p + "]" + _disc_version + "[/color]")
+		_bbcode_buffer += "  [color=" + c + "]Version:[/color] [color=" + p + "]" + _disc_version + "[/color]\n"
 	if not _disc_id.is_empty():
-		lines.append("  [color=" + c + "]ID:[/color]      [color=" + p + "]" + _disc_id + "[/color]")
-	for line in lines:
-		main.output_text.append_text(line + "\n")
-	main._request_scroll()
+		_bbcode_buffer += "  [color=" + c + "]ID:[/color]      [color=" + p + "]" + _disc_id + "[/color]\n"
+	_render()
 
 func _action_separator(ch: String, width: int, color_name: String) -> void:
 	if main == null or main.output_text == null:
 		return
 	var color_hex: String = _resolve_color(color_name)
 	var line: String = ch.repeat(clampi(width, 1, 80))
-	main.output_text.append_text("[color=" + color_hex + "]" + line + "[/color]\n")
-	main._request_scroll()
+	_bbcode_buffer += "[color=" + color_hex + "]" + line + "[/color]\n"
+	_render()
 
 # ── 视觉效果 ──
 func _action_glitch(intensity: float, duration: float) -> void:
@@ -422,6 +430,7 @@ func _action_audio_play(kf: Dictionary) -> void:
 
 # ── 流程 ──
 func _action_clear() -> void:
+	_bbcode_buffer = ""
 	if main and main.output_text:
 		main.output_text.text = ""
 
@@ -430,8 +439,8 @@ func _action_start_progress_bar(duration: float, _label: String) -> void:
 	_progress_bar_start = _elapsed
 	_progress_bar_duration = duration
 	_progress_bar_last_percent = -1
-	# 保存当前输出快照，后续每帧恢复到此状态再追加新进度条
-	_progress_bar_text_snapshot = main.output_text.text if main and main.output_text else ""
+	# 保存当前 buffer 快照，后续每帧基于此快照 + 进度行重绘
+	_progress_bar_snapshot = _bbcode_buffer
 
 func _update_progress_bar() -> void:
 	if main == null or main.output_text == null:
@@ -448,10 +457,10 @@ func _update_progress_bar() -> void:
 	var bar: String = "█".repeat(filled) + "░".repeat(empty_count)
 	var p: String = _resolve_color("primary")
 	var m: String = _resolve_color("muted")
-	var line: String = "[color=" + m + "][" + bar + "] [/color][color=" + p + "]" + str(percent) + "%[/color]\n"
-	# 原地更新：恢复到进度条开始前的快照，再追加当前进度
-	main.output_text.text = _progress_bar_text_snapshot
-	main.output_text.append_text(line)
+	var bar_line: String = "[color=" + m + "][" + bar + "] [/color][color=" + p + "]" + str(percent) + "%[/color]\n"
+	# 原地更新：基于快照 + 当前进度行重绘，vdisc 信息保持可见
+	_bbcode_buffer = _progress_bar_snapshot + bar_line
+	main.output_text.text = _bbcode_buffer
 	main._request_scroll()
 	if progress >= 1.0:
 		_progress_bar_active = false
