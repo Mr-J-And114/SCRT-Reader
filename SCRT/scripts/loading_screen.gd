@@ -93,6 +93,8 @@ var _progress_bar_active: bool = false
 var _progress_bar_start: float = 0.0
 var _progress_bar_duration: float = 4.0
 var _progress_bar_last_percent: int = -1
+var _progress_bar_line_added: bool = false          # 是否已输出过进度条行
+var _progress_bar_expected_para_count: int = 0      # 上次写入后的段落数（用于安全替换）
 
 # ── 磁盘信息（由 disc_manager 在播放前注入） ──
 var _disc_title: String = ""
@@ -143,6 +145,8 @@ func play(config: Dictionary) -> void:
 	_audio_started = false
 	_progress_bar_active = false
 	_progress_bar_last_percent = -1
+	_progress_bar_line_added = false
+	_progress_bar_expected_para_count = 0
 
 	# 解析配置
 	_skippable = bool(config.get("skippable", true))
@@ -186,6 +190,10 @@ func process(delta: float) -> void:
 		return
 	_elapsed += delta
 
+	# 更新进度条（在关键帧之前，确保不会误删关键帧输出的内容）
+	if _progress_bar_active:
+		_update_progress_bar()
+
 	# 执行到时间的关键帧
 	while _next_kf_index < _keyframes.size():
 		var kf: Dictionary = _keyframes[_next_kf_index]
@@ -195,10 +203,6 @@ func process(delta: float) -> void:
 			_next_kf_index += 1
 		else:
 			break
-
-	# 更新进度条
-	if _progress_bar_active:
-		_update_progress_bar()
 
 	# 超时强制完成
 	if _elapsed >= _total_duration + 1.0 and not _completed:
@@ -427,6 +431,8 @@ func _action_start_progress_bar(duration: float, _label: String) -> void:
 	_progress_bar_start = _elapsed
 	_progress_bar_duration = duration
 	_progress_bar_last_percent = -1
+	_progress_bar_line_added = false
+	_progress_bar_expected_para_count = 0
 
 func _update_progress_bar() -> void:
 	if main == null or main.output_text == null:
@@ -443,9 +449,18 @@ func _update_progress_bar() -> void:
 	var bar: String = "█".repeat(filled) + "░".repeat(empty_count)
 	var p: String = _resolve_color("primary")
 	var m: String = _resolve_color("muted")
-	if percent % 5 == 0 or percent == 100:
-		main.output_text.append_text("[color=" + m + "][" + bar + "] [/color][color=" + p + "]" + str(percent) + "%[/color]\n")
-		main._request_scroll()
+	var line: String = "[color=" + m + "][" + bar + "] [/color][color=" + p + "]" + str(percent) + "%[/color]\n"
+	# 原地更新：仅当上次写入后没有其他内容追加时，才安全替换上一行
+	if _progress_bar_line_added:
+		var current_para: int = main.output_text.get_paragraph_count()
+		if current_para == _progress_bar_expected_para_count:
+			# 没有新段落插入，可以安全替换
+			main.output_text.remove_paragraph(current_para - 1)
+		# 否则有其他内容被追加，直接追加新行（不删除旧行）
+	main.output_text.append_text(line)
+	_progress_bar_line_added = true
+	_progress_bar_expected_para_count = main.output_text.get_paragraph_count()
+	main._request_scroll()
 	if progress >= 1.0:
 		_progress_bar_active = false
 
