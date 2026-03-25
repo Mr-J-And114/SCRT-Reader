@@ -308,6 +308,8 @@ func load_story(args: Array) -> void:
 	if not story_loader.load_story(path):
 		main.append_output("[color=" + T.error_hex + "]磁盘加载失败: " + story_loader.error_message + "[/color]\n", false)
 		return
+	# ★ 在设置 FS 前，从 story_loader 直接提取 loading_screen.json
+	var ls_config: Dictionary = _extract_loading_screen(story_loader.file_system)
 	# 设置文件系统（loading_screen 的 sound 动作需要访问虚拟FS）
 	fs.file_system = story_loader.file_system
 	main.story_manifest = story_loader.manifest
@@ -322,17 +324,9 @@ func load_story(args: Array) -> void:
 		"id": str(story_dict.get("id", "")),
 	})
 	# ★ 播放自定义载入画面（或内置默认）
-	# 优先级：vdisc 内 loading_screen.json > manifest.loading_screen > 内置默认
-	var ls_config: Dictionary = _try_load_loading_screen_json()
+	# （manifest.json 中的 "loading_screen" 字段已弃用，静默忽略）
 	if not ls_config.is_empty():
 		print("[DiscManager] 载入画面来源: vdisc /loading_screen.json")
-	elif main.story_manifest.has("loading_screen") and main.story_manifest["loading_screen"] is Dictionary:
-		ls_config = main.story_manifest["loading_screen"] as Dictionary
-		if ls_config.has("keyframes"):
-			print("[DiscManager] 载入画面来源: manifest.json (inline)")
-		else:
-			ls_config = {}  # manifest 中无 keyframes，视为无效
-	if not ls_config.is_empty():
 		loading_screen.play(ls_config)
 	else:
 		print("[DiscManager] 载入画面来源: 内置默认")
@@ -534,49 +528,37 @@ func load_story(args: Array) -> void:
 	# ★ 外部模组包：加载完故事后尝试编译并启动模组脚本
 	_try_load_external_mod(path, main.story_manifest)
 
-## 尝试从 vdisc 虚拟文件系统加载 loading_screen.json
-func _try_load_loading_screen_json() -> Dictionary:
-	if fs == null or fs.file_system.is_empty():
-		print("[DiscManager] _try_load_loading_screen_json: fs 为空或无文件")
+## 从 story_loader 的文件系统字典中提取并解析 loading_screen.json
+## 成功后从字典中移除该条目（对用户隐藏）
+func _extract_loading_screen(file_sys: Dictionary) -> Dictionary:
+	if file_sys.is_empty():
 		return {}
-	# 直接在原始字典中查找，避免 get_node_at_path 的路径规范化差异
-	var found_path: String = ""
-	for key in fs.file_system.keys():
-		var lower_key: String = str(key).to_lower()
-		if lower_key.ends_with("/loading_screen.json") or lower_key == "/loading_screen.json":
-			found_path = str(key)
+	# 在字典中查找 loading_screen.json（大小写不敏感）
+	var found_key: String = ""
+	for key in file_sys.keys():
+		var k: String = str(key).to_lower()
+		if k == "/loading_screen.json" or k.ends_with("/loading_screen.json"):
+			found_key = str(key)
 			break
-	if found_path.is_empty():
-		print("[DiscManager] _try_load_loading_screen_json: 未找到 loading_screen.json")
-		print("[DiscManager]   当前 FS 根目录文件: ", _list_root_files())
+	if found_key.is_empty():
 		return {}
-	var entry: Dictionary = fs.file_system[found_path] as Dictionary
-	if entry.get("type", "") != "file":
-		print("[DiscManager] _try_load_loading_screen_json: ", found_path, " 不是文件类型")
+	var entry = file_sys[found_key]
+	if not (entry is Dictionary):
 		return {}
 	var content: String = str(entry.get("content", ""))
 	if content.is_empty():
-		print("[DiscManager] _try_load_loading_screen_json: ", found_path, " 内容为空")
+		print("[DiscManager] loading_screen.json 内容为空: ", found_key)
 		return {}
 	var json := JSON.new()
 	if json.parse(content) != OK:
 		push_warning("[DiscManager] loading_screen.json 解析失败: " + json.get_error_message())
 		return {}
 	if json.data is Dictionary:
-		print("[DiscManager] 从 vdisc 加载自定义载入画面: ", found_path)
+		# 从文件系统中移除，对用户隐藏此配置文件
+		file_sys.erase(found_key)
+		print("[DiscManager] 从 vdisc 提取自定义载入画面: ", found_key)
 		return json.data as Dictionary
-	print("[DiscManager] _try_load_loading_screen_json: JSON 顶层不是 Dictionary")
 	return {}
-
-## 列出虚拟文件系统根目录文件（用于调试）
-func _list_root_files() -> Array[String]:
-	var result: Array[String] = []
-	for key in fs.file_system.keys():
-		var k: String = str(key)
-		# 根目录文件：只有一层路径分隔
-		if k.count("/") == 1:
-			result.append(k)
-	return result
 
 # ══════════════════════════════════════════
 #  弹出磁盘
