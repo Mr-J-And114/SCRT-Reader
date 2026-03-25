@@ -322,15 +322,16 @@ func load_story(args: Array) -> void:
 		"id": str(story_dict.get("id", "")),
 	})
 	# ★ 播放自定义载入画面（或内置默认）
-	# 优先级：manifest.loading_screen > vdisc 内 loading_screen.json > 内置默认
-	var ls_config: Dictionary = {}
-	if main.story_manifest.has("loading_screen") and main.story_manifest["loading_screen"] is Dictionary:
+	# 优先级：vdisc 内 loading_screen.json > manifest.loading_screen > 内置默认
+	var ls_config: Dictionary = _try_load_loading_screen_json()
+	if not ls_config.is_empty():
+		print("[DiscManager] 载入画面来源: vdisc /loading_screen.json")
+	elif main.story_manifest.has("loading_screen") and main.story_manifest["loading_screen"] is Dictionary:
 		ls_config = main.story_manifest["loading_screen"] as Dictionary
-		print("[DiscManager] 载入画面来源: manifest.json (inline)")
-	else:
-		ls_config = _try_load_loading_screen_json()
-		if not ls_config.is_empty():
-			print("[DiscManager] 载入画面来源: vdisc /loading_screen.json")
+		if ls_config.has("keyframes"):
+			print("[DiscManager] 载入画面来源: manifest.json (inline)")
+		else:
+			ls_config = {}  # manifest 中无 keyframes，视为无效
 	if not ls_config.is_empty():
 		loading_screen.play(ls_config)
 	else:
