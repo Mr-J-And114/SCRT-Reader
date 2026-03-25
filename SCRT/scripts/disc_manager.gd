@@ -326,11 +326,15 @@ func load_story(args: Array) -> void:
 	var ls_config: Dictionary = {}
 	if main.story_manifest.has("loading_screen") and main.story_manifest["loading_screen"] is Dictionary:
 		ls_config = main.story_manifest["loading_screen"] as Dictionary
+		print("[DiscManager] 载入画面来源: manifest.json (inline)")
 	else:
 		ls_config = _try_load_loading_screen_json()
+		if not ls_config.is_empty():
+			print("[DiscManager] 载入画面来源: vdisc /loading_screen.json")
 	if not ls_config.is_empty():
 		loading_screen.play(ls_config)
 	else:
+		print("[DiscManager] 载入画面来源: 内置默认")
 		loading_screen.play_default()
 	# ★ 等待载入画面完成
 	await loading_screen.loading_completed
@@ -532,21 +536,46 @@ func load_story(args: Array) -> void:
 ## 尝试从 vdisc 虚拟文件系统加载 loading_screen.json
 func _try_load_loading_screen_json() -> Dictionary:
 	if fs == null or fs.file_system.is_empty():
+		print("[DiscManager] _try_load_loading_screen_json: fs 为空或无文件")
 		return {}
-	var node: FileSystem.FSNode = fs.get_node_at_path("/loading_screen.json")
-	if node == null or node.type != "file":
+	# 直接在原始字典中查找，避免 get_node_at_path 的路径规范化差异
+	var found_path: String = ""
+	for key in fs.file_system.keys():
+		var lower_key: String = str(key).to_lower()
+		if lower_key.ends_with("/loading_screen.json") or lower_key == "/loading_screen.json":
+			found_path = str(key)
+			break
+	if found_path.is_empty():
+		print("[DiscManager] _try_load_loading_screen_json: 未找到 loading_screen.json")
+		print("[DiscManager]   当前 FS 根目录文件: ", _list_root_files())
 		return {}
-	var content: String = node.content
+	var entry: Dictionary = fs.file_system[found_path] as Dictionary
+	if entry.get("type", "") != "file":
+		print("[DiscManager] _try_load_loading_screen_json: ", found_path, " 不是文件类型")
+		return {}
+	var content: String = str(entry.get("content", ""))
 	if content.is_empty():
+		print("[DiscManager] _try_load_loading_screen_json: ", found_path, " 内容为空")
 		return {}
 	var json := JSON.new()
 	if json.parse(content) != OK:
 		push_warning("[DiscManager] loading_screen.json 解析失败: " + json.get_error_message())
 		return {}
 	if json.data is Dictionary:
-		print("[DiscManager] 从 vdisc 加载自定义载入画面: /loading_screen.json")
+		print("[DiscManager] 从 vdisc 加载自定义载入画面: ", found_path)
 		return json.data as Dictionary
+	print("[DiscManager] _try_load_loading_screen_json: JSON 顶层不是 Dictionary")
 	return {}
+
+## 列出虚拟文件系统根目录文件（用于调试）
+func _list_root_files() -> Array[String]:
+	var result: Array[String] = []
+	for key in fs.file_system.keys():
+		var k: String = str(key)
+		# 根目录文件：只有一层路径分隔
+		if k.count("/") == 1:
+			result.append(k)
+	return result
 
 # ══════════════════════════════════════════
 #  弹出磁盘
