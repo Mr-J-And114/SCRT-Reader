@@ -5,8 +5,9 @@
 # 专用于故事包加载时的过渡动画。
 #
 # ── 配置来源（优先级从高到低）──
-#   1. manifest.json 的 "loading_screen" 字段（故事包作者定义）
-#   2. 内置默认载入画面
+#   1. vdisc 根目录的 loading_screen.json（独立配置文件）
+#   2. manifest.json 的 "loading_screen" 字段（内联配置）
+#   3. 内置默认载入画面
 #
 # ── manifest.json 配置示例 ──
 # {
@@ -93,8 +94,7 @@ var _progress_bar_active: bool = false
 var _progress_bar_start: float = 0.0
 var _progress_bar_duration: float = 4.0
 var _progress_bar_last_percent: int = -1
-var _progress_bar_line_added: bool = false          # 是否已输出过进度条行
-var _progress_bar_expected_para_count: int = 0      # 上次写入后的段落数（用于安全替换）
+var _progress_bar_text_snapshot: String = ""  # 进度条开始前的 BBCode 快照（用于原地更新）
 
 # ── 磁盘信息（由 disc_manager 在播放前注入） ──
 var _disc_title: String = ""
@@ -145,8 +145,7 @@ func play(config: Dictionary) -> void:
 	_audio_started = false
 	_progress_bar_active = false
 	_progress_bar_last_percent = -1
-	_progress_bar_line_added = false
-	_progress_bar_expected_para_count = 0
+	_progress_bar_text_snapshot = ""
 
 	# 解析配置
 	_skippable = bool(config.get("skippable", true))
@@ -431,8 +430,8 @@ func _action_start_progress_bar(duration: float, _label: String) -> void:
 	_progress_bar_start = _elapsed
 	_progress_bar_duration = duration
 	_progress_bar_last_percent = -1
-	_progress_bar_line_added = false
-	_progress_bar_expected_para_count = 0
+	# 保存当前输出快照，后续每帧恢复到此状态再追加新进度条
+	_progress_bar_text_snapshot = main.output_text.text if main and main.output_text else ""
 
 func _update_progress_bar() -> void:
 	if main == null or main.output_text == null:
@@ -450,16 +449,9 @@ func _update_progress_bar() -> void:
 	var p: String = _resolve_color("primary")
 	var m: String = _resolve_color("muted")
 	var line: String = "[color=" + m + "][" + bar + "] [/color][color=" + p + "]" + str(percent) + "%[/color]\n"
-	# 原地更新：仅当上次写入后没有其他内容追加时，才安全替换上一行
-	if _progress_bar_line_added:
-		var current_para: int = main.output_text.get_paragraph_count()
-		if current_para == _progress_bar_expected_para_count:
-			# 没有新段落插入，可以安全替换
-			main.output_text.remove_paragraph(current_para - 1)
-		# 否则有其他内容被追加，直接追加新行（不删除旧行）
+	# 原地更新：恢复到进度条开始前的快照，再追加当前进度
+	main.output_text.text = _progress_bar_text_snapshot
 	main.output_text.append_text(line)
-	_progress_bar_line_added = true
-	_progress_bar_expected_para_count = main.output_text.get_paragraph_count()
 	main._request_scroll()
 	if progress >= 1.0:
 		_progress_bar_active = false
