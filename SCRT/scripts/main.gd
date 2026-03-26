@@ -1600,6 +1600,15 @@ func _comm_scroll_to_bottom() -> void:
 #  每帧处理
 # ══════════════════════════════════════════
 func _process(delta: float) -> void:
+	# ★ 载入画面独占模式：loading screen 期间只驱动它自身和滚动，
+	# 阻止 typewriter / trigger / mail 等系统写入 output_text 干扰 BBCode 缓冲区
+	if disc_mgr and disc_mgr.loading_screen and disc_mgr.loading_screen.is_active():
+		disc_mgr.loading_screen.process(delta)
+		if _scroll_pending_frames > 0:
+			_scroll_pending_frames -= 1
+			if _scroll_pending_frames == 0:
+				_do_scroll_to_bottom()
+		return
 	tw.process_scroll()
 	if tw.is_typing:
 		_request_scroll()
@@ -1622,9 +1631,6 @@ func _process(delta: float) -> void:
 	# 开关机序列驱动
 	if boot_sequence and boot_sequence.is_active():
 		boot_sequence.process(delta)
-	# ★ 载入画面驱动
-	if disc_mgr and disc_mgr.loading_screen and disc_mgr.loading_screen.is_active():
-		disc_mgr.loading_screen.process(delta)
 	# ★ 模组系统每帧更新
 	if pkg_mgr:
 		pkg_mgr.process(delta)

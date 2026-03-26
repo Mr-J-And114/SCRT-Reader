@@ -176,7 +176,10 @@ func play(config: Dictionary) -> void:
 	if main and main.prompt_label:
 		main.prompt_label.visible = false
 
-	print("[LoadingScreen] 载入画面启动, 时长: ", _total_duration, "s, 关键帧: ", _keyframes.size())
+	print("[LoadingScreen] 载入画面启动 (自定义配置), 时长: ", _total_duration, "s, 关键帧: ", _keyframes.size())
+	for i in range(_keyframes.size()):
+		var kf: Dictionary = _keyframes[i]
+		print("[LoadingScreen]   #%d @%.2fs -> %s" % [i, float(kf.get("time", 0.0)), str(kf.get("action", "?"))])
 
 # ============================================================
 # 使用内置默认配置启动
@@ -229,6 +232,8 @@ func is_active() -> bool:
 func _execute_keyframe(kf: Dictionary) -> void:
 	var action: String = str(kf.get("action", ""))
 	var params: Dictionary = kf.get("params", {}) as Dictionary
+	var kf_time: float = float(kf.get("time", 0.0))
+	print("[LoadingScreen] @%.2fs 执行关键帧: %s %s" % [kf_time, action, str(params) if not params.is_empty() else ""])
 
 	match action:
 		# ── 文字输出 ──
