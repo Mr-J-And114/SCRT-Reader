@@ -30,7 +30,7 @@ main.gd (extends Control) — the god object
 ├─ effect_sys: EffectSystem — timeline-based multi-step effect sequences
 ├─ effect_settings: EffectSettings — photosensitive/intensity levels
 ├─ boot_sequence: BootSequence — keyframe-driven boot/shutdown animations
-├─ loading_screen: LoadingScreen — disc loading animation
+├─ loading_screen: LoadingScreen — disc loading animation (custom or default, exclusive mode)
 ├─ doc_viewer: DocumentViewer — paginated document overlay
 ├─ profile_builder: ProfileBuilder — user profile card pages
 ├─ explore_viewer: ExploreViewer — file tree explorer panel
@@ -90,7 +90,7 @@ Main (Control, fullrect) [main.gd]
 | crt_shader.gd | — | 417 | CRT post-process: glitch, shake, tear, boot/shutdown, noise burst, blackout |
 | theme_manager.gd | ThemeManager | 495 | 4 themes, color palette (ThemeColors), CRT/background/logo shader refresh |
 | boot_sequence.gd | BootSequence | 807 | JSON-driven keyframe boot/shutdown: screen_off/on, text, glitch, progress, audio |
-| loading_screen.gd | LoadingScreen | 519 | Disc loading keyframe animation |
+| loading_screen.gd | LoadingScreen | ~543 | Disc loading keyframe animation (custom via loading_screen.json or built-in default) |
 | trigger_system.gd | TriggerSystem | 614 | Event triggers: enter_dir, open_file, command, idle, level_change → actions (mail, glitch, lock, etc.) |
 | mail_system.gd | MailSystem | 831 | Mail inbox, delayed delivery, global+per-story mail, blink notification |
 | effect_system.gd | EffectSystem | 452 | Timeline effect sequences (glitch, shake, sound, text, reboot, brightness, etc.) |

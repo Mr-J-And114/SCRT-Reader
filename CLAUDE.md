@@ -9,7 +9,7 @@ tune radio signals, and decode ciphers.
 
 ## WHAT (Repo Map)
 - `SCRT/` — Godot project root
-  - `scripts/` — Core scripts (main.gd is the god object, ~1939 lines)
+  - `scripts/` — Core scripts (main.gd is the god object, ~2211 lines)
   - `comm_system/` — Dialogue/character/dial system (13 scripts, incl. call_handler + presentation_overlay)
   - `camera_system/` — CCTV surveillance (4 files incl. shader)
   - `env_system/` — Environmental monitoring (env_monitor, env_task_manager, env_viewer)
@@ -42,6 +42,10 @@ tune radio signals, and decode ciphers.
 - **Adding commands**: Register in `CommandHandler._register_commands()`.
 - **Adding manifest data**: Parse in `disc_manager.load_story()` or
   `trigger_system.load_from_manifest()`.
+- **Loading screen**: Customizable via `loading_screen.json` in vdisc root.
+  Uses keyframe timeline engine (same pattern as `boot_sequence.gd`).
+  During playback, `main._process()` enters exclusive mode — only the loading
+  screen processes; typewriter/triggers/mail/effects are suspended.
 - **Save data**: Add to `save_manager.auto_save()`/`load_save()`.
 - **Settings**: Register via `settings_manager.register_category()`/`register_setting()`.
   Built-in categories: display, audio, effect, terminal, comm.
@@ -58,7 +62,7 @@ tune radio signals, and decode ciphers.
 - **Inline effects**: `{fx:glitch}`, `{fx:shake}`, `{fx:sound=path}` in CRTML text.
 
 ## IMPORTANT GOTCHAS
-- main.gd is a ~1939-line god object. All `_process` and `_input` routing lives there.
+- main.gd is a ~2211-line god object. All `_process` and `_input` routing lives there.
 - `dial_mgr` runs in background (non-blocking). State machine:
   IDLE → DTMF → RINGING → VOICE/MODEM → ENDED → IDLE.
 - Story content loaded from .scp ZIP files. Encoding detection: UTF-8 with GBK fallback.
@@ -77,7 +81,8 @@ Each flag gates a section in `main._input()`. If stuck `true`, lower-priority in
 
 ## SEE ALSO
 - `docs/architecture.md` — Full dependency graph, scene tree, script reference
-- `docs/data-formats.md` — .scp format, CRTML markup, boot config, save system
+- `docs/data-formats.md` — .scp format, CRTML markup, boot config, loading screen, save system
+- `docs/loading-screen-guide.md` — Custom loading screen authoring guide
 - `docs/extension-guide.md` — Step-by-step for adding new features
 - `SCRT/scripts/CLAUDE.md` — Core scripts patterns + file index
 - `SCRT/comm_system/CLAUDE.md` — Comm/dial system details

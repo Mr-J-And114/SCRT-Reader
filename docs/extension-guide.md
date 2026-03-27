@@ -19,7 +19,7 @@
 3. Login flow (login/register prompt)
 4. Enter desktop mode → load settings, mail, check for stories
 5. User types commands → CommandHandler dispatches
-6. `load` command → DiscManager.load_story() → StoryLoader parses ZIP → populate FS
+6. `load` command → DiscManager.load_story() → StoryLoader parses ZIP → extract `loading_screen.json` → populate FS → play loading screen (custom or default) → await completion
 7. `cd`/`open` → navigate virtual FS, display files via CrtmlParser
 8. `eject` → auto-save, clear FS
    - `dial <number>` → DialManager.dial() → DTMF → voice call or modem download
