@@ -1,30 +1,31 @@
 # scripts/ — Core Scripts
 
 This directory contains all core logic scripts. `main.gd` is the central
-god object (~1939 lines) that owns all manager instances.
+god object (~2211 lines) that owns all manager instances.
 
 ## Key Files by Size (largest = most complex)
 
 | File | Lines | Role |
 |---|---|---|
-| main.gd | 1939 | Init, input routing, mode management, UI, effects |
-| typewriter.gd | 1939 | Character-by-character output, queue, progress bar |
-| command_handler.gd | 1638 | CLI command registry, all `_cmd_*` handlers |
-| crtml_parser.gd | 1266 | Markdown-like markup → BBCode conversion |
-| mail_system.gd | 831 | Inbox, delayed delivery, global+per-story mail |
-| package_manager.gd | 818 | Mod install/uninstall/runtime |
-| boot_sequence.gd | 807 | JSON keyframe boot/shutdown animations |
-| video_player.gd | 737 | Video playback overlay |
-| user_manager.gd | 725 | Multi-user accounts, profiles, stats |
+| main.gd | ~2211 | Init, input routing, mode management, UI, effects |
+| typewriter.gd | ~1939 | Character-by-character output, queue, progress bar |
+| command_handler.gd | ~1638 | CLI command registry, all `_cmd_*` handlers |
+| crtml_parser.gd | ~1266 | Markdown-like markup → BBCode conversion |
+| mail_system.gd | ~831 | Inbox, delayed delivery, global+per-story mail |
+| package_manager.gd | ~818 | Mod install/uninstall/runtime |
+| boot_sequence.gd | ~807 | JSON keyframe boot/shutdown animations |
+| video_player.gd | ~737 | Video playback overlay |
+| user_manager.gd | ~725 | Multi-user accounts, profiles, stats |
+| disc_manager.gd | ~698 | Virtual disc: load/mount .scp, loading screen, desktop welcome |
 | trigger_system.gd | ~600 | Event triggers: conditions → actions |
-| disc_manager.gd | ~500 | Virtual disc: load/mount .scp, desktop welcome |
+| loading_screen.gd | ~543 | Keyframe-driven disc loading animation (custom + default) |
 | file_system.gd | ~400 | Virtual filesystem: paths, permissions, passwords |
 | daily_dialogue_manager.gd | ~300 | Per-day dialogue/mail triggers |
 | theme_manager.gd | ~250 | Color schemes, shader parameters |
 | effect_system.gd | ~250 | Timeline-driven effect orchestration |
 | story_loader.gd | ~200 | ZIP parser, UTF-8/GBK encoding detection |
-| effect_settings.gd | 176 | Effect intensity (FULL/MILD/OFF) + photosensitive |
-| save_manager.gd | 229 | Save/load paths, directory management |
+| effect_settings.gd | ~176 | Effect intensity (FULL/MILD/OFF) + photosensitive |
+| save_manager.gd | ~229 | Save/load paths, directory management |
 | image_viewer.gd | ~200 | Full-screen CRT image viewer |
 | oscilloscope.gd | ~200 | Audio visualizer (spectrum/Lissajous) |
 | decode_viewer.gd | ~200 | Cipher decoder UI overlay |
@@ -34,7 +35,6 @@ god object (~1939 lines) that owns all manager instances.
 | cipher_decoder.gd | ~150 | Caesar, Vigenere, Base64, Morse, ROT13, Atbash |
 | morse_engine.gd | ~200 | Morse encode/decode, playback events |
 | sstv_decoder.gd | ~200 | SSTV image receive simulation |
-| loading_screen.gd | ~200 | Story load transition animation |
 | ui_manager.gd | ~150 | UI init: background, fonts, cursor |
 | ui_sound.gd | ~100 | Terminal SFX: keystroke, error, HDD read |
 | profile_builder.gd | ~100 | User profile display |
@@ -59,6 +59,11 @@ Each flag gates a section in `main._input()`. If stuck `true`, lower-priority in
   - Three dicts: `global_commands`, `desktop_commands`, `disc_commands`
 - **Inline effects** in CRTML text: `{fx:glitch}`, `{fx:shake}`, `{fx:sound=path}`
 - **No autoloads** — all managers created in `main.gd._ready()` with constructor injection
+- **Loading screen** uses BBCode buffer (`_bbcode_buffer`) for reliable in-place rendering.
+  All output goes through the buffer, rendered via `output_text.text = _bbcode_buffer`.
+  Progress bar saves a snapshot of the buffer, then overwrites the last line each frame.
+  During playback, `main._process()` enters exclusive mode (early return) to prevent
+  typewriter/trigger/mail/effect systems from writing to `output_text`.
 
 ## Adding a New Script
 

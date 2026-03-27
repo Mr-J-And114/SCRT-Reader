@@ -25,7 +25,8 @@
   十二、屏幕特效
   十三、无线电系统
   十四、剧情分支与存档
-  十五、创作工作流总结
+  十五、自定义加载画面
+  十六、创作工作流总结
 
 
 ================================================================
@@ -1301,7 +1302,104 @@
 
 
 ================================================================
-十五、创作工作流总结
+十五、自定义加载画面
+================================================================
+
+  故事包可以通过在根目录放置 loading_screen.json 来完全
+  替换默认的磁盘加载动画。该文件使用关键帧时间轴引擎，
+  和开机动画（boot_config.json）采用相同的设计模式。
+
+  15.1 基本结构
+  ──────────────────────────────────────────
+
+  {
+      "skippable": true,
+      "total_duration": 8.0,
+      "keyframes": [
+          { "time": 0.0, "action": "clear" },
+          { "time": 0.0, "action": "text", "params": {
+              "content": "正在加载...", "color": "muted" } },
+          { "time": 1.0, "action": "disc_title" },
+          { "time": 1.5, "action": "disc_info" },
+          { "time": 2.0, "action": "separator" },
+          { "time": 2.5, "action": "progress_bar", "params": {
+              "duration": 4.0 } },
+          { "time": 7.0, "action": "text", "params": {
+              "content": "加载完成。", "color": "success" } },
+          { "time": 8.0, "action": "complete" }
+      ]
+  }
+
+  顶层字段：
+    · skippable      是否允许按任意键跳过（默认 true）
+    · total_duration  动画总时长（秒）
+    · audio           背景音乐的虚拟文件路径（可选）
+    · audio_volume    音乐音量 0.0~1.0（默认 0.6）
+    · keyframes       关键帧数组，按 time 排序
+
+  15.2 支持的关键帧动作
+  ──────────────────────────────────────────
+
+  【文字输出】
+    text           终端文字      params: content, color
+    text_center    居中文字      params: content, color
+    disc_title     磁盘标题框    params: color（可选）
+    disc_info      作者/版本/ID  params: color（可选）
+    separator      分隔线        params: char, width, color
+    ascii_art      ASCII 艺术    params: content, color
+
+  【视觉效果】
+    glitch         故障效果      params: intensity, duration
+    scanlines      扫描线        params: intensity
+    screen_flash   屏幕闪白      params: duration
+
+  【音频】
+    beep           蜂鸣音
+    sound          播放音效      params: path（虚拟FS路径）
+    audio_play     播放背景音乐  params: path（可选）
+
+  【流程控制】
+    clear          清屏
+    wait           纯等待占位
+    progress_bar   进度条        params: duration, label
+    complete       结束加载画面
+
+  15.3 颜色名称
+  ──────────────────────────────────────────
+
+  在 color 参数中可使用以下名称，会自动匹配当前主题色：
+    primary   主色（默认绿色）
+    success   成功色
+    warning   警告色
+    error     错误色
+    muted     灰色/次要色
+
+  15.4 变量替换
+  ──────────────────────────────────────────
+
+  text 和 text_center 的 content 中可使用以下变量：
+    {disc_title}    故事标题
+    {disc_author}   作者
+    {disc_version}  版本号
+    {disc_id}       故事 ID
+    {username}      当前登录用户名
+
+  15.5 注意事项
+  ──────────────────────────────────────────
+
+  · loading_screen.json 放在 .scp 包的根目录
+  · 如果 .scp 有顶层文件夹包裹，放在那个文件夹内即可
+  · 加载画面播放期间，终端输入被禁用
+  · disc_title、disc_info、progress_bar 等动作的视觉效果
+    与默认动画相同——如果想要完全不同的外观，请用 text
+    动作自行拼装内容
+  · complete 动作是必须的，否则动画在 total_duration+1
+    秒后才会超时结束
+  · manifest.json 中的 loading_screen 字段已弃用，
+    请使用独立的 loading_screen.json 文件
+
+
+十六、创作工作流总结
 ================================================================
 
   15.1 写一天主线剧情的步骤

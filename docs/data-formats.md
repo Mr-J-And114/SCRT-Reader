@@ -37,6 +37,98 @@ Markdown-like syntax → BBCode:
 - `{fx:glitch}`, `{fx:shake}`, `{fx:sound=path}` inline effect tags
 - Tables via `|col1|col2|` syntax
 
+## Loading Screen Config (`loading_screen.json` in vdisc root)
+
+Optional standalone JSON file placed at the root of a `.scp` story pack. If present,
+completely replaces the built-in default loading animation when the disc is loaded.
+Extracted by `disc_manager._extract_loading_screen()` before populating the virtual FS
+(hidden from players). Uses the same keyframe timeline engine as `boot_sequence.gd`.
+
+During playback, `main._process()` enters exclusive mode — only the loading screen
+processes; all other systems (typewriter, triggers, mail, effects) are suspended.
+
+### Top-level Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `skippable` | bool | `true` | Allow player to skip by pressing any key |
+| `total_duration` | float | `8.0` | Total animation length in seconds |
+| `audio` | string | `""` | Virtual FS path to background music |
+| `audio_volume` | float | `0.6` | Music volume (linear 0.0~1.0) |
+| `keyframes` | array | `[]` | Array of `{time, action, params}` objects |
+
+### Keyframe Actions
+
+**Text output:**
+| Action | Params | Description |
+|---|---|---|
+| `text` | `content`, `color` | Terminal text line |
+| `text_center` | `content`, `color` | Centered text line |
+| `disc_title` | `color` (optional) | Display disc title box (uses `fs.build_box`) |
+| `disc_info` | `color` (optional) | Display Author/Version/ID |
+| `separator` | `char` (default `═`), `width` (default 50), `color` | Separator line |
+| `ascii_art` | `content`, `color` | ASCII art block |
+
+**Visual effects:**
+| Action | Params | Description |
+|---|---|---|
+| `glitch` | `intensity`, `duration` | CRT glitch effect |
+| `scanlines` | `intensity` | Scanline intensity |
+| `screen_flash` | `duration` | Screen flash |
+
+**Audio:**
+| Action | Params | Description |
+|---|---|---|
+| `beep` | — | Terminal beep sound |
+| `sound` | `path` | Play sound from virtual FS |
+| `audio_play` | `path` (optional, falls back to top-level `audio`) | Start background music |
+
+**Flow control:**
+| Action | Params | Description |
+|---|---|---|
+| `clear` | — | Clear screen |
+| `wait` | — | No-op placeholder |
+| `progress_bar` | `duration`, `label` | Animated progress bar (in-place update) |
+| `complete` | — | End loading screen |
+
+### Variable Substitution in `text`/`text_center` content
+
+| Variable | Replaced with |
+|---|---|
+| `{disc_title}` | Story title from manifest |
+| `{disc_author}` | Author name |
+| `{disc_version}` | Version string |
+| `{disc_id}` | Story ID |
+| `{username}` | Current logged-in username |
+
+### Color Names
+
+`primary`, `success`, `warning`, `error`, `muted` — resolved via ThemeManager.
+
+### Example
+
+```json
+{
+  "skippable": true,
+  "total_duration": 8.0,
+  "keyframes": [
+    { "time": 0.0, "action": "clear" },
+    { "time": 0.0, "action": "text", "params": {
+        "content": "INSERTING VIRTUAL DISC...", "color": "muted" } },
+    { "time": 0.5, "action": "glitch", "params": {
+        "intensity": 0.2, "duration": 0.3 } },
+    { "time": 1.0, "action": "disc_title" },
+    { "time": 1.5, "action": "disc_info" },
+    { "time": 2.0, "action": "separator" },
+    { "time": 2.5, "action": "progress_bar", "params": {
+        "duration": 4.0 } },
+    { "time": 7.0, "action": "text", "params": {
+        "content": "READY.", "color": "success" } },
+    { "time": 8.0, "action": "complete" }
+  ]
+}
+```
+
 ## Boot/Shutdown Config (`res://boot_config.json`)
 
 JSON keyframe timeline: `{time, action, params}`.
