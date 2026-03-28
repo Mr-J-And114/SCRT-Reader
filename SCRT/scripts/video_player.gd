@@ -23,6 +23,14 @@ var _video_ended: bool = false
 var _known_length: float = 0.0       # 已确认的总时长（播完后才确定）
 var _max_seen_position: float = 0.0  # 播放过程中见过的最大位置
 
+# ★ 缓存终端元素可见性状态
+var _cached_output_visible: bool = true
+var _cached_scroll_visible: bool = true
+var _cached_input_visible: bool = true
+var _cached_prompt_visible: bool = true
+var _cached_status_visible: bool = true
+var _cached_input_frame_visible: bool = true
+
 # UI 节点
 var overlay: Panel = null
 var video_player: VideoStreamPlayer = null
@@ -313,7 +321,13 @@ func open_with_file(file_path: String, file_name: String, data: PackedByteArray)
 	video_player.play()
 	is_active = true
 
-	# ★ 隐藏终端元素（包括状态栏）
+	# ★ 缓存并隐藏终端元素（包括状态栏）
+	_cached_output_visible = main.output_text.visible
+	_cached_scroll_visible = main.scroll_container.visible
+	_cached_input_visible = main.input_field.visible
+	_cached_prompt_visible = main.prompt_label.visible
+	_cached_status_visible = main.status_frame.visible if main.status_frame else true
+	_cached_input_frame_visible = main.input_frame.visible if main.input_frame else true
 	main.output_text.visible = false
 	main.scroll_container.visible = false
 	main.input_field.visible = false
@@ -351,15 +365,15 @@ func close() -> void:
 
 	_cleanup_temp_file()
 
-	# ★ 恢复终端元素
-	main.output_text.visible = true
-	main.scroll_container.visible = true
-	main.input_field.visible = true
-	main.prompt_label.visible = true
+	# ★ 恢复终端元素（使用缓存的可见性状态）
+	main.output_text.visible = _cached_output_visible
+	main.scroll_container.visible = _cached_scroll_visible
+	main.input_field.visible = _cached_input_visible
+	main.prompt_label.visible = _cached_prompt_visible
 	if main.status_frame:
-		main.status_frame.visible = true
+		main.status_frame.visible = _cached_status_visible
 	if main.input_frame:
-		main.input_frame.visible = true
+		main.input_frame.visible = _cached_input_frame_visible
 
 	main._update_status_bar()
 	main.input_field.grab_focus()

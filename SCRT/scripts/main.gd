@@ -365,7 +365,7 @@ func _register_settings_apply_callbacks() -> void:
 	)
 	settings_mgr.register_apply("terminal.progress_speed", func(value):
 		if tw:
-			tw.progress_speed_multiplier = float(value)
+			tw.progress_bar_speed = float(value)
 	)
 
 
@@ -526,9 +526,6 @@ func _enter_desktop_after_login(message: String) -> void:
 			T = ThemeManager.current
 			settings_mgr.T = T
 			_full_ui_refresh()
-	# ★ 登录后加载用户全局收件箱
-	if mail_sys != null:
-		mail_sys.load_global_inbox()
 	# ★ 登录后恢复已安装的模组
 	if pkg_mgr:
 		pkg_mgr.load_installed_mods()

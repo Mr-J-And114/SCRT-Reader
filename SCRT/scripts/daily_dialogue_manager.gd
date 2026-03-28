@@ -48,10 +48,11 @@ func load_main_storyline() -> void:
 	if f == null:
 		return
 	var json := JSON.new()
-	if json.parse(f.get_as_text()) != OK or not (json.data is Dictionary):
+	var text: String = f.get_as_text()
+	f.close()
+	if json.parse(text) != OK or not (json.data is Dictionary):
 		push_warning("[DailyDialogue] 主线剧情 JSON 解析失败")
 		return
-	f.close()
 	var data: Dictionary = json.data
 	# 加载每日对话配置
 	_daily_config = data.get("daily_dialogues", {})

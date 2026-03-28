@@ -124,14 +124,12 @@ func setup(p_main, p_audio_manager, p_crt_shader) -> void:
 	main.add_child.call_deferred(overlay_layer)
 	# 延迟添加 ColorRect 到 CanvasLayer
 	_setup_overlay_deferred.call_deferred(overlay_layer)
+	# 加载默认配置（立即执行，不放在 deferred 中）
+	_load_default_config()
 
 func _setup_overlay_deferred(layer: CanvasLayer) -> void:
 	_black_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(_black_overlay)
-
-
-	# 加载默认配置
-	_load_default_config()
 
 # ============================================================
 # 配置加载（三级覆盖）
@@ -790,7 +788,7 @@ func _resolve_color(color_name: String) -> String:
 		"warning": return T.warning_hex
 		"error": return T.error_hex
 		"muted": return T.muted_hex
-		"info": return T.info_hex if T.get("info_hex") else T.primary_hex
+		"info": return T.info_hex if not T.info_hex.is_empty() else T.primary_hex
 		_: return T.primary_hex
 
 func is_active() -> bool:

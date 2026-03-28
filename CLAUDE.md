@@ -9,13 +9,13 @@ tune radio signals, and decode ciphers.
 
 ## WHAT (Repo Map)
 - `SCRT/` — Godot project root
-  - `scripts/` — Core scripts (main.gd is the god object, ~2211 lines)
+  - `scripts/` — Core scripts (main.gd is the god object, ~2209 lines)
   - `comm_system/` — Dialogue/character/dial system (13 scripts, incl. call_handler + presentation_overlay)
   - `camera_system/` — CCTV surveillance (4 files incl. shader)
   - `env_system/` — Environmental monitoring (env_monitor, env_task_manager, env_viewer)
-  - `radio/` — Radio receiver/signals (radio_receiver ~1700 lines + 5 support scripts)
+  - `radio/` — Radio receiver/signals (radio_receiver ~1804 lines + 5 support scripts)
   - `settings/` — Settings manager/registry/storage
-  - `modder/` — Mod API (mod_api.gd ~997 lines) + ModBase
+  - `modder/` — Mod API (mod_api.gd ~1075 lines) + ModBase
   - `templates/` — Document viewer templates (article/chat/email/two-page)
   - `shaders/` — CRT effect, background vignette, background logo
   - `scenes/main.tscn` — Single scene (all UI nodes)
@@ -25,6 +25,9 @@ tune radio signals, and decode ciphers.
   - `design-doc.txt` — 软件规划设计文档
   - `story-authoring-guide.txt` — 故事包制作指南
   - `camera-asset-guide.txt` — 摄像头资源制作指南
+  - `character-system-guide.md` — 角色/动画系统指南
+  - `bgm-descriptions.md` — 背景音乐设计说明
+  - `loading-screen-guide.md` — 自定义加载画面指南
 
 ## HOW (Key Conventions)
 - **Architecture**: No autoloads/singletons. main.gd instantiates all managers
@@ -84,6 +87,9 @@ Each flag gates a section in `main._input()`. If stuck `true`, lower-priority in
 - `docs/data-formats.md` — .scp format, CRTML markup, boot config, loading screen, save system
 - `docs/loading-screen-guide.md` — Custom loading screen authoring guide
 - `docs/extension-guide.md` — Step-by-step for adding new features
+- `docs/character-system-guide.md` — Character sprite/animation system
+- `docs/bgm-descriptions.md` — Background music design reference
+- `docs/camera-asset-guide.txt` — Camera/CCTV asset creation guide
 - `SCRT/scripts/CLAUDE.md` — Core scripts patterns + file index
 - `SCRT/comm_system/CLAUDE.md` — Comm/dial system details
 - `SCRT/camera_system/CLAUDE.md` — Camera shader pipeline
