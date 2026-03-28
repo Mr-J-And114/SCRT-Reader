@@ -93,11 +93,8 @@ func _resolve_media_path(media_path: String) -> String:
 	if media_path.begins_with("/"):
 		return media_path
 	# 通过 main_ref 获取当前目录拼接
-	if main_ref != null and main_ref.has_method("get") == false:
-		# main_ref 是 main.gd 节点，有 current_path 属性
-		var current_dir: String = ""
-		if "current_path" in main_ref:
-			current_dir = str(main_ref.current_path)
+	if main_ref != null and "current_path" in main_ref:
+		var current_dir: String = str(main_ref.current_path)
 		if not current_dir.is_empty() and fs != null:
 			var joined: String = fs.join_path(current_dir, media_path)
 			return fs.normalize_path(joined)

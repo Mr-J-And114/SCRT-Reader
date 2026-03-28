@@ -1,5 +1,8 @@
 # templates/ — Document Viewer Templates
 
+> 上级文档：[/CLAUDE.md](/CLAUDE.md) | 数据格式：[/docs/data-formats.md](/docs/data-formats.md)
+> 新增模板后请同步更新本文件的文件列表和 Template 枚举说明。
+
 Specialized full-screen document viewers, selected by file header `template:` field.
 
 ## Files

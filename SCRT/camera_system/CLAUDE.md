@@ -1,5 +1,8 @@
 # camera_system/ — CCTV Surveillance
 
+> 上级文档：[/CLAUDE.md](/CLAUDE.md) | 素材指南：[/docs/camera-asset-guide.txt](/docs/camera-asset-guide.txt)
+> 修改摄像头系统后请同步更新本文件。
+
 CCTV monitoring system with shader-rendered surveillance camera feeds.
 
 ## Architecture

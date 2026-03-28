@@ -1,5 +1,8 @@
 # settings/ — Settings System
 
+> 上级文档：[/CLAUDE.md](/CLAUDE.md)
+> 新增设置类别或修改 API 后请同步更新本文件。
+
 Registry-based settings with automatic TUI rendering.
 
 ## Files

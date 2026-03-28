@@ -366,8 +366,9 @@ static func _refresh_all_ui(main_node: Node) -> void:
 	if main_node.tw != null:
 		main_node.tw.T = current
 	if main_node.decode_viewer != null:
-		if "settings_mgr" in main_node and main_node.settings_mgr != null:
-			main_node.settings_mgr.T = current
+		main_node.decode_viewer.T = current
+	if "settings_mgr" in main_node and main_node.settings_mgr != null:
+		main_node.settings_mgr.T = current
 
 	# 重新应用 UI 样式
 	UIManager.setup_all_styles(

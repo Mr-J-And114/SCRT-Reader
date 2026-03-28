@@ -77,90 +77,91 @@ Main (Control, fullrect) [main.gd]
 
 | File | Class | Lines | Purpose |
 |---|---|---|---|
-| main.gd | — | 1939 | God object: init, input routing, mode management, UI updates, media, effects |
-| file_system.gd | FileSystem | 473 | Virtual FS tree (FSNode), permissions, clearance, ambient sounds, path utils |
-| command_handler.gd | CommandHandler | 1638 | CLI command registry (desktop/disc/global), history, tab-complete, all `_cmd_*` handlers |
-| story_loader.gd | StoryLoader | 709 | Parse .scp ZIP files, detect encoding (UTF-8/GBK), build manifest+filesystem |
-| disc_manager.gd | DiscManager | 597 | Scan vdisc/, load/eject stories, mod support, auto-save |
-| crtml_parser.gd | CrtmlParser | 1266 | Markdown→BBCode: headings, bold, italic, spoilers, tables, media tags, effect tags, page breaks |
-| typewriter.gd | Typewriter | 521 | Queued text output with char-by-char typing, inline FX triggers, progress bars |
-| save_manager.gd | SaveManager | 229 | Per-user per-story JSON save/load, auto-save |
-| user_manager.gd | UserManager | 725 | Multi-user accounts, login/register/passwd, profiles, stats, story progress |
-| audio_manager.gd | AudioManager | 587 | Ambient(crossfade)/SFX/Media players, ducking, spectrum analyzer, load from bytes (MP3/OGG/WAV) |
-| crt_shader.gd | — | 417 | CRT post-process: glitch, shake, tear, boot/shutdown, noise burst, blackout |
-| theme_manager.gd | ThemeManager | 495 | 4 themes, color palette (ThemeColors), CRT/background/logo shader refresh |
-| boot_sequence.gd | BootSequence | 807 | JSON-driven keyframe boot/shutdown: screen_off/on, text, glitch, progress, audio |
-| loading_screen.gd | LoadingScreen | ~543 | Disc loading keyframe animation (custom via loading_screen.json or built-in default) |
-| trigger_system.gd | TriggerSystem | 614 | Event triggers: enter_dir, open_file, command, idle, level_change → actions (mail, glitch, lock, etc.) |
-| mail_system.gd | MailSystem | 831 | Mail inbox, delayed delivery, global+per-story mail, blink notification |
-| effect_system.gd | EffectSystem | 452 | Timeline effect sequences (glitch, shake, sound, text, reboot, brightness, etc.) |
-| effect_settings.gd | EffectSettings | 154 | Effect intensity levels (full/mild/off), photosensitive mode |
-| settings/settings_manager.gd | SettingsManager | 904 | Registry-based settings system with categories, TUI interface, import/export |
+| main.gd | — | 2209 | God object: init, input routing, mode management, UI updates, media, effects |
+| file_system.gd | FileSystem | 472 | Virtual FS tree (FSNode), permissions, clearance, ambient sounds, path utils |
+| command_handler.gd | CommandHandler | 2346 | CLI command registry (desktop/disc/global), history, tab-complete, all `_cmd_*` handlers |
+| story_loader.gd | StoryLoader | 708 | Parse .scp ZIP files, detect encoding (UTF-8/GBK), build manifest+filesystem |
+| disc_manager.gd | DiscManager | 698 | Scan vdisc/, load/eject stories, mod support, auto-save |
+| crtml_parser.gd | CrtmlParser | 1263 | Markdown→BBCode: headings, bold, italic, spoilers, tables, media tags, effect tags, page breaks |
+| typewriter.gd | Typewriter | 520 | Queued text output with char-by-char typing, inline FX triggers, progress bars |
+| save_manager.gd | SaveManager | 228 | Per-user per-story JSON save/load, auto-save |
+| user_manager.gd | UserManager | 856 | Multi-user accounts, login/register/passwd, profiles, stats, story progress |
+| audio_manager.gd | AudioManager | 586 | Ambient(crossfade)/SFX/Media players, ducking, spectrum analyzer, load from bytes (MP3/OGG/WAV) |
+| crt_shader.gd | — | 416 | CRT post-process: glitch, shake, tear, boot/shutdown, noise burst, blackout |
+| theme_manager.gd | ThemeManager | 518 | 4 themes, color palette (ThemeColors), CRT/background/logo shader refresh |
+| boot_sequence.gd | BootSequence | 813 | JSON-driven keyframe boot/shutdown: screen_off/on, text, glitch, progress, audio |
+| loading_screen.gd | LoadingScreen | 543 | Disc loading keyframe animation (custom via loading_screen.json or built-in default) |
+| trigger_system.gd | TriggerSystem | 726 | Event triggers: enter_dir, open_file, command, idle, level_change → actions (mail, glitch, lock, etc.) |
+| mail_system.gd | MailSystem | 891 | Mail inbox, delayed delivery, global+per-story mail, blink notification |
+| effect_system.gd | EffectSystem | 451 | Timeline effect sequences (glitch, shake, sound, text, reboot, brightness, etc.) |
+| effect_settings.gd | EffectSettings | 175 | Effect intensity levels (full/mild/off), photosensitive mode |
+| settings/settings_manager.gd | SettingsManager | 903 | Registry-based settings system with categories, TUI interface, import/export |
 | settings/settings_registry.gd | — | — | Setting definitions registration |
 | settings/settings_storage.gd | — | — | JSON storage backend for settings |
-| header_parser.gd | HeaderParser | 248 | Parse file headers (metadata block between markers) |
-| cipher_decoder.gd | CipherDecoder | 585 | Caesar, Vigenere, substitution, base64, morse, ROT13, atbash, reverse |
-| morse_engine.gd | MorseEngine | 348 | Morse encode/decode, playback events, numbers station mode |
-| radio_audio_generator.gd | RadioAudioGenerator | 312 | Procedural noise/tone/SSTV audio generation |
-| radio_config_parser.gd | RadioConfigParser | 303 | Parse radio signal definitions from config/manifest; RadioSignal class with hidden, content_audio, proximity_range |
-| radio_signal_manager.gd | RadioSignalManager | 297 | Signal database, quality calc (progressive proximity), discovery, bookmarks, scan |
-| sstv_decoder.gd | SSTVDecoder | 311 | SSTV image receive simulation with scanline noise |
-| package_manager.gd | PackageManager | 818 | Mod system: install/uninstall .scp mods, hook dispatch, mod lifecycle |
-| ui_manager.gd | UIManager | 467 | Procedural UI style: cursors, scrollbar, panel themes, font setup |
-| ui_sound.gd | UiSound | 201 | Procedural SFX: keystroke, enter, backspace, HDD read, click |
-| profile_builder.gd | ProfileBuilder | 219 | Build 3-page profile card for doc_viewer |
-| video_player.gd | VideoPlayerViewer | 737 | Video overlay with controls, ffmpeg fallback support |
-| env_monitor.gd | EnvMonitor | ~550 | Environmental simulation: sensors, weather, events, anomalies, daily seed |
-| env_task_manager.gd | EnvTaskManager | ~450 | Daily task checklist: inspection, recording, calibration, reporting |
-| camera_feed.gd | CameraFeed | ~273 | Single camera data model: base/depth/light/anomaly images, lens params |
-| camera_manager.gd | CameraManager | ~290 | Camera registry, unlock/lock, anomaly triggers, save/load, image loading |
+| header_parser.gd | HeaderParser | 247 | Parse file headers (metadata block between markers) |
+| cipher_decoder.gd | CipherDecoder | 584 | Caesar, Vigenere, substitution, base64, morse, ROT13, atbash, reverse |
+| morse_engine.gd | MorseEngine | 347 | Morse encode/decode, playback events, numbers station mode |
+| radio_audio_generator.gd | RadioAudioGenerator | 311 | Procedural noise/tone/SSTV audio generation |
+| radio_config_parser.gd | RadioConfigParser | 319 | Parse radio signal definitions from config/manifest; RadioSignal class with hidden, content_audio, proximity_range |
+| radio_signal_manager.gd | RadioSignalManager | 344 | Signal database, quality calc (progressive proximity), discovery, bookmarks, scan |
+| sstv_decoder.gd | SSTVDecoder | 310 | SSTV image receive simulation with scanline noise |
+| package_manager.gd | PackageManager | 817 | Mod system: install/uninstall .scp mods, hook dispatch, mod lifecycle |
+| ui_manager.gd | UIManager | 466 | Procedural UI style: cursors, scrollbar, panel themes, font setup |
+| ui_sound.gd | UiSound | 200 | Procedural SFX: keystroke, enter, backspace, HDD read, click |
+| profile_builder.gd | ProfileBuilder | 242 | Build 3-page profile card for doc_viewer |
+| video_player.gd | VideoPlayerViewer | 748 | Video overlay with controls, ffmpeg fallback support |
+| daily_dialogue_manager.gd | DailyDialogueManager | 414 | Per-day dialogue/mail triggers, main storyline loading |
+| env_monitor.gd | EnvMonitor | 919 | Environmental simulation: sensors, weather, events, anomalies, daily seed |
+| env_task_manager.gd | EnvTaskManager | 697 | Daily task checklist: inspection, recording, calibration, reporting |
+| camera_feed.gd | CameraFeed | 320 | Single camera data model: base/depth/light/anomaly images, lens params |
+| camera_manager.gd | CameraManager | 435 | Camera registry, unlock/lock, anomaly triggers, save/load, image loading |
 
 ### Viewer/Overlay Scripts
 
 | File | Class | Lines | Purpose |
 |---|---|---|---|
-| document_viewer.gd | DocumentViewer | 669 | 2-page overlay (left/right RTL), pagination, typing animation |
-| explore_viewer.gd | ExploreViewer | 478 | File tree panel, story progress display |
+| document_viewer.gd | DocumentViewer | 668 | 2-page overlay (left/right RTL), pagination, typing animation |
+| explore_viewer.gd | ExploreViewer | 477 | File tree panel, story progress display |
 | image_viewer.gd | ImageViewer | 634 | Zoomable image viewer, pan, scan effect, _ImageCanvas inner class |
 | oscilloscope.gd | Oscilloscope | 820 | Spectrum analyzer + Lissajous, _ScopeCanvas inner class |
-| radio_receiver.gd | RadioReceiver | ~1700 | Full radio UI: tuning, bands, morse decode, SSTV, audio station, hidden signals, waterfall, _RadioCanvas inner class |
-| decode_viewer.gd | DecodeViewer | 1457 | Cipher decode animation viewer, _DecodeCanvas inner class |
-| env_viewer.gd | EnvViewer | ~350 | Environmental data panel overlay, 6 pages, _EnvCanvas inner class |
-| camera_viewer.gd | CameraViewer | ~480 | CCTV fullscreen overlay, shader-rendered surveillance feed, pan/switch controls |
+| radio_receiver.gd | RadioReceiver | 1804 | Full radio UI: tuning, bands, morse decode, SSTV, audio station, hidden signals, waterfall, _RadioCanvas inner class |
+| decode_viewer.gd | DecodeViewer | 1456 | Cipher decode animation viewer, _DecodeCanvas inner class |
+| env_viewer.gd | EnvViewer | 557 | Environmental data panel overlay, 6 pages, _EnvCanvas inner class |
+| camera_viewer.gd | CameraViewer | 656 | CCTV fullscreen overlay, shader-rendered surveillance feed, pan/switch controls |
 
 ### Comm System (`res://comm_system/`)
 
-| File | Class | Purpose |
-|---|---|---|
-| comm_manager.gd | CommManager | Dialogue orchestration, call routing, tutorial flow, `comm` command handler |
-| comm_dialogue_player.gd | CommDialoguePlayer | Dialogue playback engine (line-by-line, choices, conditions, slides, silent stop) |
-| comm_character.gd | CommCharacter | Lightweight character data model (identity, voice, state, delegates to animator) |
-| character_registry.gd | CharacterRegistry | Character lifecycle, registration (builtin/disc/mod sources) |
-| character_asset_library.gd | CharacterAssetLibrary | Asset profiles, modular texture loading (res:// + virtual FS) |
-| character_animator.gd | CharacterAnimator | Animation engine (mouth, blink, action, layer overrides, costumes) |
-| call_handler.gd | CallHandler | Call mode handler: SILENT/FORCED/ANSWERABLE ring + answer flow |
-| presentation_overlay.gd | PresentationOverlay | Presentation mode slide overlay (image display, fit/align, transitions) |
-| comm_sprite_renderer.gd | — | Character sprite rendering (card mode) |
-| comm_ui.gd | CommUI | Comm overlay UI (dialogue bar, card/meeting/presentation mode, history) |
-| comm_voice.gd | — | Procedural voice synthesis (sine/square/saw tones) |
-| dial_manager.gd | DialManager | DTMF dial state machine, voice call routing, modem handshake/download, phonebook |
-| dial_tone_generator.gd | DialToneGenerator | Procedural audio: DTMF keys, ringback, busy tone, modem handshake, data noise, hangup, ring |
+| File | Class | Lines | Purpose |
+|---|---|---|---|
+| comm_manager.gd | CommManager | 1259 | Dialogue orchestration, call routing, tutorial flow, `comm` command handler |
+| comm_dialogue_player.gd | CommDialoguePlayer | 377 | Dialogue playback engine (line-by-line, choices, conditions, slides, silent stop) |
+| comm_character.gd | CommCharacter | 426 | Lightweight character data model (identity, voice, state, delegates to animator) |
+| character_registry.gd | CharacterRegistry | 297 | Character lifecycle, registration (builtin/disc/mod sources) |
+| character_asset_library.gd | CharacterAssetLibrary | 420 | Asset profiles, modular texture loading (res:// + virtual FS) |
+| character_animator.gd | CharacterAnimator | 387 | Animation engine (mouth, blink, action, layer overrides, costumes) |
+| call_handler.gd | CallHandler | 285 | Call mode handler: SILENT/FORCED/ANSWERABLE ring + answer flow |
+| presentation_overlay.gd | PresentationOverlay | 295 | Presentation mode slide overlay (image display, fit/align, transitions) |
+| comm_sprite_renderer.gd | — | 181 | Character sprite rendering (card mode) |
+| comm_ui.gd | CommUI | 1289 | Comm overlay UI (dialogue bar, card/meeting/presentation mode, history) |
+| comm_voice.gd | — | 188 | Procedural voice synthesis (sine/square/saw tones) |
+| dial_manager.gd | DialManager | 831 | DTMF dial state machine, voice call routing, modem handshake/download, phonebook |
+| dial_tone_generator.gd | DialToneGenerator | 376 | Procedural audio: DTMF keys, ringback, busy tone, modem handshake, data noise, hangup, ring |
 
 ### Mod System (`res://modder/`)
 
 | File | Class | Purpose |
 |---|---|---|
-| mod_api.gd | ModAPI | 997-line API surface for mods: output, FS access, commands, audio, effects, UI, comm, etc. |
+| mod_api.gd | ModAPI | 1075-line API surface for mods: output, FS access, commands, audio, effects, UI, comm, etc. |
 | mod_base.gd | ModBase | Base class for mods: lifecycle hooks (_on_install, _on_enable, _process, event callbacks) |
 
 ### Templates (`res://templates/`)
 
-| File | Purpose |
-|---|---|
-| article_viewer.gd | Article-style document template |
-| chat_viewer.gd | Chat log template |
-| email_viewer.gd | Email template |
-| two_page_reader.gd | Two-page book template |
+| File | Lines | Purpose |
+|---|---|---|
+| article_viewer.gd | 466 | Article-style document template |
+| chat_viewer.gd | 823 | Chat log template |
+| email_viewer.gd | 788 | Email template |
+| two_page_reader.gd | 571 | Two-page book template |
 
 ## Shaders
 
@@ -240,24 +241,30 @@ api.env_get_anomalies()              # Pending anomalies
 ## File Index (by size)
 
 ```
-scripts/main.gd|1939  scripts/command_handler.gd|1638  scripts/crtml_parser.gd|1266
-scripts/radio_receiver.gd|~1700  scripts/decode_viewer.gd|1457  scripts/oscilloscope.gd|820
-scripts/boot_sequence.gd|807  scripts/mail_system.gd|831  scripts/package_manager.gd|818
-scripts/image_viewer.gd|634  scripts/video_player.gd|737  scripts/user_manager.gd|725
-scripts/story_loader.gd|709  scripts/document_viewer.gd|669  scripts/trigger_system.gd|614
-scripts/disc_manager.gd|597  scripts/audio_manager.gd|587  scripts/cipher_decoder.gd|585
-scripts/typewriter.gd|521  scripts/loading_screen.gd|519  scripts/theme_manager.gd|495
-scripts/explore_viewer.gd|478  scripts/file_system.gd|473  scripts/ui_manager.gd|467
-scripts/effect_system.gd|452  scripts/crt_shader.gd|417  scripts/radio_signal_manager.gd|297
-scripts/radio_audio_generator.gd|312  scripts/radio_config_parser.gd|303  scripts/sstv_decoder.gd|311
-scripts/morse_engine.gd|348  scripts/header_parser.gd|248  scripts/save_manager.gd|229
-scripts/profile_builder.gd|219  scripts/ui_sound.gd|201  scripts/effect_settings.gd|154
-camera_system/camera_feed.gd|273  camera_system/camera_manager.gd|290  camera_system/camera_viewer.gd|480
-camera_system/camera_effect.gdshader|~200
-comm_system/comm_manager.gd|~600  comm_system/comm_dialogue_player.gd|~280
-scripts/dial_manager.gd|~550  scripts/dial_tone_generator.gd|?
-settings/settings_manager.gd|904
-modder/mod_api.gd|997  modder/mod_base.gd|93
+scripts/command_handler.gd|2346  scripts/main.gd|2209  radio/radio_receiver.gd|1804
+scripts/decode_viewer.gd|1456  scripts/crtml_parser.gd|1263  comm_system/comm_manager.gd|1259
+comm_system/comm_ui.gd|1289  modder/mod_api.gd|1075  env_system/env_monitor.gd|919
+settings/settings_manager.gd|903  scripts/mail_system.gd|891  scripts/user_manager.gd|856
+comm_system/dial_manager.gd|831  scripts/oscilloscope.gd|820  scripts/package_manager.gd|817
+scripts/boot_sequence.gd|813  templates/chat_viewer.gd|823  templates/email_viewer.gd|788
+scripts/video_player.gd|748  scripts/trigger_system.gd|726  scripts/story_loader.gd|708
+env_system/env_task_manager.gd|697  scripts/disc_manager.gd|698  camera_system/camera_viewer.gd|656
+scripts/document_viewer.gd|668  scripts/image_viewer.gd|634  scripts/audio_manager.gd|586
+scripts/cipher_decoder.gd|584  templates/two_page_reader.gd|571  env_system/env_viewer.gd|557
+scripts/loading_screen.gd|543  scripts/typewriter.gd|520  scripts/theme_manager.gd|518
+scripts/explore_viewer.gd|477  scripts/file_system.gd|472  scripts/ui_manager.gd|466
+templates/article_viewer.gd|466  scripts/effect_system.gd|451  camera_system/camera_manager.gd|435
+comm_system/character_asset_library.gd|420  comm_system/comm_character.gd|426
+scripts/crt_shader.gd|416  scripts/daily_dialogue_manager.gd|414
+comm_system/character_animator.gd|387  comm_system/comm_dialogue_player.gd|377
+comm_system/dial_tone_generator.gd|376  radio/radio_signal_manager.gd|344
+scripts/morse_engine.gd|347  radio/radio_config_parser.gd|319  camera_system/camera_feed.gd|320
+radio/radio_audio_generator.gd|311  scripts/sstv_decoder.gd|310  radio/radio_data_manager.gd|302
+comm_system/character_registry.gd|297  comm_system/presentation_overlay.gd|295
+comm_system/call_handler.gd|285  scripts/header_parser.gd|247  scripts/profile_builder.gd|242
+scripts/save_manager.gd|228  scripts/ui_sound.gd|200  comm_system/comm_voice.gd|188
+comm_system/comm_sprite_renderer.gd|181  scripts/effect_settings.gd|175
+modder/mod_base.gd|92
 ```
 
 ## Module Status

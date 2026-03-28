@@ -151,20 +151,20 @@ func play_glitch(intensity: float = 0.5, duration: float = 1.0, preset: String =
 	if duration >= 90.0:
 		return
 
-	# 持续 duration 后淡出恢复
+	# 持续 duration 后淡出恢复 — 捕获初始值用于线性淡出
+	var fade_base_intensity: float = intensity
+	var fade_base_color_drift: float = color_drift
+	var fade_base_noise_burst: float = noise_burst_val
 	_glitch_tween = _create_tween()
 	_glitch_tween.tween_interval(duration * 0.7)
 	# 后 30% 时间淡出
-	_glitch_tween.tween_method(_fade_glitch, 1.0, 0.0, duration * 0.3)
+	_glitch_tween.tween_method(
+		func(t: float) -> void:
+			_set_param("glitch_intensity", fade_base_intensity * t)
+			_set_param("glitch_color_drift", fade_base_color_drift * t)
+			_set_param("noise_burst", fade_base_noise_burst * t),
+		1.0, 0.0, duration * 0.3)
 	_glitch_tween.tween_callback(_on_glitch_finished)
-
-## glitch 淡出插值回调
-func _fade_glitch(t: float) -> void:
-	var base_intensity: float = float(_get_param("glitch_intensity", 0.5))
-	# t 从 1→0，所以实际效果是逐渐减弱
-	_set_param("glitch_intensity", base_intensity * t)
-	_set_param("glitch_color_drift", float(_get_param("glitch_color_drift", 0.0)) * t)
-	_set_param("noise_burst", float(_get_param("noise_burst", 0.0)) * t)
 
 func _on_glitch_finished() -> void:
 	_reset_glitch_params()

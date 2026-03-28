@@ -240,16 +240,23 @@ func delete_user(username: String) -> Dictionary:
 		logout()
 
 	var user_dir: String = _get_user_dir(username)
-	var dir := DirAccess.open(user_dir)
-	if dir:
-		dir.list_dir_begin()
-		var entry: String = dir.get_next()
-		while not entry.is_empty():
-			if not dir.current_is_dir():
-				dir.remove(entry)
-			entry = dir.get_next()
-		dir.list_dir_end()
-	DirAccess.remove_absolute(user_dir)
+	_remove_dir_recursive(user_dir)
+
+## 递归删除目录及其所有子目录和文件
+func _remove_dir_recursive(path: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var entry: String = dir.get_next()
+	while not entry.is_empty():
+		if dir.current_is_dir():
+			_remove_dir_recursive(path.path_join(entry))
+		else:
+			dir.remove(entry)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	DirAccess.remove_absolute(path)
 
 	return { "success": true, "message": "用户 \"" + username + "\" 及其所有数据已永久删除。" }
 

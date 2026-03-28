@@ -1,5 +1,8 @@
 # comm_system/ — Dialogue, Dial & Character System
 
+> 上级文档：[/CLAUDE.md](/CLAUDE.md) | 数据格式：[/docs/data-formats.md](/docs/data-formats.md)
+> 修改通讯/角色/拨号逻辑后请同步更新本文件。
+
 Communication subsystem handling character dialogues, voice calls, modem downloads,
 and modular character management with layered sprite system.
 
