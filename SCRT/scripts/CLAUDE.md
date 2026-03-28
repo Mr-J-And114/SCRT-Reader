@@ -1,5 +1,8 @@
 # scripts/ — Core Scripts
 
+> 上级文档：[/CLAUDE.md](/CLAUDE.md) | 详细索引：[/docs/architecture.md](/docs/architecture.md)
+> 修改脚本后请同步更新本文件中的行数和文件列表。
+
 This directory contains all core logic scripts. `main.gd` is the central
 god object (~2209 lines) that owns all manager instances.
 

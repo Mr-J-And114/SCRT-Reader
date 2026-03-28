@@ -1,5 +1,8 @@
 # modder/ — Mod System
 
+> 上级文档：[/CLAUDE.md](/CLAUDE.md)
+> 修改 ModAPI 接口后请同步更新本文件。
+
 Sandboxed mod API with lifecycle hooks and cross-mod messaging.
 
 ## Files

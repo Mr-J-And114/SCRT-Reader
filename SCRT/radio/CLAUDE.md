@@ -1,5 +1,8 @@
 # radio/ — Radio Receiver System
 
+> 上级文档：[/CLAUDE.md](/CLAUDE.md) | 数据格式：[/docs/data-formats.md](/docs/data-formats.md)
+> 修改无线电系统后请同步更新本文件。
+
 Full radio tuning interface with morse code, SSTV image reception, and audio broadcast stations.
 
 ## Key Warning

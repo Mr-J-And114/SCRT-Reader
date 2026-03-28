@@ -1,5 +1,8 @@
 # env_system/ — Environmental Monitoring
 
+> 上级文档：[/CLAUDE.md](/CLAUDE.md)
+> 修改环境监测系统后请同步更新本文件。
+
 Station environmental sensor system with daily tasks, weather simulation, and anomaly detection.
 
 ## Files
