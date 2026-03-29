@@ -1,8 +1,9 @@
-# Architecture Reference
+# 架构参考文档 (Architecture Reference)
 
+> 最后更新：2026-03-29 | 行数通过 `wc -l` 核实
 <!-- Extracted from SCRT/AI_HANDOFF.md §2-4, §7, §10, §13-15 -->
 
-## Core Dependency Graph
+## 核心依赖图 (Core Dependency Graph)
 
 ```
 main.gd (extends Control) — the god object
@@ -47,7 +48,7 @@ main.gd (extends Control) — the god object
 └─ crt_shader: CRTShader (extends ColorRect) — CRT post-process on CanvasLayer(10)
 ```
 
-## Scene Tree (main.tscn)
+## 场景树 (Scene Tree - main.tscn)
 
 ```
 Main (Control, fullrect) [main.gd]
@@ -71,110 +72,109 @@ Main (Control, fullrect) [main.gd]
    └─ CRTShader (ColorRect) [crt_shader.gd] — crt_effect.gdshader
 ```
 
-## Script Reference
+## 脚本参考 (Script Reference)
 
-### Core Scripts (`res://scripts/`)
-
-| File | Class | Lines | Purpose |
-|---|---|---|---|
-| main.gd | — | 2209 | God object: init, input routing, mode management, UI updates, media, effects |
-| file_system.gd | FileSystem | 472 | Virtual FS tree (FSNode), permissions, clearance, ambient sounds, path utils |
-| command_handler.gd | CommandHandler | 2346 | CLI command registry (desktop/disc/global), history, tab-complete, all `_cmd_*` handlers |
-| story_loader.gd | StoryLoader | 708 | Parse .scp ZIP files, detect encoding (UTF-8/GBK), build manifest+filesystem |
-| disc_manager.gd | DiscManager | 698 | Scan vdisc/, load/eject stories, mod support, auto-save |
-| crtml_parser.gd | CrtmlParser | 1263 | Markdown→BBCode: headings, bold, italic, spoilers, tables, media tags, effect tags, page breaks |
-| typewriter.gd | Typewriter | 520 | Queued text output with char-by-char typing, inline FX triggers, progress bars |
-| save_manager.gd | SaveManager | 228 | Per-user per-story JSON save/load, auto-save |
-| user_manager.gd | UserManager | 856 | Multi-user accounts, login/register/passwd, profiles, stats, story progress |
-| audio_manager.gd | AudioManager | 586 | Ambient(crossfade)/SFX/Media players, ducking, spectrum analyzer, load from bytes (MP3/OGG/WAV) |
-| crt_shader.gd | — | 416 | CRT post-process: glitch, shake, tear, boot/shutdown, noise burst, blackout |
-| theme_manager.gd | ThemeManager | 518 | 4 themes, color palette (ThemeColors), CRT/background/logo shader refresh |
-| boot_sequence.gd | BootSequence | 813 | JSON-driven keyframe boot/shutdown: screen_off/on, text, glitch, progress, audio |
-| loading_screen.gd | LoadingScreen | 543 | Disc loading keyframe animation (custom via loading_screen.json or built-in default) |
-| trigger_system.gd | TriggerSystem | 726 | Event triggers: enter_dir, open_file, command, idle, level_change → actions (mail, glitch, lock, etc.) |
-| mail_system.gd | MailSystem | 891 | Mail inbox, delayed delivery, global+per-story mail, blink notification |
-| effect_system.gd | EffectSystem | 451 | Timeline effect sequences (glitch, shake, sound, text, reboot, brightness, etc.) |
-| effect_settings.gd | EffectSettings | 175 | Effect intensity levels (full/mild/off), photosensitive mode |
-| settings/settings_manager.gd | SettingsManager | 903 | Registry-based settings system with categories, TUI interface, import/export |
-| settings/settings_registry.gd | — | — | Setting definitions registration |
-| settings/settings_storage.gd | — | — | JSON storage backend for settings |
-| header_parser.gd | HeaderParser | 247 | Parse file headers (metadata block between markers) |
-| cipher_decoder.gd | CipherDecoder | 584 | Caesar, Vigenere, substitution, base64, morse, ROT13, atbash, reverse |
-| morse_engine.gd | MorseEngine | 347 | Morse encode/decode, playback events, numbers station mode |
-| radio_audio_generator.gd | RadioAudioGenerator | 311 | Procedural noise/tone/SSTV audio generation |
-| radio_config_parser.gd | RadioConfigParser | 319 | Parse radio signal definitions from config/manifest; RadioSignal class with hidden, content_audio, proximity_range |
-| radio_signal_manager.gd | RadioSignalManager | 344 | Signal database, quality calc (progressive proximity), discovery, bookmarks, scan |
-| sstv_decoder.gd | SSTVDecoder | 310 | SSTV image receive simulation with scanline noise |
-| package_manager.gd | PackageManager | 817 | Mod system: install/uninstall .scp mods, hook dispatch, mod lifecycle |
-| ui_manager.gd | UIManager | 466 | Procedural UI style: cursors, scrollbar, panel themes, font setup |
-| ui_sound.gd | UiSound | 200 | Procedural SFX: keystroke, enter, backspace, HDD read, click |
-| profile_builder.gd | ProfileBuilder | 242 | Build 3-page profile card for doc_viewer |
-| video_player.gd | VideoPlayerViewer | 748 | Video overlay with controls, ffmpeg fallback support |
-| daily_dialogue_manager.gd | DailyDialogueManager | 414 | Per-day dialogue/mail triggers, main storyline loading |
-| env_monitor.gd | EnvMonitor | 919 | Environmental simulation: sensors, weather, events, anomalies, daily seed |
-| env_task_manager.gd | EnvTaskManager | 697 | Daily task checklist: inspection, recording, calibration, reporting |
-| camera_feed.gd | CameraFeed | 320 | Single camera data model: base/depth/light/anomaly images, lens params |
-| camera_manager.gd | CameraManager | 435 | Camera registry, unlock/lock, anomaly triggers, save/load, image loading |
-
-### Viewer/Overlay Scripts
+### 核心脚本 (`res://scripts/`)
 
 | File | Class | Lines | Purpose |
 |---|---|---|---|
-| document_viewer.gd | DocumentViewer | 668 | 2-page overlay (left/right RTL), pagination, typing animation |
-| explore_viewer.gd | ExploreViewer | 477 | File tree panel, story progress display |
-| image_viewer.gd | ImageViewer | 634 | Zoomable image viewer, pan, scan effect, _ImageCanvas inner class |
-| oscilloscope.gd | Oscilloscope | 820 | Spectrum analyzer + Lissajous, _ScopeCanvas inner class |
-| radio_receiver.gd | RadioReceiver | 1804 | Full radio UI: tuning, bands, morse decode, SSTV, audio station, hidden signals, waterfall, _RadioCanvas inner class |
-| decode_viewer.gd | DecodeViewer | 1456 | Cipher decode animation viewer, _DecodeCanvas inner class |
-| env_viewer.gd | EnvViewer | 557 | Environmental data panel overlay, 6 pages, _EnvCanvas inner class |
-| camera_viewer.gd | CameraViewer | 656 | CCTV fullscreen overlay, shader-rendered surveillance feed, pan/switch controls |
+| main.gd | — | 2208 | 上帝对象：初始化、输入路由、模式管理、UI 更新、媒体、效果 |
+| file_system.gd | FileSystem | 472 | 虚拟文件系统树（FSNode）、权限、安全等级、环境音、路径工具 |
+| command_handler.gd | CommandHandler | 2346 | CLI 命令注册（桌面/故事盘/全局）、历史、Tab 补全、所有 `_cmd_*` 处理器 |
+| story_loader.gd | StoryLoader | 708 | 解析 .scp ZIP 文件、编码检测（UTF-8/GBK）、构建 manifest + 文件系统 |
+| disc_manager.gd | DiscManager | 698 | 扫描 vdisc/、加载/弹出故事、Mod 支持、自动存档 |
+| crtml_parser.gd | CrtmlParser | 1262 | Markdown→BBCode：标题、粗体、斜体、剧透、表格、媒体标签、效果标签、分页 |
+| typewriter.gd | Typewriter | 520 | 排队式文本输出，逐字打字、内联效果触发、进度条 |
+| save_manager.gd | SaveManager | 228 | 每用户每故事 JSON 存档/读档、自动存档 |
+| user_manager.gd | UserManager | 853 | 多用户账户、登录/注册/改密、个人资料、统计、故事进度 |
+| audio_manager.gd | AudioManager | 586 | 环境音（交叉淡化）/音效/媒体播放器、ducking、频谱分析、字节加载 |
+| crt_shader.gd | — | 416 | CRT 后处理：glitch/shake/tear/开关机/noise burst/blackout |
+| theme_manager.gd | ThemeManager | 517 | 4 种主题配色（ThemeColors）、CRT/背景/logo 着色器参数刷新 |
+| boot_sequence.gd | BootSequence | 809 | JSON 关键帧驱动开机/关机动画：黑屏/亮屏/文本/故障/进度条/音频 |
+| loading_screen.gd | LoadingScreen | 543 | 磁盘加载关键帧动画（支持 loading_screen.json 自定义或内置默认） |
+| trigger_system.gd | TriggerSystem | 726 | 事件触发器：进目录/开文件/命令/空闲/等级变化 → 28 种动作 |
+| mail_system.gd | MailSystem | 891 | 邮件收件箱、延迟投递、全局+故事盘邮件、闪烁通知 |
+| effect_system.gd | EffectSystem | 451 | 时间轴效果序列（glitch/shake/sound/text/reboot/brightness 等） |
+| effect_settings.gd | EffectSettings | 175 | 效果强度等级（full/mild/off）、光敏模式 |
+| settings/settings_manager.gd | SettingsManager | 903 | 注册式设置系统：分类、TUI 界面、导入/导出 |
+| settings/settings_registry.gd | — | 225 | 内置设置定义注册（所有默认分类和设置项） |
+| settings/settings_storage.gd | — | 165 | JSON 存储后端：全局 + 用户级、版本迁移 |
+| header_parser.gd | HeaderParser | 247 | 文件头部解析（标记块中的元数据） |
+| cipher_decoder.gd | CipherDecoder | 584 | 凯撒、维吉尼亚、替换、Base64、摩斯、ROT13、Atbash、反转 |
+| morse_engine.gd | MorseEngine | 347 | 摩斯码编解码、播放事件、数字站模式 |
+| radio_audio_generator.gd | RadioAudioGenerator | 311 | 程序化噪声/音调/SSTV 音频生成 |
+| radio_config_parser.gd | RadioConfigParser | 319 | 解析无线电信号定义（配置/manifest）；RadioSignal 数据类 |
+| radio_signal_manager.gd | RadioSignalManager | 344 | 信号数据库、质量计算（渐进接近）、发现跟踪、书签、扫描 |
+| sstv_decoder.gd | SSTVDecoder | 310 | SSTV 图像接收模拟，带扫描线噪声 |
+| package_manager.gd | PackageManager | 817 | Mod 系统：安装/卸载 .scp Mod、钩子分发、Mod 生命周期 |
+| ui_manager.gd | UIManager | 466 | 程序化 UI 样式：光标、滚动条、面板主题、字体设置 |
+| ui_sound.gd | UiSound | 200 | 程序化音效：按键/回车/退格/硬盘读取/点击 |
+| profile_builder.gd | ProfileBuilder | 242 | 构建 3 页用户资料卡片 |
+| video_player.gd | VideoPlayerViewer | 750 | 视频播放覆盖层，含控件，ffmpeg 回退支持 |
+| daily_dialogue_manager.gd | DailyDialogueManager | 415 | 每日对话/邮件触发管理、主线剧情加载、故事标记持久化 |
+| env_monitor.gd | EnvMonitor | 919 | 环境模拟：传感器、天气、事件、异常、每日种子 |
+| env_task_manager.gd | EnvTaskManager | 697 | 每日任务清单：检查、读数、校准、报告 |
+| camera_feed.gd | CameraFeed | 320 | 单摄像头数据模型：底图/深度图/照明/异常图像、镜头参数 |
+| camera_manager.gd | CameraManager | 435 | 摄像头注册中心、解锁/锁定、异常触发、存档/读档、图像加载 |
 
-### Comm System (`res://comm_system/`)
+### 查看器/覆盖层脚本 (Viewer/Overlay Scripts)
 
-| File | Class | Lines | Purpose |
+| 文件 | 类名 | 行数 | 用途 |
 |---|---|---|---|
-| comm_manager.gd | CommManager | 1259 | Dialogue orchestration, call routing, tutorial flow, `comm` command handler |
-| comm_dialogue_player.gd | CommDialoguePlayer | 377 | Dialogue playback engine (line-by-line, choices, conditions, slides, silent stop) |
-| comm_character.gd | CommCharacter | 426 | Lightweight character data model (identity, voice, state, delegates to animator) |
-| character_registry.gd | CharacterRegistry | 297 | Character lifecycle, registration (builtin/disc/mod sources) |
-| character_asset_library.gd | CharacterAssetLibrary | 420 | Asset profiles, modular texture loading (res:// + virtual FS) |
-| character_animator.gd | CharacterAnimator | 387 | Animation engine (mouth, blink, action, layer overrides, costumes) |
-| call_handler.gd | CallHandler | 285 | Call mode handler: SILENT/FORCED/ANSWERABLE ring + answer flow |
-| presentation_overlay.gd | PresentationOverlay | 295 | Presentation mode slide overlay (image display, fit/align, transitions) |
-| comm_sprite_renderer.gd | — | 181 | Character sprite rendering (card mode) |
-| comm_ui.gd | CommUI | 1289 | Comm overlay UI (dialogue bar, card/meeting/presentation mode, history) |
-| comm_voice.gd | — | 188 | Procedural voice synthesis (sine/square/saw tones) |
-| dial_manager.gd | DialManager | 831 | DTMF dial state machine, voice call routing, modem handshake/download, phonebook |
-| dial_tone_generator.gd | DialToneGenerator | 376 | Procedural audio: DTMF keys, ringback, busy tone, modem handshake, data noise, hangup, ring |
+| document_viewer.gd | DocumentViewer | 668 | 双页覆盖层（左/右 RTL），分页，打字动画 |
+| explore_viewer.gd | ExploreViewer | 477 | 文件树面板，故事进度显示 |
+| image_viewer.gd | ImageViewer | 634 | 可缩放图像查看器，平移，扫描效果，_ImageCanvas 内部类 |
+| oscilloscope.gd | Oscilloscope | 820 | 频谱分析器 + 李萨如图形，_ScopeCanvas 内部类 |
+| radio_receiver.gd | RadioReceiver | 1804 | 完整无线电 UI：调谐/频段/摩斯解码/SSTV/音频电台/隐藏信号/瀑布图，_RadioCanvas 内部类 |
+| decode_viewer.gd | DecodeViewer | 1456 | 密码解码动画查看器，_DecodeCanvas 内部类 |
+| env_viewer.gd | EnvViewer | 557 | 环境数据面板覆盖层，6 页，_EnvCanvas 内部类 |
+| camera_viewer.gd | CameraViewer | 656 | CCTV 全屏覆盖层，shader 渲染监控画面，平移/切换控制 |
 
-### Mod System (`res://modder/`)
+### 通讯系统 (`res://comm_system/`)
 
-| File | Class | Purpose |
+| 文件 | 类名 | 行数 | 用途 |
+|---|---|---|---|
+| comm_manager.gd | CommManager | 1259 | 对话编排、通话路由、教程流程、`comm` 命令处理 |
+| comm_ui.gd | CommUI | 1289 | 通讯覆盖层 UI（对话条、卡片/会议/演示模式、历史记录） |
+| dial_manager.gd | DialManager | 831 | DTMF 拨号状态机、语音通话路由、调制解调器握手/下载、电话簿 |
+| comm_character.gd | CommCharacter | 426 | 轻量角色数据模型（身份/语音/状态，委托给 animator） |
+| character_asset_library.gd | CharacterAssetLibrary | 420 | 素材配置库、模块化纹理加载（res:// + 虚拟 FS） |
+| character_animator.gd | CharacterAnimator | 387 | 动画引擎（口型/眨眼/动作帧/图层覆盖/服装） |
+| comm_dialogue_player.gd | CommDialoguePlayer | 377 | 对话播放引擎（逐行/选项/条件/幻灯片/静默停止） |
+| dial_tone_generator.gd | DialToneGenerator | 376 | 程序化音频：DTMF 按键/回铃/忙音/调制解调器/挂断/来电铃声 |
+| character_registry.gd | CharacterRegistry | 297 | 角色生命周期、注册（内置/故事盘/Mod 来源） |
+| presentation_overlay.gd | PresentationOverlay | 295 | 演示模式幻灯片覆盖层（图片显示/适配/对齐/过渡） |
+| comm_voice.gd | — | 188 | 程序化语音合成（正弦/方波/锯齿波） |
+| comm_sprite_renderer.gd | — | 181 | 角色精灵渲染（卡片模式） |
+
+### Mod 系统 (`res://modder/`)
+
+| 文件 | 类名 | 行数 | 用途 |
+|---|---|---|---|
+| mod_api.gd | ModAPI | 1075 | 沙盒 API：16 类功能（输出/文件/命令/音频/效果/通讯/环境等） |
+| mod_base.gd | ModBase | 92 | Mod 基类：生命周期钩子 + 事件回调 |
+
+### 文档模板 (`res://templates/`)
+
+| 文件 | 行数 | 用途 |
 |---|---|---|
-| mod_api.gd | ModAPI | 1075-line API surface for mods: output, FS access, commands, audio, effects, UI, comm, etc. |
-| mod_base.gd | ModBase | Base class for mods: lifecycle hooks (_on_install, _on_enable, _process, event callbacks) |
+| article_viewer.gd | 466 | 文章样式文档模板（单页滚动） |
+| chat_viewer.gd | 823 | 聊天记录模板（多角色对话） |
+| email_viewer.gd | 788 | 邮件模板（含发件人信息栏） |
+| two_page_reader.gd | 571 | 双页书籍模板（左/右翻页） |
 
-### Templates (`res://templates/`)
+## 着色器 (Shaders)
 
-| File | Lines | Purpose |
-|---|---|---|
-| article_viewer.gd | 466 | Article-style document template |
-| chat_viewer.gd | 823 | Chat log template |
-| email_viewer.gd | 788 | Email template |
-| two_page_reader.gd | 571 | Two-page book template |
-
-## Shaders
-
-| File | Purpose |
+| 文件 | 用途 |
 |---|---|
-| shaders/crt_effect.gdshader | CRT post-process (scanlines, curvature, chromatic aberration, noise, brightness, shake offset) |
-| shaders/background_vignette.gdshader | Background vignette effect |
-| shaders/background_logo.gdshader | SCP logo background effect |
-| camera_system/camera_effect.gdshader | CCTV surveillance shader: depth parallax, 3 light modes (spotlight/nightvision/infrared), noise, scanlines, signal interference, anomaly blend |
+| shaders/crt_effect.gdshader | CRT 后处理（扫描线/弯曲/色差/噪声/亮度/抖动偏移） |
+| shaders/background_vignette.gdshader | 背景暗角效果 |
+| shaders/background_logo.gdshader | SCP logo 背景效果 |
+| camera_system/camera_effect.gdshader | CCTV 监控着色器：深度视差(POM)/3 种照明/噪声/扫描线/信号干扰/异常混合 |
 
-## Environment Monitoring System
+## 环境监测系统 (Environment Monitoring System)
 
-### Architecture
+### 架构
 ```
 env_monitor.gd (EnvMonitor) — Core simulation + data generation
 ├─ 20+ sensors with Sakhalin baselines (monthly averages)
@@ -199,29 +199,29 @@ env_viewer.gd (EnvViewer) — CRT overlay panel
 └─ Keyboard: ←/→ pages, TAB next, Q/ESC close
 ```
 
-### Sensors (21 parameters)
+### 传感器（21 个参数）
 
-| Category | Sensors |
+| 类别 | 传感器 ID |
 |---|---|
-| Atmosphere | air_temp, humidity, pressure, wind_speed, wind_dir, precipitation, visibility, cloud_cover, light_level, uv_index |
-| Ocean | sea_temp, tide_level, wave_height, salinity |
-| Geophysics | mag_field, mag_declination, radiation, seismic, soil_temp |
-| Composition | o2_concentration, co2_concentration |
+| 大气 (atmosphere, 10) | air_temp, humidity, pressure, wind_speed, wind_dir, precipitation, visibility, cloud_cover, light_level, uv_index |
+| 海洋 (ocean, 4) | sea_temp, tide_level, wave_height, salinity |
+| 地球物理 (geophysics, 5) | mag_field, mag_declination, radiation, seismic, soil_temp |
+| 大气成分 (composition, 2) | o2_concentration, co2_concentration |
 
-### Data Generation
-- Master seed per playthrough + day number → deterministic daily data
-- Monthly baselines interpolated with seasonal transitions
-- Diurnal curves (temperature peaks at 14h, humidity inverse)
-- Weather modifiers (8 patterns with seasonal restrictions)
-- Event modifiers (stackable, with duration)
-- Calibration drift simulation + sensor failure rates
-- Semi-diurnal tidal model (12.42h period)
-- Solar angle-based light/UV calculation
+### 数据生成机制
+- 主种子 + 天数 → 确定性每日数据
+- 月均基准线按季节过渡插值
+- 昼夜曲线（温度 14:00 峰值，湿度反向）
+- 天气修正（8 种模式，含季节限制）
+- 事件修正（可叠加，有持续时间）
+- 传感器校准漂移模拟 + 故障率
+- 半日潮汐模型（12.42 小时周期）
+- 基于太阳角度的光照/UV 计算
 
-### Story Pack Integration
-Manifest key: `"env_config"` — supports overriding: `location`, `sensors`, `baselines`, `weather_patterns`, `anomaly_types`, `events`, `tasks`, `master_seed`.
+### 故事包集成
+Manifest 键名：`"env_config"` — 支持覆盖：`location`、`sensors`、`baselines`、`weather_patterns`、`anomaly_types`、`events`、`tasks`、`master_seed`。
 
-### ModAPI Extensions
+### ModAPI 环境扩展接口
 ```gdscript
 api.env_get_reading(sensor_id)       # Float reading
 api.env_get_all_readings()           # Dict of all readings
@@ -238,53 +238,64 @@ api.env_can_advance()                # Can advance day?
 api.env_get_anomalies()              # Pending anomalies
 ```
 
-## File Index (by size)
+## 文件索引（按行数排序）
 
 ```
-scripts/command_handler.gd|2346  scripts/main.gd|2209  radio/radio_receiver.gd|1804
-scripts/decode_viewer.gd|1456  scripts/crtml_parser.gd|1263  comm_system/comm_manager.gd|1259
-comm_system/comm_ui.gd|1289  modder/mod_api.gd|1075  env_system/env_monitor.gd|919
-settings/settings_manager.gd|903  scripts/mail_system.gd|891  scripts/user_manager.gd|856
-comm_system/dial_manager.gd|831  scripts/oscilloscope.gd|820  scripts/package_manager.gd|817
-scripts/boot_sequence.gd|813  templates/chat_viewer.gd|823  templates/email_viewer.gd|788
-scripts/video_player.gd|748  scripts/trigger_system.gd|726  scripts/story_loader.gd|708
-env_system/env_task_manager.gd|697  scripts/disc_manager.gd|698  camera_system/camera_viewer.gd|656
-scripts/document_viewer.gd|668  scripts/image_viewer.gd|634  scripts/audio_manager.gd|586
-scripts/cipher_decoder.gd|584  templates/two_page_reader.gd|571  env_system/env_viewer.gd|557
-scripts/loading_screen.gd|543  scripts/typewriter.gd|520  scripts/theme_manager.gd|518
-scripts/explore_viewer.gd|477  scripts/file_system.gd|472  scripts/ui_manager.gd|466
-templates/article_viewer.gd|466  scripts/effect_system.gd|451  camera_system/camera_manager.gd|435
-comm_system/character_asset_library.gd|420  comm_system/comm_character.gd|426
-scripts/crt_shader.gd|416  scripts/daily_dialogue_manager.gd|414
+scripts/command_handler.gd|2346  scripts/main.gd|2208  radio/radio_receiver.gd|1804
+scripts/decode_viewer.gd|1456  comm_system/comm_ui.gd|1289
+scripts/crtml_parser.gd|1262  comm_system/comm_manager.gd|1259
+modder/mod_api.gd|1075  env_system/env_monitor.gd|919
+settings/settings_manager.gd|903  scripts/mail_system.gd|891
+scripts/user_manager.gd|853  comm_system/dial_manager.gd|831
+templates/chat_viewer.gd|823  scripts/oscilloscope.gd|820
+scripts/package_manager.gd|817  scripts/boot_sequence.gd|809
+templates/email_viewer.gd|788  scripts/video_player.gd|750
+scripts/trigger_system.gd|726  scripts/story_loader.gd|708
+scripts/disc_manager.gd|698  env_system/env_task_manager.gd|697
+scripts/document_viewer.gd|668  camera_system/camera_viewer.gd|656
+scripts/image_viewer.gd|634  scripts/audio_manager.gd|586
+scripts/cipher_decoder.gd|584  templates/two_page_reader.gd|571
+env_system/env_viewer.gd|557  scripts/loading_screen.gd|543
+scripts/typewriter.gd|520  scripts/theme_manager.gd|517
+scripts/explore_viewer.gd|477  scripts/file_system.gd|472
+scripts/ui_manager.gd|466  templates/article_viewer.gd|466
+scripts/effect_system.gd|451  camera_system/camera_manager.gd|435
+comm_system/comm_character.gd|426  comm_system/character_asset_library.gd|420
+scripts/crt_shader.gd|416  scripts/daily_dialogue_manager.gd|415
 comm_system/character_animator.gd|387  comm_system/comm_dialogue_player.gd|377
-comm_system/dial_tone_generator.gd|376  radio/radio_signal_manager.gd|344
-scripts/morse_engine.gd|347  radio/radio_config_parser.gd|319  camera_system/camera_feed.gd|320
-radio/radio_audio_generator.gd|311  scripts/sstv_decoder.gd|310  radio/radio_data_manager.gd|302
+comm_system/dial_tone_generator.gd|376  scripts/morse_engine.gd|347
+radio/radio_signal_manager.gd|344  camera_system/camera_feed.gd|320
+radio/radio_config_parser.gd|319  radio/radio_audio_generator.gd|311
+scripts/sstv_decoder.gd|310  radio/radio_data_manager.gd|302
 comm_system/character_registry.gd|297  comm_system/presentation_overlay.gd|295
-comm_system/call_handler.gd|285  scripts/header_parser.gd|247  scripts/profile_builder.gd|242
-scripts/save_manager.gd|228  scripts/ui_sound.gd|200  comm_system/comm_voice.gd|188
-comm_system/comm_sprite_renderer.gd|181  scripts/effect_settings.gd|175
+comm_system/call_handler.gd|285  scripts/header_parser.gd|247
+scripts/profile_builder.gd|242  scripts/save_manager.gd|228
+settings/settings_registry.gd|225  scripts/ui_sound.gd|200
+comm_system/comm_voice.gd|188  comm_system/comm_sprite_renderer.gd|181
+scripts/effect_settings.gd|175  settings/settings_storage.gd|165
 modder/mod_base.gd|92
+总计: ~41,225 行
 ```
 
-## Module Status
+## 模块状态 (Module Status)
 
-| Module | Status | Notes |
+| 模块 | 状态 | 说明 |
 |---|---|---|
-| Core Terminal | ✅ Complete | CLI, themes, CRT effects |
-| File System | ✅ Complete | Virtual FS, permissions, clearance |
-| Story Loading | ✅ Complete | ZIP parsing, GBK support |
-| User System | ✅ Complete | Multi-user, profiles, stats |
-| Save System | ✅ Complete | Per-user per-story |
-| Comm System | ✅ Complete | Dialogues, characters, call modes (silent/forced/answerable), card/meeting/presentation display, layered sprites, history, video calls |
-| Mail System | ✅ Complete | Inbox, delayed delivery |
-| Radio System | ✅ Complete | Tuning, morse, SSTV, audio stations, hidden signals, waterfall, progressive perception |
-| Mod System | ✅ Complete | Install, lifecycle, API |
-| Settings | ✅ Complete | Registry, TUI, import/export |
-| Triggers | ✅ Complete | Event-driven actions |
-| Effects | ✅ Complete | Timeline sequences, presets |
-| Viewers | ✅ Complete | Image, audio, video, decode, explore |
-| CRTML | ✅ Complete | Full markup parser |
-| Dial System | ✅ Complete | DTMF dialing, voice call routing, modem handshake + HTTP download, phonebook, preset + story directory loading |
-| Env Monitor | ✅ Complete | Environmental simulation, daily seed, Sakhalin baselines, weather, anomalies, daily tasks, viewer overlay |
-| Camera System | ✅ Complete | CCTV surveillance: base/depth/light/anomaly images, shader pipeline, 3 light modes, anomaly system, trigger integration |
+| 核心终端 | ✅ 完成 | CLI 输入/输出、主题、CRT 效果 |
+| 虚拟文件系统 | ✅ 完成 | 目录树、权限、安全等级 |
+| 故事加载 | ✅ 完成 | ZIP 解析、GBK 编码支持 |
+| 用户系统 | ✅ 完成 | 多用户、个人资料、统计 |
+| 存档系统 | ✅ 完成 | 每用户每故事独立存档 |
+| 通讯系统 | ✅ 完成 | 对话/角色/来电模式(SILENT/FORCED/ANSWERABLE)/卡片/会议/演示/分层精灵/历史/视频 |
+| 邮件系统 | ✅ 完成 | 收件箱、延迟投递、持久/临时、内联投递 |
+| 无线电系统 | ✅ 完成 | 调谐/摩斯码/SSTV/音频电台/隐藏信号/瀑布图/渐进感知 |
+| Mod 系统 | ✅ 完成 | 安装/卸载、生命周期、16 类 API |
+| 设置系统 | ✅ 完成 | 注册式、TUI 界面、导入/导出 |
+| 触发器系统 | ✅ 完成 | 28 种事件驱动动作 |
+| 效果系统 | ✅ 完成 | 时间轴效果序列、预设 |
+| 查看器 | ✅ 完成 | 图片/音频/视频/密码解码/文件探索 |
+| CRTML 解析 | ✅ 完成 | 完整标记解析器（结构/格式/效果/媒体） |
+| 拨号系统 | ✅ 完成 | DTMF/语音路由/调制解调器握手下载/电话簿 |
+| 环境监测 | ✅ 完成 | 21 传感器/天气/事件/异常/每日任务/仪表盘 |
+| 摄像头系统 | ✅ 完成 | CCTV 监控：底图/深度/照明/异常/shader 管线/3 种照明/POM 视差/触发器集成 |
+| 每日对话 | ✅ 完成 | 7 种触发钩子/故事标记/选择持久化/对话扩展加载 |
