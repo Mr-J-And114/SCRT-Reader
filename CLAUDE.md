@@ -2,7 +2,7 @@
 
 > **给 AI 助手的第一条指令**：本文件是项目入口文档。每次接手任务前，先通读本文件。
 > 修改代码后，**必须**同步更新相关的 CLAUDE.md 和 docs/ 文档（行数、API、命令列表等）。
-> 本文件最后更新：2026-03-28。
+> 本文件最后更新：2026-03-29。
 
 ---
 
@@ -11,25 +11,27 @@
 ```
 CLAUDE.md  ← 你在这里（项目总览 + AI 工作规范）
 │
-├─ docs/                          ← 人类可读的详细文档
+├─ DEVELOPMENT_STATUS.md          ← 开发进度总结（代码实现 vs 设计规划的完整对照）
+│
+├─ docs/                          ← 详细文档（面向 AI + 人类开发者）
 │  ├─ architecture.md             ← 依赖图、场景树、全脚本索引（含行数）
-│  ├─ data-formats.md             ← .scp 格式、CRTML、加载画面、存档、拨号
-│  ├─ extension-guide.md          ← 添加新功能的 7 步流程 + 完整命令列表
-│  ├─ design-doc.txt              ← 游戏设计文档（28 天剧情规划、角色、结局）
-│  ├─ story-authoring-guide.txt   ← 故事包制作指南（面向非程序员）
-│  ├─ character-system-guide.md   ← 角色精灵/动画系统
-│  ├─ bgm-descriptions.md         ← 背景音乐设计说明
-│  ├─ loading-screen-guide.md     ← 自定义加载画面制作
-│  └─ camera-asset-guide.txt      ← 摄像头/CCTV 素材制作
+│  ├─ data-formats.md             ← .scp 格式、CRTML 标记语法、加载画面、存档、拨号格式
+│  ├─ extension-guide.md          ← 添加新功能的 7 步流程 + 完整命令列表 + 生命周期
+│  ├─ design-doc.txt              ← 游戏设计文档（28 天剧情规划、角色、4 种结局）
+│  ├─ story-authoring-guide.txt   ← 故事包制作指南（面向非程序员，纯中文）
+│  ├─ character-system-guide.md   ← 角色精灵/动画系统（素材规范 + 对话标记）
+│  ├─ bgm-descriptions.md         ← 背景音乐印象描述（20 首，供 AI 音乐生成）
+│  ├─ loading-screen-guide.md     ← 自定义加载画面制作（关键帧时间轴）
+│  └─ camera-asset-guide.txt      ← 摄像头/CCTV 素材制作（底图/深度图/照明图）
 │
 ├─ SCRT/scripts/CLAUDE.md         ← 核心脚本索引（行数、模式标志、架构模式）
-├─ SCRT/comm_system/CLAUDE.md     ← 通讯/对话/角色/拨号系统
-├─ SCRT/camera_system/CLAUDE.md   ← CCTV 摄像头 + shader 管线
-├─ SCRT/radio/CLAUDE.md           ← 无线电接收/摩斯/SSTV/音频电台
-├─ SCRT/env_system/CLAUDE.md      ← 环境监测（21 传感器、任务、天气）
-├─ SCRT/settings/CLAUDE.md        ← 设置注册/存储系统
-├─ SCRT/modder/CLAUDE.md          ← Mod API/生命周期
-└─ SCRT/templates/CLAUDE.md       ← 文档查看器模板（article/chat/email/two_page）
+├─ SCRT/comm_system/CLAUDE.md     ← 通讯系统（对话/角色/拨号/来电/演示模式）
+├─ SCRT/camera_system/CLAUDE.md   ← CCTV 监控（摄像头注册 + shader 渲染管线）
+├─ SCRT/radio/CLAUDE.md           ← 无线电系统（摩斯码/SSTV/音频电台/渐进感知）
+├─ SCRT/env_system/CLAUDE.md      ← 环境监测（21 传感器、每日任务、天气模拟）
+├─ SCRT/settings/CLAUDE.md        ← 设置系统（注册式设置 + TUI 渲染 + JSON 持久化）
+├─ SCRT/modder/CLAUDE.md          ← Mod 系统（沙盒 API + 生命周期钩子 + 跨 Mod 通信）
+└─ SCRT/templates/CLAUDE.md       ← 文档模板（article/chat/email/two_page 四种布局）
 ```
 
 **阅读策略**：根据任务类型选择性阅读：
@@ -38,6 +40,7 @@ CLAUDE.md  ← 你在这里（项目总览 + AI 工作规范）
 - 写剧情 → `docs/story-authoring-guide.txt` + `docs/design-doc.txt`
 - 改 UI/效果 → 本文件 + `SCRT/scripts/CLAUDE.md`
 - 全局了解 → 本文件 + `docs/architecture.md`
+- 查进度 → `DEVELOPMENT_STATUS.md`
 
 ---
 
@@ -57,18 +60,18 @@ CLAUDE.md  ← 你在这里（项目总览 + AI 工作规范）
 
 ### 目录结构
 ```
-SCRT/                        Godot 项目根目录
-├─ scripts/                  核心脚本（main.gd ~2209 行，command_handler.gd ~2346 行…）
-├─ comm_system/              通讯系统（13 脚本：对话/角色/拨号/语音/演示）
-├─ camera_system/            CCTV 监控（3 脚本 + 1 shader）
-├─ env_system/               环境监测（3 脚本：监测/任务/查看器）
-├─ radio/                    无线电（radio_receiver ~1804 行 + 5 支持脚本）
-├─ settings/                 设置系统（3 脚本：管理器/注册表/存储）
-├─ modder/                   Mod 系统（mod_api ~1075 行 + mod_base）
-├─ templates/                文档模板（article/chat/email/two_page）
-├─ shaders/                  着色器（CRT 效果/背景/logo）
-├─ scenes/main.tscn          唯一场景
-├─ data/                     配置与剧情数据
+SCRT/                        Godot 项目根目录（总计约 41,000 行 GDScript）
+├─ scripts/                  核心脚本（27 个文件，main.gd 2208 行、command_handler.gd 2346 行…）
+├─ comm_system/              通讯系统（13 脚本：对话引擎/角色注册/拨号状态机/语音合成/演示覆盖层）
+├─ camera_system/            CCTV 监控（3 脚本 + 1 shader：摄像头注册/查看器/画面数据/监控着色器）
+├─ env_system/               环境监测（3 脚本：传感器模拟 919 行 + 任务管理 697 行 + 仪表盘 557 行）
+├─ radio/                    无线电（radio_receiver 1804 行 + 5 支持脚本：信号管理/配置解析/音频生成/数据管理）
+├─ settings/                 设置系统（3 脚本：管理器 903 行 + 注册表 225 行 + 存储 165 行）
+├─ modder/                   Mod 系统（mod_api 1075 行提供 16 类沙盒 API + mod_base 92 行基类）
+├─ templates/                文档模板（4 个查看器：article/chat/email/two_page）
+├─ shaders/                  着色器（CRT 后处理/背景暗角/logo 效果）
+├─ scenes/main.tscn          唯一场景（单场景架构）
+├─ data/                     配置与剧情数据（boot_config/dial_directory/radio 信号/主线剧情）
 ├─ addons/agent/             编辑器内 AI 插件（⚠️ 不要修改）
 └─ vdisc/                    故事盘 (.scp) 存放目录
 ```
@@ -82,12 +85,13 @@ comm_mgr.setup(self, fs, T)  # self=main, fs=FileSystem, T=ThemeColors
 - 管理器 extends RefCounted（需要 `_process` 的 extends Node）
 - **无 Autoload/Singleton**，所有引用通过构造注入
 
-### 输入优先级链（main.gd 中 _input 路由）
+### 输入优先级链（main.gd 中 `_input` 路由）
 ```
-_booting > _shutting_down > _comm_active > _viewer_active > _camera_mode >
-_radio_mode > _env_mode > _explore_mode > _decode_mode > _password_mode >
-_login_mode > [normal terminal input]
+Mod 输入 > 来电铃声 > 通讯对话 > 示波器 > 图片查看 > 视频播放 >
+无线电 > 环境仪表盘 > CCTV 监控 > 密码解码 > 文档模板查看器 >
+文档查看 > 文件探索 > [普通终端输入]
 ```
+注意：代码中使用具体标志（`_oscilloscope_mode`、`_radio_mode` 等）或 `.is_active` 属性检查。
 
 ---
 
@@ -125,7 +129,7 @@ _login_mode > [normal terminal input]
 
 ## 四、重要陷阱（GOTCHAS）
 
-1. **main.gd 是上帝对象**（~2209 行）——所有 `_process` 和 `_input` 路由都在此
+1. **main.gd 是上帝对象**（2208 行）——所有 `_process` 和 `_input` 路由都在此
 2. **dial_mgr 后台运行**，状态机：IDLE → DTMF → RINGING → VOICE/MODEM → ENDED → IDLE
 3. **.scp 文件是 ZIP**，编码检测：UTF-8 优先，GBK 回退
 4. **vdisc 路径差异**：编辑器用 `res://vdisc/`，导出版用 `./vdisc/`

@@ -1,80 +1,102 @@
-# scripts/ — Core Scripts
+# scripts/ — 核心脚本 (Core Scripts)
 
 > 上级文档：[/CLAUDE.md](/CLAUDE.md) | 详细索引：[/docs/architecture.md](/docs/architecture.md)
 > 修改脚本后请同步更新本文件中的行数和文件列表。
 
-This directory contains all core logic scripts. `main.gd` is the central
-god object (~2209 lines) that owns all manager instances.
+本目录包含所有核心逻辑脚本。`main.gd` 是中央上帝对象（2208 行），拥有所有管理器实例。
+共 27 个脚本文件，总计约 22,000 行。
 
-## Key Files by Size (largest = most complex)
+## 按行数排列的文件索引（行数大 = 复杂度高）
 
-| File | Lines | Role |
+| 文件 | 行数 | 用途 |
 |---|---|---|
-| command_handler.gd | 2346 | CLI command registry, all `_cmd_*` handlers |
-| main.gd | 2209 | Init, input routing, mode management, UI, effects |
-| decode_viewer.gd | 1456 | Cipher decoder UI overlay, _DecodeCanvas inner class |
-| crtml_parser.gd | 1263 | Markdown-like markup → BBCode conversion |
-| env_monitor.gd* | 919 | Environmental simulation (in env_system/) |
-| mail_system.gd | 891 | Inbox, delayed delivery, global+per-story mail |
-| user_manager.gd | 856 | Multi-user accounts, profiles, stats |
-| oscilloscope.gd | 820 | Audio visualizer (spectrum/Lissajous), _ScopeCanvas |
-| package_manager.gd | 817 | Mod install/uninstall/runtime |
-| boot_sequence.gd | 813 | JSON keyframe boot/shutdown animations |
-| video_player.gd | 748 | Video playback overlay with ffmpeg fallback |
-| trigger_system.gd | 726 | Event triggers: conditions → actions |
-| story_loader.gd | 708 | ZIP parser, UTF-8/GBK encoding detection |
-| disc_manager.gd | 698 | Virtual disc: load/mount .scp, loading screen, desktop welcome |
-| document_viewer.gd | 668 | 2-page overlay, pagination, typing animation |
-| image_viewer.gd | 634 | Full-screen CRT image viewer, _ImageCanvas |
-| audio_manager.gd | 586 | Ambient/SFX/Media players, ducking, spectrum |
-| cipher_decoder.gd | 584 | Caesar, Vigenere, Base64, Morse, ROT13, Atbash |
-| loading_screen.gd | 543 | Keyframe-driven disc loading animation (custom + default) |
-| typewriter.gd | 520 | Character-by-character output, queue, progress bar |
-| theme_manager.gd | 518 | Color schemes, shader parameters |
-| explore_viewer.gd | 477 | File tree panel, story progress display |
-| file_system.gd | 472 | Virtual filesystem: paths, permissions, passwords |
-| ui_manager.gd | 466 | UI init: background, fonts, cursor |
-| effect_system.gd | 451 | Timeline-driven effect orchestration |
-| crt_shader.gd | 416 | CRT post-process effects controller |
-| daily_dialogue_manager.gd | 414 | Per-day dialogue/mail triggers |
-| morse_engine.gd | 347 | Morse encode/decode, playback events |
-| sstv_decoder.gd | 310 | SSTV image receive simulation |
-| header_parser.gd | 247 | Parse file headers (template, title, password) |
-| profile_builder.gd | 242 | User profile display (3 pages) |
-| save_manager.gd | 228 | Save/load paths, directory management |
-| ui_sound.gd | 200 | Terminal SFX: keystroke, error, HDD read |
-| effect_settings.gd | 175 | Effect intensity (FULL/MILD/OFF) + photosensitive |
+| command_handler.gd | 2346 | CLI 命令注册中心，所有 `_cmd_*` 处理器（全局 36 + 桌面 7 + 故事盘 11） |
+| main.gd | 2208 | 初始化、输入路由、模式管理、UI 更新、媒体播放、效果触发 |
+| decode_viewer.gd | 1456 | 密码解码 UI 覆盖层，内含 _DecodeCanvas 内部类 |
+| crtml_parser.gd | 1262 | Markdown 风格标记 → BBCode 转换（含内联效果标记解析） |
+| mail_system.gd | 891 | 收件箱系统：持久/临时邮件、延迟投递、内联投递、去重 |
+| user_manager.gd | 853 | 多用户账户系统：登录/注册/改密、个人资料、统计信息 |
+| oscilloscope.gd | 820 | 音频可视化器（频谱分析/李萨如图形），内含 _ScopeCanvas |
+| package_manager.gd | 817 | Mod 安装/卸载/运行时生命周期管理 |
+| boot_sequence.gd | 809 | JSON 关键帧驱动的开机/关机动画 |
+| video_player.gd | 750 | 视频播放覆盖层，含控件和 ffmpeg 回退支持 |
+| trigger_system.gd | 726 | 事件触发器：条件（进目录/开文件/执行命令/空闲/等级变化）→ 28 种动作 |
+| story_loader.gd | 708 | ZIP 解析器，UTF-8/GBK 编码检测 |
+| disc_manager.gd | 698 | 虚拟磁盘：加载/挂载 .scp、加载画面、桌面欢迎信息 |
+| document_viewer.gd | 668 | 双页覆盖层，分页，打字动画 |
+| image_viewer.gd | 634 | 全屏 CRT 图像查看器，支持缩放/平移，内含 _ImageCanvas |
+| audio_manager.gd | 586 | 环境音/音效/媒体播放器，ducking、频谱分析、字节加载（MP3/OGG/WAV） |
+| cipher_decoder.gd | 584 | 密码解码算法：凯撒、维吉尼亚、Base64、摩斯、ROT13、Atbash、替换、反转 |
+| loading_screen.gd | 543 | 关键帧驱动的磁盘加载动画（支持自定义 + 默认两种） |
+| typewriter.gd | 520 | 逐字符输出队列，内联效果触发器，进度条 |
+| theme_manager.gd | 517 | 4 种配色方案（绿/琥珀/蓝/白），shader 参数刷新 |
+| explore_viewer.gd | 477 | 文件树浏览面板，故事进度显示 |
+| file_system.gd | 472 | 虚拟文件系统：路径/权限/密码/环境音 |
+| ui_manager.gd | 466 | UI 初始化：背景/字体/光标/滚动条主题化 |
+| effect_system.gd | 451 | 时间轴驱动的效果编排（glitch/shake/sound/text/reboot/brightness 等） |
+| crt_shader.gd | 416 | CRT 后处理效果控制器（glitch/shake/tear/noise/blackout） |
+| daily_dialogue_manager.gd | 415 | 每日对话/邮件触发管理，7 种钩子，故事标记/选择持久化 |
+| morse_engine.gd | 347 | 摩斯码编解码，播放事件回调，数字站模式 |
+| sstv_decoder.gd | 310 | SSTV 图像接收模拟，带扫描线噪声效果 |
+| header_parser.gd | 247 | 文件头部解析（模板类型/标题/密码/元数据） |
+| profile_builder.gd | 242 | 用户资料显示（3 页卡片） |
+| save_manager.gd | 228 | 存档路径管理、目录创建 |
+| ui_sound.gd | 200 | 终端音效：按键声/回车/退格/硬盘读取/点击 |
+| effect_settings.gd | 175 | 效果强度等级 (FULL/MILD/OFF) + 光敏模式 |
 
-## Mode Flags (main.gd input priority order)
+## 输入优先级链（main.gd `_input` + `_on_input_submitted` 中的实际路由顺序）
 
 ```
-_booting > _shutting_down > _comm_active > _viewer_active > _camera_mode >
-_radio_mode > _env_mode > _explore_mode > _decode_mode > _password_mode >
-_login_mode > [normal terminal input]
+_input() 中的拦截顺序：
+1. pkg_mgr.handle_input()        ← Mod 输入捕获最优先
+2. comm_mgr.is_call_ringing()    ← 来电铃声期间吞掉所有按键
+3. comm_mgr.is_active            ← 通讯对话（等命令时放行，否则拦截）
+4. _oscilloscope_mode            ← 示波器
+5. _image_viewer_mode            ← 图片查看器
+6. _video_player_mode            ← 视频播放器
+7. _radio_mode                   ← 无线电接收器
+8. _env_viewer_mode              ← 环境仪表盘
+9. _camera_viewer_mode           ← CCTV 监控
+10. _decode_mode                 ← 密码解码器
+11. article/chat/email/two_page  ← 文档模板查看器（通过 .is_active 检查）
+12. doc_viewer/explore_viewer    ← 文档/探索查看器
+13. [鼠标滚轮/右键等]
+
+_on_input_submitted() 中的拦截顺序：
+1. loading_screen.is_active()    ← 加载画面独占
+2. 各查看器 .is_active           ← 全屏覆盖层阻断终端输入
+3. comm_mgr.is_active            ← 通讯对话
+4. _login_mode / _register_mode / _passwd_mode / _delete_user_mode
+5. _theme_confirm_mode / _password_mode / _file_password_mode
+6. [普通命令分发]
 ```
 
-Each flag gates a section in `main._input()`. If stuck `true`, lower-priority input blocked.
+实际模式标志变量（main.gd 中声明的 `var _*_mode`）：
+`_desktop_mode` `_password_mode` `_file_password_mode` `_theme_confirm_mode`
+`_login_mode` `_register_mode` `_passwd_mode` `_delete_user_mode`
+`_oscilloscope_mode` `_image_viewer_mode` `_video_player_mode`
+`_radio_mode` `_decode_mode` `_env_viewer_mode` `_camera_viewer_mode`
 
-## Patterns
+## 架构模式
 
-- **Managers** extend RefCounted unless they need `_process` (then extend Node)
-- **Viewers** use overlay pattern: Panel on OutputArea, hide input/prompt, restore on close
-  - See `image_viewer.gd`, `oscilloscope.gd` as canonical examples
-  - Custom rendering via `_draw()` in inner `_*Canvas` class
-- **Commands** defined as `_cmd_<name>` methods in `command_handler.gd`
-  - Three dicts: `global_commands`, `desktop_commands`, `disc_commands`
-- **Inline effects** in CRTML text: `{fx:glitch}`, `{fx:shake}`, `{fx:sound=path}`
-- **No autoloads** — all managers created in `main.gd._ready()` with constructor injection
-- **Loading screen** uses BBCode buffer (`_bbcode_buffer`) for reliable in-place rendering.
-  All output goes through the buffer, rendered via `output_text.text = _bbcode_buffer`.
-  Progress bar saves a snapshot of the buffer, then overwrites the last line each frame.
-  During playback, `main._process()` enters exclusive mode (early return) to prevent
-  typewriter/trigger/mail/effect systems from writing to `output_text`.
+- **管理器**继承 RefCounted，除非需要 `_process`（则继承 Node）
+- **查看器**使用覆盖层模式：Panel 覆盖 OutputArea，隐藏 input/prompt，关闭时恢复
+  - 参考 `image_viewer.gd`、`oscilloscope.gd` 作为标准实现
+  - 自定义绘制通过内部 `_*Canvas` 类的 `_draw()` 实现
+- **命令**定义为 `command_handler.gd` 中的 `_cmd_<name>` 方法
+  - 三个字典：`global_commands`、`desktop_commands`、`disc_commands`
+- **内联效果**在 CRTML 文本中使用：`{glitch}`、`{screen_shake}`、`{tear}`、`{noise}`、`{sound=path}`、`{effect=id}`、`{speed=N}`、`{delay=N}` 等（注意：不是 `{fx:}` 前缀）
+- **无 Autoload**——所有管理器在 `main.gd._ready()` 中创建，通过构造注入依赖
+- **加载画面**使用 BBCode 缓冲区（`_bbcode_buffer`）确保可靠的就地渲染。
+  所有输出通过缓冲区，通过 `output_text.text = _bbcode_buffer` 渲染。
+  进度条保存缓冲区快照，每帧覆写最后一行。
+  播放期间 `main._process()` 进入独占模式（提前返回），阻止打字机/触发器/邮件/效果系统写入 `output_text`。
 
-## Adding a New Script
+## 添加新脚本
 
-1. Create class extending RefCounted in this directory
-2. Instantiate in `main.gd._ready()`, pass dependencies via constructor
-3. If it needs per-frame updates, call its `process()` from `main._process()`
-4. If it needs input, add handler in `main._input()` respecting mode priority chain
-5. Register commands in `CommandHandler._register_commands()` if needed
+1. 在此目录创建类，继承 RefCounted
+2. 在 `main.gd._ready()` 中实例化，通过构造函数传递依赖
+3. 如需每帧更新，在 `main._process()` 中调用其 `process()`
+4. 如需输入处理，在 `main._input()` 中添加处理器（遵循模式优先级链）
+5. 如需命令，在 `CommandHandler._register_commands()` 中注册
+6. 更新本文件的文件列表和行数
