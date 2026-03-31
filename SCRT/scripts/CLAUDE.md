@@ -10,8 +10,8 @@
 
 | 文件 | 行数 | 用途 |
 |---|---|---|
-| command_handler.gd | 2346 | CLI 命令注册中心，所有 `_cmd_*` 处理器（全局 36 + 桌面 7 + 故事盘 11） |
-| main.gd | 2208 | 初始化、输入路由、模式管理、UI 更新、媒体播放、效果触发 |
+| command_handler.gd | 2450 | CLI 命令注册中心，所有 `_cmd_*` 处理器（全局 38 + 桌面 7 + 故事盘 11） |
+| main.gd | 2239 | 初始化、输入路由、模式管理、UI 更新、媒体播放、效果触发、绩效集成 |
 | decode_viewer.gd | 1456 | 密码解码 UI 覆盖层，内含 _DecodeCanvas 内部类 |
 | crtml_parser.gd | 1262 | Markdown 风格标记 → BBCode 转换（含内联效果标记解析） |
 | mail_system.gd | 891 | 收件箱系统：持久/临时邮件、延迟投递、内联投递、去重 |
@@ -20,7 +20,7 @@
 | package_manager.gd | 817 | Mod 安装/卸载/运行时生命周期管理 |
 | boot_sequence.gd | 809 | JSON 关键帧驱动的开机/关机动画 |
 | video_player.gd | 750 | 视频播放覆盖层，含控件和 ffmpeg 回退支持 |
-| trigger_system.gd | 726 | 事件触发器：条件（进目录/开文件/执行命令/空闲/等级变化）→ 28 种动作 |
+| trigger_system.gd | 754 | 事件触发器：条件（进目录/开文件/执行命令/空闲/等级变化）→ 30 种动作（含 score/perf_warning） |
 | story_loader.gd | 708 | ZIP 解析器，UTF-8/GBK 编码检测 |
 | disc_manager.gd | 698 | 虚拟磁盘：加载/挂载 .scp、加载画面、桌面欢迎信息 |
 | document_viewer.gd | 668 | 双页覆盖层，分页，打字动画 |
@@ -35,7 +35,8 @@
 | ui_manager.gd | 466 | UI 初始化：背景/字体/光标/滚动条主题化 |
 | effect_system.gd | 451 | 时间轴驱动的效果编排（glitch/shake/sound/text/reboot/brightness 等） |
 | crt_shader.gd | 416 | CRT 后处理效果控制器（glitch/shake/tear/noise/blackout） |
-| daily_dialogue_manager.gd | 415 | 每日对话/邮件触发管理，7 种钩子，故事标记/选择持久化 |
+| daily_dialogue_manager.gd | 431 | 每日对话/邮件触发管理，7 种钩子，故事标记/选择持久化，绩效配额配置 |
+| performance_manager.gd | 404 | 绩效评分系统：三类绩效(main/daily/side)、配额、加班缺口、4日报告、警告升级 |
 | morse_engine.gd | 347 | 摩斯码编解码，播放事件回调，数字站模式 |
 | sstv_decoder.gd | 310 | SSTV 图像接收模拟，带扫描线噪声效果 |
 | header_parser.gd | 247 | 文件头部解析（模板类型/标题/密码/元数据） |

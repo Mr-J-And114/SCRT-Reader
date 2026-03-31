@@ -595,6 +595,8 @@ func _auto_save() -> void:
 		main.env_monitor.save_env_progress()
 	if main.env_task_mgr:
 		main.env_task_mgr.save_task_progress()
+	if main.get("perf_mgr"):
+		main.perf_mgr.save_progress()
 
 	if main.story_id.is_empty():
 		return

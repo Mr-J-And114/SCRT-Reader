@@ -141,6 +141,8 @@ func trigger_day_start(day: int) -> void:
 	_story_day = day
 	_triggered_today.clear()
 	register_dialogues_to_comm()
+	# ★ 应用当日绩效配置
+	_apply_day_performance_config(day)
 	# ★ 处理当日邮件投递
 	_deliver_day_mails(day)
 	# ★ 执行当日触发器动作（radio_update 等）
@@ -149,6 +151,20 @@ func trigger_day_start(day: int) -> void:
 	if dlg_ids.size() > 0 and not _triggered_today.has("on_start"):
 		_triggered_today["on_start"] = true
 		_trigger_dialogues(dlg_ids)
+
+## ★ 应用当日绩效配置（覆盖 PerformanceManager 的 daily_quota）
+func _apply_day_performance_config(day: int) -> void:
+	if main == null or not main.get("perf_mgr"):
+		return
+	var day_key: String = str(day)
+	var config: Dictionary = {}
+	if _daily_config.has(day_key):
+		config = _daily_config[day_key]
+	elif _daily_config.has("default"):
+		config = _daily_config["default"]
+	var perf_cfg: Dictionary = config.get("performance", {})
+	if perf_cfg.has("min_quota"):
+		main.perf_mgr.daily_quota = int(perf_cfg["min_quota"])
 
 ## ★ 执行每日触发器动作（如 radio_update、radio_visible 等）
 func _execute_day_actions(day: int) -> void:

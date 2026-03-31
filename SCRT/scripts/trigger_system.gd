@@ -303,6 +303,8 @@ func _exec_single(raw: String, ctx: Dictionary) -> void:
 		"radio_visible":  _act_radio_visible(param)
 		"radio_update":   _act_radio_update(param)
 		"radio_reload":   _act_radio_reload()
+		"score":          _act_score(param)
+		"perf_warning":   _act_perf_warning(param)
 		_:
 			push_warning("[TriggerSystem] 未知动作: " + raw)
 
@@ -616,6 +618,32 @@ func _act_radio_reload() -> void:
 		return
 	main.radio_receiver.reload_signals()
 	print("[TriggerSystem] radio_reload: 信号已重载")
+
+func _act_score(param: String) -> void:
+	## 格式: score:N 或 score:N:category
+	if not main.get("perf_mgr"):
+		push_warning("[TriggerSystem] 绩效系统未初始化")
+		return
+	var parts: PackedStringArray = param.split(":")
+	var amount: int = parts[0].strip_edges().to_int()
+	var category: String = "side"
+	if parts.size() >= 2 and not parts[1].strip_edges().is_empty():
+		category = parts[1].strip_edges()
+	main.perf_mgr.add_score(amount, category)
+	print("[TriggerSystem] score: %+d (%s)" % [amount, category])
+
+func _act_perf_warning(param: String) -> void:
+	## 格式: perf_warning:level:message
+	if not main.get("perf_mgr"):
+		push_warning("[TriggerSystem] 绩效系统未初始化")
+		return
+	var colon: int = param.find(":")
+	var level: String = param.strip_edges() if colon < 0 else param.substr(0, colon).strip_edges()
+	var msg: String = "" if colon < 0 else param.substr(colon + 1).strip_edges()
+	if level.is_empty():
+		level = "low"
+	main.perf_mgr.performance_warning.emit(level, msg)
+	print("[TriggerSystem] perf_warning: level=%s" % level)
 
 # ============================================================
 # ── .meta.cfg 解析与缓存 ──

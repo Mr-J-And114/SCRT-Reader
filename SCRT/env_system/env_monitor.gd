@@ -42,8 +42,9 @@ var task_defs: Dictionary = {}         # task_id -> config
 # ══════════════════════════════════════════
 var master_seed: int = 0               # 全局主种子（每个存档唯一）
 var current_day: int = 1               # 当前天数
-var current_hour: float = 6.0          # 当前小时 (0.0~24.0)
-var game_time_accumulator: float = 0.0 # 游戏时间累积器
+var current_hour: float = 6.0          # 当前小时 (0.0~24.0)，由系统时钟驱动
+var _update_accumulator: float = 0.0   # 传感器刷新间隔累积器
+var _weather_timer: float = 0.0        # 天气切换计时器（真实秒数）
 
 ## 当前传感器读数
 var current_readings: Dictionary = {}  # sensor_id -> float
@@ -53,10 +54,11 @@ var sensor_status: Dictionary = {}     # sensor_id -> "online"/"offline"/"degrad
 var calibration_offsets: Dictionary = {} # sensor_id -> float
 ## 最近 24 小时的读数历史（用于趋势分析）
 var reading_history: Dictionary = {}   # sensor_id -> Array[{hour, value}]
+## 气压历史（用于 3h 趋势计算）
+var _pressure_history: Array[Dictionary] = []  # [{time_sec, value}]
 
 ## 天气
 var current_weather: String = "partly_cloudy"
-var weather_duration_remaining: float = 0.0  # 当前天气剩余时间（小时）
 var daily_weather_base: String = ""    # 当日基础天气（由种子决定）
 
 ## 活跃事件
@@ -72,6 +74,9 @@ var target_wind_dir: float = 0.0
 
 ## 潮汐相位（半日潮）
 var tide_phase: float = 0.0
+
+## 派生参数缓存（每次 _regenerate_readings 后更新）
+var derived_readings: Dictionary = {}  # "dew_point", "wind_chill", "heat_index", "feels_like", "beaufort", "pressure_tendency"
 
 ## RNG
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -132,11 +137,10 @@ func get_save_data() -> Dictionary:
 	return {
 		"master_seed": master_seed,
 		"current_day": current_day,
-		"current_hour": current_hour,
 		"sensor_status": sensor_status.duplicate(),
 		"calibration_offsets": calibration_offsets.duplicate(),
 		"current_weather": current_weather,
-		"weather_duration": weather_duration_remaining,
+		"weather_timer": _weather_timer,
 		"active_events": active_events.duplicate(true),
 		"detected_anomalies": detected_anomalies.duplicate(true),
 		"current_wind_dir": current_wind_dir,
@@ -146,7 +150,6 @@ func get_save_data() -> Dictionary:
 func load_save_data(data: Dictionary) -> void:
 	master_seed = int(data.get("master_seed", 0))
 	current_day = int(data.get("current_day", 1))
-	current_hour = float(data.get("current_hour", 6.0))
 	if data.has("sensor_status"):
 		for k in data["sensor_status"]:
 			sensor_status[k] = data["sensor_status"][k]
@@ -154,7 +157,7 @@ func load_save_data(data: Dictionary) -> void:
 		for k in data["calibration_offsets"]:
 			calibration_offsets[k] = float(data["calibration_offsets"][k])
 	current_weather = str(data.get("current_weather", "partly_cloudy"))
-	weather_duration_remaining = float(data.get("weather_duration", 0.0))
+	_weather_timer = float(data.get("weather_timer", 0.0))
 	if data.has("active_events"):
 		active_events = data["active_events"]
 	if data.has("detected_anomalies"):
@@ -163,7 +166,8 @@ func load_save_data(data: Dictionary) -> void:
 			detected_anomalies.append(a)
 	current_wind_dir = float(data.get("current_wind_dir", 0.0))
 	tide_phase = float(data.get("tide_phase", 0.0))
-	# 重新生成当前读数
+	# 同步系统时钟 + 重新生成当前读数
+	_sync_system_clock()
 	_regenerate_readings()
 
 # ══════════════════════════════════════════
@@ -176,8 +180,10 @@ func start_new_game(seed_value: int = 0) -> void:
 	else:
 		master_seed = seed_value
 	current_day = 1
-	current_hour = 6.0
-	game_time_accumulator = 0.0
+	_sync_system_clock()
+	_update_accumulator = 0.0
+	_weather_timer = 0.0
+	_pressure_history.clear()
 	detected_anomalies.clear()
 	pending_anomalies.clear()
 	active_events.clear()
@@ -185,8 +191,10 @@ func start_new_game(seed_value: int = 0) -> void:
 
 func advance_day() -> void:
 	current_day += 1
-	current_hour = 6.0
-	game_time_accumulator = 0.0
+	_sync_system_clock()
+	_update_accumulator = 0.0
+	_weather_timer = 0.0
+	_pressure_history.clear()
 	pending_anomalies.clear()
 	_init_day()
 	day_changed.emit(current_day)
@@ -210,30 +218,34 @@ func _init_day() -> void:
 # ══════════════════════════════════════════
 func process(delta: float) -> void:
 	var time_cfg: Dictionary = config.get("time", {})
-	var time_scale: float = float(time_cfg.get("time_scale", 144.0))
 	var update_interval: float = float(time_cfg.get("update_interval_seconds", 5.0))
+	var weather_shift_sec: float = float(time_cfg.get("weather_shift_interval_minutes", 45.0)) * 60.0
 
-	game_time_accumulator += delta
-	# 推进游戏内时间
-	var hour_delta: float = (delta * time_scale) / 3600.0
-	current_hour += hour_delta
-	# 潮汐相位推进
-	tide_phase += hour_delta / TIDE_PERIOD_HOURS * TAU
-	if tide_phase > TAU:
-		tide_phase -= TAU
-	# 风向缓慢变化
+	# ── 系统时钟同步 ──
+	_sync_system_clock()
+
+	# ── 潮汐相位（由当前真实小时直接计算） ──
+	tide_phase = fmod(current_hour / TIDE_PERIOD_HOURS, 1.0) * TAU
+
+	# ── 风向缓慢变化 ──
 	_update_wind_direction(delta)
-	# 天气持续时间递减
-	weather_duration_remaining -= hour_delta
-	if weather_duration_remaining <= 0:
+
+	# ── 天气切换（真实秒数计时） ──
+	_weather_timer += delta
+	if _weather_timer >= weather_shift_sec:
+		_weather_timer -= weather_shift_sec
 		_shift_weather()
-	# 定期更新读数
-	if game_time_accumulator >= update_interval:
-		game_time_accumulator -= update_interval
+
+	# ── 定期更新读数 ──
+	_update_accumulator += delta
+	if _update_accumulator >= update_interval:
+		_update_accumulator -= update_interval
 		_regenerate_readings()
 		_record_history()
+		_record_pressure_history()
 		_check_anomalies()
-	# 检查事件结束
+
+	# ── 检查事件结束 ──
 	_check_events()
 
 
@@ -268,28 +280,52 @@ func _generate_daily_weather() -> void:
 		daily_weather_base = ids[0]
 	var old: String = current_weather
 	current_weather = daily_weather_base
-	weather_duration_remaining = _day_rng.randf_range(4.0, 12.0)
+	_weather_timer = 0.0
 	if old != current_weather:
 		weather_changed.emit(old, current_weather)
 
 func _shift_weather() -> void:
-	# 天气持续结束后，有概率变化或维持
+	# 天气切换：由气压趋势驱动方向，叠加随机
 	var old: String = current_weather
-	if _day_rng.randf() < 0.4:
+	var tendency: String = get_pressure_tendency()
+	# 气压下降 → 偏向恶劣天气；上升 → 偏向好天气
+	var bad_bias: float = 0.0
+	match tendency:
+		"falling_fast": bad_bias = 0.6
+		"falling": bad_bias = 0.3
+		"rising": bad_bias = -0.3
+		"rising_fast": bad_bias = -0.5
+	if _rng.randf() < 0.35:
 		# 回到当日基础天气
 		current_weather = daily_weather_base
 	else:
-		# 随机小幅变化 (偏向相邻类型)
 		var month: int = _get_current_month()
 		var candidates: Array = []
+		var weights: Array = []
 		for pid in weather_patterns.keys():
 			var p: Dictionary = weather_patterns[pid]
 			if p.has("season_months") and not p["season_months"].has(month):
 				continue
 			candidates.append(pid)
+			var w: float = float(p.get("probability_weight", 10))
+			# 气压趋势影响：恶劣天气（高乘数风速）加权
+			var wind_mult: float = float(p.get("modifiers", {}).get("wind_speed_mult", 1.0))
+			if wind_mult > 1.5:
+				w *= (1.0 + bad_bias)
+			elif wind_mult < 0.8:
+				w *= (1.0 - bad_bias)
+			weights.append(maxf(w, 0.1))
 		if candidates.size() > 0:
-			current_weather = candidates[_day_rng.randi() % candidates.size()]
-	weather_duration_remaining = _day_rng.randf_range(2.0, 8.0)
+			var total: float = 0.0
+			for w in weights:
+				total += w
+			var roll: float = _rng.randf() * total
+			var cum: float = 0.0
+			for i in range(candidates.size()):
+				cum += weights[i]
+				if roll <= cum:
+					current_weather = candidates[i]
+					break
 	if old != current_weather:
 		weather_changed.emit(old, current_weather)
 
@@ -364,6 +400,10 @@ func _regenerate_readings() -> void:
 	_generate_light(month_idx, hour)
 	# 风向
 	current_readings["wind_dir"] = current_wind_dir
+	# ── 传感器间物理关联 ──
+	_apply_cross_sensor_correlations()
+	# ── 派生参数计算 ──
+	_compute_derived_readings()
 
 func _get_diurnal_factor(sid: String, hour: float) -> float:
 	# 各参数有不同的日变化曲线
@@ -848,12 +888,226 @@ func get_current_hour_display() -> String:
 func get_day_display() -> String:
 	return "第 %d 天" % current_day
 
+func get_display_date() -> String:
+	## 返回虚构日期字符串 (YYYY-MM-DD)
+	var time_cfg: Dictionary = config.get("time", {})
+	var year: int = int(time_cfg.get("fictional_year", 2024))
+	var start_m: int = int(time_cfg.get("fictional_start_month", 10))
+	var start_d: int = int(time_cfg.get("fictional_start_day", 15))
+	var days_in_month: Array[int] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+	var remaining: int = start_d + current_day - 2  # -1 for 0-based, -1 because day1=start_day
+	var month: int = start_m
+	while remaining >= days_in_month[(month - 1) % 12]:
+		remaining -= days_in_month[(month - 1) % 12]
+		month += 1
+		if month > 12:
+			month = 1
+			year += 1
+	var day: int = remaining + 1
+	return "%d-%02d-%02d" % [year, month, day]
+
+# ══════════════════════════════════════════
+#  系统时钟同步
+# ══════════════════════════════════════════
+func _sync_system_clock() -> void:
+	## 从操作系统读取真实时间，更新 current_hour
+	var sys: Dictionary = Time.get_time_dict_from_system()
+	current_hour = float(sys["hour"]) + float(sys["minute"]) / 60.0 + float(sys["second"]) / 3600.0
+
+# ══════════════════════════════════════════
+#  传感器间物理关联
+# ══════════════════════════════════════════
+func _apply_cross_sensor_correlations() -> void:
+	## 基于已生成的读数，应用交叉物理约束
+	var pressure: float = current_readings.get("pressure", 1013.0)
+	var humidity: float = current_readings.get("humidity", 70.0)
+	var air_temp: float = current_readings.get("air_temp", 10.0)
+	var wind_speed: float = current_readings.get("wind_speed", 5.0)
+	var precip: float = current_readings.get("precipitation", 0.0)
+	var visibility: float = current_readings.get("visibility", 15.0)
+
+	# 1) 气压趋势影响风速：气压快速下降 → 风速增大
+	var tendency: String = get_pressure_tendency()
+	match tendency:
+		"falling_fast":
+			current_readings["wind_speed"] = _clamp_sensor("wind_speed", wind_speed * 1.3)
+		"falling":
+			current_readings["wind_speed"] = _clamp_sensor("wind_speed", wind_speed * 1.1)
+
+	# 2) 高湿度 + 低温 → 雾（降低能见度）
+	if humidity > 93.0 and air_temp < 8.0:
+		var fog_factor: float = remap(humidity, 93.0, 100.0, 0.7, 0.2)
+		current_readings["visibility"] = _clamp_sensor("visibility", visibility * fog_factor)
+		visibility = current_readings["visibility"]
+
+	# 3) 降水量 → 进一步降低能见度
+	if precip > 2.0:
+		var rain_vis_factor: float = maxf(0.15, 1.0 - precip * 0.04)
+		current_readings["visibility"] = _clamp_sensor("visibility", visibility * rain_vis_factor)
+
+	# 4) 强风 → 增加浪高
+	var ws: float = current_readings.get("wind_speed", 5.0)
+	if ws > 10.0:
+		var wave: float = current_readings.get("wave_height", 1.0)
+		var wind_wave_add: float = (ws - 10.0) * 0.15
+		current_readings["wave_height"] = _clamp_sensor("wave_height", wave + wind_wave_add)
+
+func _clamp_sensor(sid: String, val: float) -> float:
+	## 将值钳位到传感器定义的范围内
+	var cfg: Dictionary = sensors.get(sid, {})
+	var range_arr = cfg.get("range", [])
+	if range_arr is Array and range_arr.size() >= 2:
+		val = clampf(val, float(range_arr[0]), float(range_arr[1]))
+	var prec: int = int(cfg.get("precision", 1))
+	var mult: float = pow(10.0, prec)
+	return roundf(val * mult) / mult
+
+# ══════════════════════════════════════════
+#  派生参数计算（大气科学公式）
+# ══════════════════════════════════════════
+func _compute_derived_readings() -> void:
+	var t: float = current_readings.get("air_temp", 10.0)
+	var rh: float = current_readings.get("humidity", 70.0)
+	var ws: float = current_readings.get("wind_speed", 5.0)
+
+	derived_readings["dew_point"] = _calc_dew_point(t, rh)
+	derived_readings["wind_chill"] = _calc_wind_chill(t, ws)
+	derived_readings["heat_index"] = _calc_heat_index(t, rh)
+	derived_readings["feels_like"] = _calc_feels_like(t, rh, ws)
+	derived_readings["beaufort"] = get_beaufort_scale()
+	derived_readings["pressure_tendency"] = get_pressure_tendency()
+	derived_readings["weather_forecast"] = get_weather_forecast()
+
+func _calc_dew_point(t: float, rh: float) -> float:
+	## Magnus 公式计算露点温度
+	if rh <= 0.0:
+		return t - 30.0
+	var a: float = 17.625
+	var b: float = 243.04
+	var alpha: float = log(clampf(rh, 0.1, 100.0) / 100.0) + (a * t) / (b + t)
+	return snappedf(b * alpha / (a - alpha), 0.1)
+
+func _calc_wind_chill(t: float, ws: float) -> float:
+	## 加拿大标准风寒指数（适用于 T<10°C，V>4.8km/h）
+	var v_kmh: float = ws * 3.6  # m/s → km/h
+	if t >= 10.0 or v_kmh < 4.8:
+		return t
+	var wc: float = 13.12 + 0.6215 * t - 11.37 * pow(v_kmh, 0.16) + 0.3965 * t * pow(v_kmh, 0.16)
+	return snappedf(wc, 0.1)
+
+func _calc_heat_index(t: float, rh: float) -> float:
+	## Rothfusz 回归方程（适用于 T>27°C，RH>40%）
+	if t < 27.0 or rh < 40.0:
+		return t
+	# 使用华氏度计算
+	var tf: float = t * 9.0 / 5.0 + 32.0
+	var hi: float = -42.379 + 2.04901523 * tf + 10.14333127 * rh \
+		- 0.22475541 * tf * rh - 0.00683783 * tf * tf \
+		- 0.05481717 * rh * rh + 0.00122874 * tf * tf * rh \
+		+ 0.00085282 * tf * rh * rh - 0.00000199 * tf * tf * rh * rh
+	# 转回摄氏
+	return snappedf((hi - 32.0) * 5.0 / 9.0, 0.1)
+
+func _calc_feels_like(t: float, rh: float, ws: float) -> float:
+	## 体感温度：低温用风寒，高温用热指数，中间用实际
+	if t < 10.0:
+		return _calc_wind_chill(t, ws)
+	elif t > 27.0 and rh > 40.0:
+		return _calc_heat_index(t, rh)
+	return t
+
+func get_beaufort_scale() -> int:
+	## 蒲福风力等级 (0-12)
+	var ws: float = current_readings.get("wind_speed", 0.0)
+	var thresholds: Array[float] = [0.5, 1.5, 3.3, 5.5, 8.0, 10.8, 13.9, 17.2, 20.7, 24.5, 28.4, 32.6]
+	for i in range(thresholds.size()):
+		if ws < thresholds[i]:
+			return i
+	return 12
+
+func get_pressure_tendency() -> String:
+	## 3 小时气压趋势：rising_fast / rising / steady / falling / falling_fast
+	if _pressure_history.size() < 2:
+		return "steady"
+	var now_sec: float = float(Time.get_unix_time_from_system())
+	# 找到 3 小时前最接近的记录
+	var target_sec: float = now_sec - 10800.0  # 3h = 10800s
+	var oldest_val: float = _pressure_history[0].get("value", 1013.0)
+	for entry in _pressure_history:
+		if float(entry.get("time_sec", 0)) >= target_sec:
+			oldest_val = float(entry.get("value", 1013.0))
+			break
+	var current_p: float = current_readings.get("pressure", 1013.0)
+	var delta_p: float = current_p - oldest_val
+	if delta_p > 3.5:
+		return "rising_fast"
+	elif delta_p > 1.0:
+		return "rising"
+	elif delta_p < -3.5:
+		return "falling_fast"
+	elif delta_p < -1.0:
+		return "falling"
+	return "steady"
+
+func get_pressure_change_3h() -> float:
+	## 返回 3 小时内气压变化量 (hPa)
+	if _pressure_history.size() < 2:
+		return 0.0
+	var now_sec: float = float(Time.get_unix_time_from_system())
+	var target_sec: float = now_sec - 10800.0
+	var oldest_val: float = _pressure_history[0].get("value", 1013.0)
+	for entry in _pressure_history:
+		if float(entry.get("time_sec", 0)) >= target_sec:
+			oldest_val = float(entry.get("value", 1013.0))
+			break
+	return current_readings.get("pressure", 1013.0) - oldest_val
+
+func get_weather_forecast() -> String:
+	## 基于气压趋势的简易天气预报
+	var tendency: String = get_pressure_tendency()
+	match tendency:
+		"falling_fast":
+			return "风暴可能接近，注意防范"
+		"falling":
+			return "天气可能转差"
+		"rising_fast":
+			return "天气正在好转"
+		"rising":
+			return "天气趋于稳定"
+	return "天气相对稳定"
+
+func get_derived_readings() -> Dictionary:
+	return derived_readings.duplicate()
+
+func _record_pressure_history() -> void:
+	## 记录气压值到 3h 滑动窗口
+	var p: float = current_readings.get("pressure", 1013.0)
+	if is_nan(p):
+		return
+	var now_sec: float = float(Time.get_unix_time_from_system())
+	_pressure_history.append({"time_sec": now_sec, "value": p})
+	# 仅保留 3.5 小时内的记录
+	var cutoff: float = now_sec - 12600.0
+	while _pressure_history.size() > 0 and float(_pressure_history[0].get("time_sec", 0)) < cutoff:
+		_pressure_history.pop_front()
+
 # ══════════════════════════════════════════
 #  工具函数
 # ══════════════════════════════════════════
 func _get_current_month() -> int:
-	# 根据天数推算月份（简化：每月30天，从1月开始）
-	return (((current_day - 1) / 30) % 12) + 1
+	## 根据虚构起始日期 + 当前天数推算月份
+	var time_cfg: Dictionary = config.get("time", {})
+	var start_m: int = int(time_cfg.get("fictional_start_month", 10))
+	var start_d: int = int(time_cfg.get("fictional_start_day", 15))
+	var days_in_month: Array[int] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+	var remaining: int = start_d + current_day - 2
+	var month: int = start_m
+	while remaining >= days_in_month[(month - 1) % 12]:
+		remaining -= days_in_month[(month - 1) % 12]
+		month += 1
+		if month > 12:
+			month = 1
+	return month
 
 func _hash_seed(base: int, offset: int) -> int:
 	# 简单哈希混合

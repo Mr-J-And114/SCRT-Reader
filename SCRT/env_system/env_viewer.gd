@@ -349,10 +349,31 @@ class _EnvCanvas extends Control:
 		# 天气状态
 		draw_line(Vector2(mx, y), Vector2(w - mx, y), col_d * 0.5, 1.0)
 		y += 6
+		var forecast: String = str(em.derived_readings.get("weather_forecast", ""))
 		draw_string(font, Vector2(mx, y + fss), "天气: %s  |  风向: %s  |  云量: %d/8" % [
 			em.get_weather_name(), em.get_wind_direction_name(), roundi(em.get_reading("cloud_cover"))],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, fss, col_p)
 		y += lh
+
+		# ── 派生参数 ──
+		var dr: Dictionary = em.derived_readings
+		var dew: float = float(dr.get("dew_point", 0))
+		var feels: float = float(dr.get("feels_like", 0))
+		var beaufort: int = int(dr.get("beaufort", 0))
+		var tendency: String = str(dr.get("pressure_tendency", "steady"))
+		var tendency_sym: String = "→"
+		match tendency:
+			"rising_fast": tendency_sym = "⇑"
+			"rising": tendency_sym = "↑"
+			"falling": tendency_sym = "↓"
+			"falling_fast": tendency_sym = "⇓"
+		draw_string(font, Vector2(mx, y + fss),
+			"体感: %.1f°C  |  露点: %.1f°C  |  蒲福: %d级  |  气压趋势: %s %s" % [feels, dew, beaufort, tendency_sym, tendency],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fss, col_d)
+		y += lh
+		if not forecast.is_empty():
+			draw_string(font, Vector2(mx, y + fss), "预报: %s" % forecast, HORIZONTAL_ALIGNMENT_LEFT, -1, fss, col_d)
+			y += lh
 
 		# 活跃事件
 		var events: Dictionary = em.get_active_events()
