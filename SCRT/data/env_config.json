@@ -10,10 +10,13 @@
 	},
 
 	"time": {
-		"day_duration_seconds": 600,
-		"time_scale": 144.0,
+		"use_system_clock": true,
 		"update_interval_seconds": 5.0,
-		"hours_per_reading": 1
+		"weather_shift_interval_minutes": 45.0,
+		"fictional_year": 2024,
+		"fictional_start_month": 10,
+		"fictional_start_day": 15,
+		"timezone_display": "UTC+11"
 	},
 
 	"sensors": {

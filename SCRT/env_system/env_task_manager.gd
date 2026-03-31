@@ -149,6 +149,9 @@ func complete_task(task_id: String, data: Dictionary = {}) -> void:
 	task_results[task_id] = data
 	task_order_log.append(task_id)
 	task_completed.emit(task_id)
+	# ★ 绩效加分
+	if main.get("perf_mgr"):
+		main.perf_mgr.add_score(1, "daily")
 	_check_all_completed()
 
 func fail_task(task_id: String, reason: String = "") -> void:
@@ -408,6 +411,9 @@ func _get_task_def(task_id: String) -> Dictionary:
 func _check_all_completed() -> void:
 	if is_all_required_completed():
 		all_tasks_completed.emit()
+		# ★ 全部任务完成的全勤奖励
+		if main.get("perf_mgr"):
+			main.perf_mgr.add_score(1, "bonus")
 		if can_advance_day():
 			day_can_advance.emit()
 

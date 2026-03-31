@@ -109,6 +109,8 @@ var env_task_mgr: EnvTaskManager = null
 var env_viewer: EnvViewer = null
 var _env_viewer_mode: bool = false
 var daily_dialogue_mgr: DailyDialogueManager = null
+# ★ 绩效系统
+var perf_mgr: PerformanceManager = null
 # ★ 监控摄像头系统
 var camera_mgr: CameraManager = null
 var camera_viewer: CameraViewer = null
@@ -262,7 +264,11 @@ func _ready() -> void:
 	env_task_mgr.reset_for_new_day()
 	daily_dialogue_mgr = DailyDialogueManager.new()
 	daily_dialogue_mgr.setup(self)
-	print("[Main] 环境监测系统已初始化")
+	# ★ 初始化绩效系统
+	perf_mgr = PerformanceManager.new()
+	perf_mgr.setup(self, T)
+	perf_mgr.performance_warning.connect(_on_performance_warning)
+	print("[Main] 环境监测 + 绩效系统已初始化")
 	# ★ 初始化监控摄像头系统
 	camera_mgr = CameraManager.new()
 	camera_mgr.setup(self)
@@ -554,12 +560,18 @@ func _enter_desktop_after_login(message: String) -> void:
 	if env_monitor:
 		if not env_monitor.load_env_progress():
 			env_monitor.save_env_progress()  # 新玩家：写入初始存档
+	# ★ 加载绩效数据
+	if perf_mgr:
+		perf_mgr.load_progress()
 	if env_task_mgr:
 		if not env_task_mgr.load_task_progress():
 			env_task_mgr.reset_for_new_day()  # 新玩家：初始化当日任务
 			env_task_mgr.save_task_progress()
 		elif env_task_mgr.can_advance_day() and env_monitor:
-			# 上次会话任务已全部完成，自动推进到下一天
+			# 上次会话任务已全部完成，结算绩效后推进到下一天
+			if perf_mgr:
+				perf_mgr.settle_day(env_monitor.current_day)
+				perf_mgr.save_progress()
 			env_monitor.advance_day()
 			env_task_mgr.reset_for_new_day()
 			env_monitor.save_env_progress()
@@ -1524,6 +1536,25 @@ func open_radio_receiver() -> void:
 	_radio_mode = true
 	input_field.editable = false
 	radio_receiver.open()
+
+## 绩效警告回调
+func _on_performance_warning(level: String, message: String) -> void:
+	match level:
+		"serious":
+			# 严重警告 → 尝试触发 AVA 强制来电
+			if comm_mgr and comm_mgr.has_method("trigger_call"):
+				comm_mgr.trigger_call("ava_perf_warning", "forced")
+			elif comm_mgr:
+				# 回退：输出终端警告
+				var w: String = T.warning_hex if T else "#FFFF80"
+				append_output("\n[color=" + w + "][HQ-CALL] AVA 紧急通讯：您的绩效表现需要立即改善。[/color]\n", false)
+		"termination":
+			# 解雇级警告
+			if daily_dialogue_mgr:
+				daily_dialogue_mgr.set_flag("termination_eligible", true)
+			var e: String = T.error_hex if T else "#FF6060"
+			append_output("\n[color=" + e + "][WARNING] 人事处已启动解雇审查程序。[/color]\n", false)
+	print("[Main] 绩效警告: level=%s msg=%s" % [level, message])
 
 ## decode_viewer 关闭回调
 func _on_decode_viewer_closed() -> void:

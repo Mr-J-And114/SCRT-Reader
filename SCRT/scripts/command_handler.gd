@@ -83,6 +83,8 @@ func _register_commands() -> void:
 		"cam": _cmd_camera,          # ★ 监控摄像头（简写）
 		"cctv": _cmd_camera,         # ★ 监控摄像头（别名）
 		"save": _cmd_save,           # ★ 手动保存进度
+		"perf": _cmd_perf,           # ★ 绩效系统
+		"performance": _cmd_perf,    # ★ 绩效系统（全称）
 	}
 
 	# ── 桌面模式专用命令 ──
@@ -464,6 +466,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]env[/color]           环境监测系统 (env help 查看子命令)")
 		lines.append("  [color=" + p + "]camera[/color]        监控摄像头系统 (camera help 查看子命令)")
 		lines.append("  [color=" + p + "]radio[/color]         启动无线电接收器")
+		lines.append("  [color=" + p + "]perf[/color]          绩效查询 (perf / perf history / perf detail)")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
@@ -530,6 +533,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("[color=" + p + "]  ── 环境监测 ──[/color]")
 		lines.append("  [color=" + p + "]env[/color]           环境监测系统 (env help 查看子命令)")
 		lines.append("  [color=" + p + "]camera[/color]        监控摄像头系统 (camera help 查看子命令)")
+		lines.append("  [color=" + p + "]perf[/color]          绩效查询 (perf / perf history / perf detail)")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
@@ -1576,6 +1580,106 @@ func verify_file_password(password: String) -> void:
 
 func _cmd_eject(_args: Array = []) -> void:
 	await disc_mgr.eject_story()
+
+func _cmd_perf(args: Array = []) -> void:
+	var pm: PerformanceManager = main.perf_mgr if main.get("perf_mgr") else null
+	if pm == null:
+		main.append_output("[color=" + T.error_hex + "]绩效系统未初始化。[/color]\n", false)
+		return
+	var p: String = T.primary_hex
+	var m: String = T.muted_hex
+	var w: String = T.warning_hex
+	var e: String = T.error_hex
+	var s: String = T.success_hex
+	var sub: String = str(args[0]).to_lower().strip_edges() if args.size() > 0 else ""
+
+	if sub == "history":
+		_cmd_perf_history(pm, p, m, w, e)
+	elif sub == "detail":
+		_cmd_perf_detail(pm, p, m, w, s)
+	elif sub == "help":
+		main.append_output("[color=" + p + "]═══ 绩效系统命令 ═══[/color]\n", false)
+		main.append_output("  [color=" + p + "]perf[/color]          当日绩效概览 + 累计总分\n", false)
+		main.append_output("  [color=" + p + "]perf detail[/color]   当日得分明细\n", false)
+		main.append_output("  [color=" + p + "]perf history[/color]  历史每日得分表\n", false)
+	else:
+		_cmd_perf_status(pm, p, m, w, e, s)
+
+func _cmd_perf_status(pm: PerformanceManager, p: String, m: String, w: String, e: String, s: String) -> void:
+	var day_sum: Dictionary = pm.get_day_summary()
+	var career: Dictionary = pm.get_career_summary()
+	var day_total: int = int(day_sum.get("total", 0))
+	var quota: int = int(day_sum.get("quota", 3))
+	var gap: int = int(day_sum.get("overtime_gap", 0))
+
+	main.append_output("\n[color=" + p + "]╔══════════════════════════════════╗[/color]\n", false)
+	main.append_output("[color=" + p + "]║      绩效状态                    ║[/color]\n", false)
+	main.append_output("[color=" + p + "]╠══════════════════════════════════╣[/color]\n", false)
+	# 当日
+	var day_col: String = s if day_total >= quota else (w if day_total > 0 else e)
+	main.append_output("[color=" + m + "]  当日得分: [/color][color=" + day_col + "]%d / %d[/color]\n" % [day_total, quota], false)
+	# 加班缺口
+	if gap > 0:
+		main.append_output("[color=" + m + "]  绩效缺口: [/color][color=" + e + "]%d 分待补[/color]\n" % gap, false)
+	# 累计
+	main.append_output("[color=" + p + "]╠══════════════════════════════════╣[/color]\n", false)
+	main.append_output("[color=" + m + "]  累计总分: [/color][color=" + p + "]%d[/color]\n" % career.get("total", 0), false)
+	main.append_output("[color=" + m + "]  主线:     [/color]%d  [color=" + m + "]每日: [/color]%d  [color=" + m + "]支线: [/color]%d\n" % [
+		career.get("main", 0), career.get("daily", 0), career.get("side", 0)], false)
+	if int(career.get("overtime", 0)) > 0:
+		main.append_output("[color=" + m + "]  加班绩效: [/color][color=" + w + "]%d[/color]\n" % career.get("overtime", 0), false)
+	if int(career.get("warnings", 0)) > 0:
+		main.append_output("[color=" + m + "]  累计警告: [/color][color=" + e + "]%d 次[/color]\n" % career.get("warnings", 0), false)
+	main.append_output("[color=" + m + "]  进度:     [/color]%d / %d 天\n" % [career.get("days_completed", 0), career.get("game_total_days", 28)], false)
+	main.append_output("[color=" + p + "]╚══════════════════════════════════╝[/color]\n\n", false)
+
+func _cmd_perf_history(pm: PerformanceManager, p: String, m: String, w: String, e: String) -> void:
+	var history: Array[Dictionary] = pm.get_history()
+	if history.is_empty():
+		main.append_output("[color=" + m + "]暂无历史绩效记录。[/color]\n", false)
+		return
+	main.append_output("\n[color=" + p + "]═══ 绩效历史 ═══[/color]\n", false)
+	main.append_output("[color=" + m + "] Day │ Main │ Daily│ Side │Bonus │ Total│ Quota│ Gap [/color]\n", false)
+	main.append_output("[color=" + m + "]─────┼──────┼──────┼──────┼──────┼──────┼──────┼─────[/color]\n", false)
+	for record in history:
+		var day: int = int(record.get("day", 0))
+		var total: int = int(record.get("total", 0))
+		var quota: int = int(record.get("quota", 3))
+		var gap: int = int(record.get("gap", 0))
+		var col: String = p if gap == 0 else (w if gap <= 2 else e)
+		main.append_output("[color=" + col + "] %3d │ %4d │ %4d │ %4d │ %4d │ %4d │ %4d │ %3d [/color]\n" % [
+			day,
+			int(record.get("main", 0)),
+			int(record.get("daily", 0)),
+			int(record.get("side", 0)),
+			int(record.get("bonus", 0)),
+			total,
+			quota,
+			gap,
+		], false)
+	main.append_output("\n", false)
+
+func _cmd_perf_detail(pm: PerformanceManager, p: String, m: String, w: String, s: String) -> void:
+	var day_sum: Dictionary = pm.get_day_summary()
+	var scores: Dictionary = day_sum.get("scores", {})
+	var quota: int = int(day_sum.get("quota", 3))
+	var total: int = int(day_sum.get("total", 0))
+	var gap: int = int(day_sum.get("overtime_gap", 0))
+
+	main.append_output("\n[color=" + p + "]═══ 当日绩效明细 ═══[/color]\n", false)
+	main.append_output("[color=" + m + "]  主线绩效:   [/color]%+d\n" % int(scores.get("main", 0)), false)
+	main.append_output("[color=" + m + "]  每日绩效:   [/color]%+d\n" % int(scores.get("daily", 0)), false)
+	main.append_output("[color=" + m + "]  支线绩效:   [/color]%+d\n" % int(scores.get("side", 0)), false)
+	main.append_output("[color=" + m + "]  奖励:       [/color]%+d\n" % int(scores.get("bonus", 0)), false)
+	var penalty: int = int(scores.get("penalty", 0))
+	if penalty != 0:
+		main.append_output("[color=" + m + "]  扣减:       [/color][color=" + w + "]%+d[/color]\n" % penalty, false)
+	main.append_output("[color=" + m + "]  ────────────────[/color]\n", false)
+	var total_col: String = s if total >= quota else w
+	main.append_output("[color=" + m + "]  合计:       [/color][color=" + total_col + "]%+d[/color] [color=" + m + "](配额: %d)[/color]\n" % [total, quota], false)
+	if gap > 0:
+		main.append_output("[color=" + m + "]  历史缺口:   [/color][color=" + w + "]%d 分待补[/color]\n" % gap, false)
+	main.append_output("\n", false)
 
 func _cmd_save(_args: Array = []) -> void:
 	disc_mgr._auto_save()
