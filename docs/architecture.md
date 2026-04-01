@@ -1,6 +1,6 @@
 # 架构参考文档 (Architecture Reference)
 
-> 最后更新：2026-03-29 | 行数通过 `wc -l` 核实
+> 最后更新：2026-04-01 | 行数通过 `wc -l` 核实
 <!-- Extracted from SCRT/AI_HANDOFF.md §2-4, §7, §10, §13-15 -->
 
 ## 核心依赖图 (Core Dependency Graph)
@@ -43,6 +43,7 @@ main.gd (extends Control) — the god object
 ├─ ui_sound: UiSound — procedural keystroke/click SFX
 ├─ camera_mgr: CameraManager — CCTV camera management (register/unlock/anomaly/save)
 ├─ camera_viewer: CameraViewer — fullscreen camera overlay with shader rendering
+├─ perf_mgr: PerformanceManager — scoring (main/daily/side), quotas, overtime, warnings
 ├─ ui_manager(static calls): UIManager — theme-aware style builder
 ├─ audio_manager: AudioManager (extends Node) — ambient/sfx/media players, load from bytes (MP3/OGG/WAV)
 └─ crt_shader: CRTShader (extends ColorRect) — CRT post-process on CanvasLayer(10)
@@ -78,11 +79,11 @@ Main (Control, fullrect) [main.gd]
 
 | File | Class | Lines | Purpose |
 |---|---|---|---|
-| main.gd | — | 2208 | 上帝对象：初始化、输入路由、模式管理、UI 更新、媒体、效果 |
+| main.gd | — | 2239 | 上帝对象：初始化、输入路由、模式管理、UI 更新、媒体、效果、绩效集成 |
 | file_system.gd | FileSystem | 472 | 虚拟文件系统树（FSNode）、权限、安全等级、环境音、路径工具 |
-| command_handler.gd | CommandHandler | 2346 | CLI 命令注册（桌面/故事盘/全局）、历史、Tab 补全、所有 `_cmd_*` 处理器 |
+| command_handler.gd | CommandHandler | 2450 | CLI 命令注册（桌面/故事盘/全局）、历史、Tab 补全、所有 `_cmd_*` 处理器 |
 | story_loader.gd | StoryLoader | 708 | 解析 .scp ZIP 文件、编码检测（UTF-8/GBK）、构建 manifest + 文件系统 |
-| disc_manager.gd | DiscManager | 698 | 扫描 vdisc/、加载/弹出故事、Mod 支持、自动存档 |
+| disc_manager.gd | DiscManager | 700 | 扫描 vdisc/、加载/弹出故事、Mod 支持、自动存档 |
 | crtml_parser.gd | CrtmlParser | 1262 | Markdown→BBCode：标题、粗体、斜体、剧透、表格、媒体标签、效果标签、分页 |
 | typewriter.gd | Typewriter | 520 | 排队式文本输出，逐字打字、内联效果触发、进度条 |
 | save_manager.gd | SaveManager | 228 | 每用户每故事 JSON 存档/读档、自动存档 |
@@ -92,7 +93,8 @@ Main (Control, fullrect) [main.gd]
 | theme_manager.gd | ThemeManager | 517 | 4 种主题配色（ThemeColors）、CRT/背景/logo 着色器参数刷新 |
 | boot_sequence.gd | BootSequence | 809 | JSON 关键帧驱动开机/关机动画：黑屏/亮屏/文本/故障/进度条/音频 |
 | loading_screen.gd | LoadingScreen | 543 | 磁盘加载关键帧动画（支持 loading_screen.json 自定义或内置默认） |
-| trigger_system.gd | TriggerSystem | 726 | 事件触发器：进目录/开文件/命令/空闲/等级变化 → 28 种动作 |
+| trigger_system.gd | TriggerSystem | 754 | 事件触发器：进目录/开文件/命令/空闲/等级变化 → 30 种动作（含 score/perf_warning） |
+| performance_manager.gd | PerformanceManager | 404 | 绩效评分：三类绩效(main/daily/side)、配额、加班缺口、4日报告、警告升级 |
 | mail_system.gd | MailSystem | 891 | 邮件收件箱、延迟投递、全局+故事盘邮件、闪烁通知 |
 | effect_system.gd | EffectSystem | 451 | 时间轴效果序列（glitch/shake/sound/text/reboot/brightness 等） |
 | effect_settings.gd | EffectSettings | 175 | 效果强度等级（full/mild/off）、光敏模式 |
@@ -111,9 +113,9 @@ Main (Control, fullrect) [main.gd]
 | ui_sound.gd | UiSound | 200 | 程序化音效：按键/回车/退格/硬盘读取/点击 |
 | profile_builder.gd | ProfileBuilder | 242 | 构建 3 页用户资料卡片 |
 | video_player.gd | VideoPlayerViewer | 750 | 视频播放覆盖层，含控件，ffmpeg 回退支持 |
-| daily_dialogue_manager.gd | DailyDialogueManager | 415 | 每日对话/邮件触发管理、主线剧情加载、故事标记持久化 |
-| env_monitor.gd | EnvMonitor | 919 | 环境模拟：传感器、天气、事件、异常、每日种子 |
-| env_task_manager.gd | EnvTaskManager | 697 | 每日任务清单：检查、读数、校准、报告 |
+| daily_dialogue_manager.gd | DailyDialogueManager | 431 | 每日对话/邮件触发管理、主线剧情加载、故事标记持久化、绩效配额配置 |
+| env_monitor.gd | EnvMonitor | 1173 | 环境模拟：21 传感器 + 6 派生参数、系统时钟同步、传感器间物理关联、天气模式、异常检测 |
+| env_task_manager.gd | EnvTaskManager | 703 | 每日任务清单：检查、读数、校准、报告、绩效加分钩子 |
 | camera_feed.gd | CameraFeed | 320 | 单摄像头数据模型：底图/深度图/照明/异常图像、镜头参数 |
 | camera_manager.gd | CameraManager | 435 | 摄像头注册中心、解锁/锁定、异常触发、存档/读档、图像加载 |
 
@@ -127,7 +129,7 @@ Main (Control, fullrect) [main.gd]
 | oscilloscope.gd | Oscilloscope | 820 | 频谱分析器 + 李萨如图形，_ScopeCanvas 内部类 |
 | radio_receiver.gd | RadioReceiver | 1804 | 完整无线电 UI：调谐/频段/摩斯解码/SSTV/音频电台/隐藏信号/瀑布图，_RadioCanvas 内部类 |
 | decode_viewer.gd | DecodeViewer | 1456 | 密码解码动画查看器，_DecodeCanvas 内部类 |
-| env_viewer.gd | EnvViewer | 557 | 环境数据面板覆盖层，6 页，_EnvCanvas 内部类 |
+| env_viewer.gd | EnvViewer | 578 | 环境数据面板覆盖层，6 页（含派生参数），_EnvCanvas 内部类 |
 | camera_viewer.gd | CameraViewer | 656 | CCTV 全屏覆盖层，shader 渲染监控画面，平移/切换控制 |
 
 ### 通讯系统 (`res://comm_system/`)
@@ -177,11 +179,14 @@ Main (Control, fullrect) [main.gd]
 ### 架构
 ```
 env_monitor.gd (EnvMonitor) — Core simulation + data generation
-├─ 20+ sensors with Sakhalin baselines (monthly averages)
-├─ Weather pattern system (8 patterns, seasonal weighting)
+├─ 21 sensors with Sakhalin baselines (monthly averages)
+├─ 6 derived parameters: dew_point, wind_chill, heat_index, feels_like, beaufort, pressure_tendency
+├─ Inter-sensor physical correlations (pressure→wind→precipitation→visibility→wave height)
+├─ System clock sync (real time drives diurnal cycles, fictional dates displayed)
+├─ Weather pattern system (8 patterns, pressure-tendency-driven transitions)
 ├─ Special event system (storms, magnetic anomalies, SCP events)
 ├─ Anomaly detection engine (threshold + deviation checks)
-├─ Diurnal cycles, tidal model, wind direction simulation
+├─ Tidal model (real-time phase calculation), wind direction simulation
 └─ Story pack overrides via manifest "env_config" section
 
 env_task_manager.gd (EnvTaskManager) — Daily task checklist
@@ -189,10 +194,12 @@ env_task_manager.gd (EnvTaskManager) — Daily task checklist
 ├─ Task dependency system (report requires all readings)
 ├─ Dynamic special tasks (injected by events/mods)
 ├─ Formatted output generators for each task type
+├─ Performance scoring hooks (task complete → +1 daily, all done → +1 bonus)
 └─ Day advancement gating (all tasks + report required)
 
 env_viewer.gd (EnvViewer) — CRT overlay panel
 ├─ 6 pages: Overview, Atmosphere, Ocean, Geophysics, Composition, Events
+├─ Derived parameters display (feels_like, dew_point, beaufort, pressure_tendency)
 ├─ Real-time sensor readings with trend indicators
 ├─ Mini sparkline graphs from reading history
 ├─ Anomaly blink indicators
@@ -208,18 +215,75 @@ env_viewer.gd (EnvViewer) — CRT overlay panel
 | 地球物理 (geophysics, 5) | mag_field, mag_declination, radiation, seismic, soil_temp |
 | 大气成分 (composition, 2) | o2_concentration, co2_concentration |
 
+### 派生参数（6 个，由传感器读数交叉计算）
+
+| 参数 | 公式 | 依赖传感器 |
+|---|---|---|
+| 露点温度 (dew_point) | Magnus 公式 | air_temp, humidity |
+| 风寒指数 (wind_chill) | 加拿大标准 (T<10°C, V>4.8km/h) | air_temp, wind_speed |
+| 热指数 (heat_index) | Rothfusz 回归 (T>27°C, RH>40%) | air_temp, humidity |
+| 体感温度 (feels_like) | 低温=风寒，高温=热指数，中间=实际 | air_temp, humidity, wind_speed |
+| 蒲福风级 (beaufort) | 标准 0-12 级分级 | wind_speed |
+| 气压趋势 (pressure_tendency) | 3h 滑动窗口: ±3.5hPa=急变 | pressure (历史) |
+
+### 传感器间物理关联
+- 气压下降 → 风速增大 (+10%~30%)
+- 高湿度 + 低温 → 能见度降低（雾效应）
+- 降水增加 → 能见度进一步降低
+- 强风 (>10m/s) → 浪高增加
+
+### 时间系统
+- **系统时钟同步**：`current_hour` 每帧从 `Time.get_time_dict_from_system()` 读取
+- **虚构日期**：`fictional_year/start_month/start_day` 配置起始日期，`current_day` 递增偏移
+- **天数推进**：仅在所有每日任务完成 + 游戏重启/重新登录时推进
+- **潮汐相位**：由当前真实小时直接计算 `fmod(hour / 12.42, 1.0) * TAU`
+- **天气切换**：真实秒数计时（默认 45 分钟切换一次），由气压趋势影响方向
+
 ### 数据生成机制
 - 主种子 + 天数 → 确定性每日数据
 - 月均基准线按季节过渡插值
-- 昼夜曲线（温度 14:00 峰值，湿度反向）
-- 天气修正（8 种模式，含季节限制）
+- 昼夜曲线（sin/cos 插值，温度 14:00 峰值，湿度反向），由系统时钟驱动
+- 天气修正（8 种模式，气压趋势驱动切换）
 - 事件修正（可叠加，有持续时间）
 - 传感器校准漂移模拟 + 故障率
-- 半日潮汐模型（12.42 小时周期）
+- 半日潮汐模型（12.42 小时周期），由真实时间驱动
 - 基于太阳角度的光照/UV 计算
+- 交叉关联：读数生成后应用物理约束
 
 ### 故事包集成
 Manifest 键名：`"env_config"` — 支持覆盖：`location`、`sensors`、`baselines`、`weather_patterns`、`anomaly_types`、`events`、`tasks`、`master_seed`。
+
+## 绩效评分系统 (Performance Scoring System)
+
+### 架构
+```
+performance_manager.gd (PerformanceManager)
+├─ Three score categories: main (主线), daily (日常), side (支线)
+├─ Daily quota system with overtime gap carry-over
+├─ 4-day period reporting cycle (auto-mail)
+├─ Warning escalation: email → AVA call → termination
+├─ Career statistics tracking (total scores, overtime, warnings)
+└─ Save/load to saves/{username}/performance.json
+```
+
+### 评分机制
+- `add_score(amount, category)`: 有加班缺口时先填补缺口（记入加班绩效），剩余计入正常类别
+- `settle_day(day)`: 结算日绩效，不达标产生缺口，触发警告升级
+- 每 4 天自动投递绩效报告邮件
+- DayConfig 可通过 `"performance": {"min_quota": N}` 覆盖当日配额
+
+### 警告升级
+| 级别 | 触发条件 | 动作 |
+|---|---|---|
+| low | 首次不达标 | 自动邮件（总部温和提醒） |
+| serious | 连续不达标 | 自动邮件 + AVA 来电警告 |
+| termination | 严重持续不达标 | 故事标记 `performance_termination` + 终端警告 |
+
+### 集成点
+- `env_task_manager`: 完成任务 → `add_score(1, "daily")`，全部完成 → `add_score(1, "bonus")`
+- `trigger_system`: `score:N` / `score:N:category` / `perf_warning:level:msg` 动作
+- `daily_dialogue_manager`: DayConfig `"performance"` 节覆盖配额
+- `main.gd`: 登录时加载、结算、保存绩效数据
 
 ### ModAPI 环境扩展接口
 ```gdscript
