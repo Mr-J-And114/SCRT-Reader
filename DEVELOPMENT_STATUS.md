@@ -1,6 +1,6 @@
 # SCRT-Reader 开发进度总结
 
-> 最后更新：2026-03-29
+> 最后更新：2026-04-01
 > 基于代码实际审计结果，非文档描述。
 
 ---
@@ -25,14 +25,15 @@
 | 虚拟文件系统 | ✅ 完成 | 目录/文件/权限/密码解锁 |
 | 故事加载器 | ✅ 完成 | .scp (ZIP) 解包/manifest 解析/编码检测 |
 | CRTML 解析器 | ✅ 完成 | Markdown→BBCode + 内联效果标记 |
-| 命令处理器 | ✅ 完成 | 51 条命令（全局 36 + 桌面 7 + 故事盘 11） |
-| 触发器系统 | ✅ 完成 | 28 种动作类型 + 延迟执行 + 条件触发 |
+| 命令处理器 | ✅ 完成 | 53 条命令（全局 38 + 桌面 7 + 故事盘 11） |
+| 绩效评分系统 | ✅ 完成 | 三类绩效/配额/加班缺口/4日报告/警告升级/perf 命令 |
+| 触发器系统 | ✅ 完成 | 30 种动作类型 + 延迟执行 + 条件触发（含 score/perf_warning） |
 | 通讯系统 | ✅ 完成 | 对话/选择/角色精灵/语音合成/来电模式 |
 | 拨号系统 | ✅ 完成 | DTMF/号码簿/语音/调制解调器 |
 | 邮件系统 | ✅ 完成 | 持久/临时收件箱/延迟投递/内联投递/去重 |
 | 无线电系统 | ✅ 完成 | 摩斯码/SSTV/音频电台/频率扫描 |
 | 摄像头系统 | ✅ 完成 | CCTV 多路切换/异常/信号质量/shader |
-| 环境监测 | ✅ 完成 | 21 传感器/天气/异常/任务/仪表盘 |
+| 环境监测 | ✅ 完成 | 21 传感器 + 6 派生参数/系统时钟同步/物理关联/天气/异常/任务/仪表盘 |
 | 每日对话管理 | ✅ 完成 | 7 种触发钩子 + 对话扩展加载 |
 | 故事标记/选择 | ✅ 完成 | set_flag/get_flag/record_choice + 持久化 |
 | 主题系统 | ✅ 完成 | 多主题/动态切换/故事包覆盖 |
@@ -52,10 +53,10 @@
 
 ## 三、已实现功能详细清单
 
-### 3.1 命令系统（51 条命令）
+### 3.1 命令系统（53 条命令）
 
-**全局命令**（桌面 + 故事盘均可用，36 条）：
-`help` `clear`/`cls` `whoami` `status` `mail` `theme` `volume`/`vol` `reboot` `exit`/`quit` `profile` `logout` `passwd` `birthday` `nickname` `gender` `users` `decode` `fx_level` `fx_safe` `sound` `packages`/`pkg` `uninstall` `comm` `dial` `phonebook`/`pb` `settings`/`set` `env` `monitor` `camera`/`cam`/`cctv` `save`
+**全局命令**（桌面 + 故事盘均可用，38 条）：
+`help` `clear`/`cls` `whoami` `status` `mail` `theme` `volume`/`vol` `reboot` `exit`/`quit` `profile` `logout` `passwd` `birthday` `nickname` `gender` `users` `decode` `fx_level` `fx_safe` `sound` `packages`/`pkg` `uninstall` `comm` `dial` `phonebook`/`pb` `settings`/`set` `env` `monitor` `camera`/`cam`/`cctv` `save` `perf`/`performance`
 
 **桌面专用命令**（7 条）：
 `scan` `load` `vdisc` `deluser` `explore` `install` `radio`
@@ -63,7 +64,7 @@
 **故事盘专用命令**（11 条）：
 `ls`/`dir` `cd` `back` `open`/`read`/`cat` `unlock` `eject` `clearsave` `explore`
 
-### 3.2 触发器动作（28 种）
+### 3.2 触发器动作（30 种）
 
 | 类别 | 动作 |
 |---|---|
@@ -76,6 +77,7 @@
 | 通讯 | `comm` |
 | 摄像头 | `camera_unlock`, `camera_lock`, `camera_online`, `camera_offline`, `camera_anomaly`, `camera_signal` |
 | 无线电 | `radio_import`, `radio_visible`, `radio_update`, `radio_reload` |
+| 绩效 | `score`, `perf_warning` |
 | 时序 | `delay` (可嵌套任意动作) |
 
 ### 3.3 CRTML 内联效果标记
@@ -104,6 +106,17 @@
 ### 3.5 环境监测 manifest 覆盖键
 
 通过 `env_config` 支持：`location` `sensors` `baselines` `weather_patterns` `anomaly_types` `events` `tasks` `master_seed`
+
+### 3.7 绩效评分系统
+
+- 三类绩效：`main`（主线）、`daily`（日常）、`side`（支线）+ `bonus`（额外奖励）
+- 每日配额系统，DayConfig 可覆盖
+- 加班缺口机制：不达标产生缺口，次日优先填补
+- 4 日报告周期（自动邮件投递）
+- 警告升级：邮件→AVA来电→termination 标记
+- `perf` / `perf status` / `perf detail` / `perf history` 命令
+- 触发器动作：`score:N[:category]`、`perf_warning:level:msg`
+- 存档：`saves/{username}/performance.json`
 
 ### 3.6 故事标记系统（已实现部分）
 
@@ -315,17 +328,21 @@ day_config = {
 
 | 脚本 | 行数 | 说明 |
 |---|---|---|
-| command_handler.gd | 2346 | 命令注册与执行 |
-| main.gd | 2209 | 核心路由/模式管理 |
+| command_handler.gd | 2450 | 命令注册与执行（含 perf 命令） |
+| main.gd | 2239 | 核心路由/模式管理/绩效集成 |
 | radio_receiver.gd | 1804 | 无线电接收器 |
-| crtml_parser.gd | 1263 | CRTML→BBCode |
+| crtml_parser.gd | 1262 | CRTML→BBCode |
 | comm_manager.gd | 1259 | 通讯系统管理 |
+| env_monitor.gd | 1173 | 环境监测（21传感器+6派生参数+系统时钟） |
 | modder/mod_api.gd | 1075 | Mod API |
-| user_manager.gd | 856 | 用户账户 |
-| boot_sequence.gd | 813 | 开关机动画 |
-| video_player.gd | 748 | 视频播放器 |
-| trigger_system.gd | 695 | 触发器系统 |
-| env_monitor.gd | 680 | 环境监测 |
-| disc_manager.gd | 616 | 故事盘管理 |
+| user_manager.gd | 853 | 用户账户 |
+| boot_sequence.gd | 809 | 开关机动画 |
+| trigger_system.gd | 754 | 触发器系统（含 score/perf_warning） |
+| video_player.gd | 750 | 视频播放器 |
+| env_task_manager.gd | 703 | 环境任务管理 |
+| disc_manager.gd | 700 | 故事盘管理 |
+| env_viewer.gd | 578 | 环境仪表盘（含派生参数） |
+| daily_dialogue_manager.gd | 431 | 每日对话管理（含绩效配额） |
+| performance_manager.gd | 404 | 绩效评分系统 |
 
-总代码量：约 20,000+ 行 GDScript
+总代码量：约 42,000 行 GDScript

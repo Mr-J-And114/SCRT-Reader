@@ -1,6 +1,6 @@
 # 扩展开发指南 / Extension Guide
 
-> 最后更新：2026-03-29
+> 最后更新：2026-04-01
 <!-- Extracted from SCRT/AI_HANDOFF.md §6, §8, §9 -->
 
 ## 添加新功能的 7 步流程 / Adding a New Feature
@@ -62,7 +62,7 @@
 ## 命令列表 / Commands
 
 **桌面命令（全局可用）：**
-`help`（帮助）、`clear`/`cls`（清屏）、`status`（状态）、`whoami`（当前用户）、`settings`/`set`（设置）、`theme`（主题）、`volume`/`vol`（音量）、`reboot`（重启）、`exit`/`quit`（退出）、`logout`（登出）、`passwd`（改密码）、`birthday`（设置生日）、`nickname`（设置昵称）、`gender`（设置性别）、`users`（用户列表）、`deluser`（删除用户）、`profile`（查看资料）、`comm`（通讯）、`mail`（邮件）、`scan`（扫描故事盘）、`load`（加载故事盘）、`vdisc`（列出故事盘）、`explore`（文件树浏览）、`dial`（拨号）、`phonebook`/`pb`（电话簿）、`env`/`monitor`（环境监测）、`camera`/`cam`/`cctv`（CCTV 监控）、`decode`（密码解码）、`sound`（音效）、`save`（存档）、`packages`/`pkg`（Mod 管理）、`install`（安装 Mod）、`uninstall`（卸载 Mod）、`radio`（无线电）
+`help`（帮助）、`clear`/`cls`（清屏）、`status`（状态）、`whoami`（当前用户）、`settings`/`set`（设置）、`theme`（主题）、`volume`/`vol`（音量）、`reboot`（重启）、`exit`/`quit`（退出）、`logout`（登出）、`passwd`（改密码）、`birthday`（设置生日）、`nickname`（设置昵称）、`gender`（设置性别）、`users`（用户列表）、`deluser`（删除用户）、`profile`（查看资料）、`comm`（通讯）、`mail`（邮件）、`scan`（扫描故事盘）、`load`（加载故事盘）、`vdisc`（列出故事盘）、`explore`（文件树浏览）、`dial`（拨号）、`phonebook`/`pb`（电话簿）、`env`/`monitor`（环境监测）、`camera`/`cam`/`cctv`（CCTV 监控）、`decode`（密码解码）、`sound`（音效）、`save`（存档）、`packages`/`pkg`（Mod 管理）、`install`（安装 Mod）、`uninstall`（卸载 Mod）、`radio`（无线电）、`perf`/`performance`（绩效查看）
 
 **通讯子命令：**
 `comm`（状态）、`comm answer`（接听）、`comm reject`（拒接）、`comm video`（视频频道列表）、`comm video <num>`（拨打视频）、`comm phonebook`（电话簿）、`comm history`/`comm log`（通讯记录）
@@ -72,6 +72,9 @@
 
 **环境监测子命令：**
 `env status`（总览）、`env view`（打开仪表盘）、`env tasks`（任务列表）、`env check`（检查传感器）、`env read`（读取传感器值）、`env calibrate`（校准传感器）、`env anomaly`（异常报告）、`env report`（生成报告）、`env repair`（修复传感器）、`env advance`（推进天数）、`env sensor`（传感器详情）、`env weather`（天气信息）、`env events`（事件日志）
+
+**绩效子命令：**
+`perf`/`perf status`（当日绩效状态）、`perf detail`（分类明细）、`perf history`（历史记录表）、`perf help`（帮助）
 
 **摄像头子命令：**
 `camera list`（列出摄像头）、`camera view [id/num]`（查看摄像头画面）、`camera status`（状态）（别名：`cam`、`cctv`）

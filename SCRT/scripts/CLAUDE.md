@@ -3,8 +3,8 @@
 > 上级文档：[/CLAUDE.md](/CLAUDE.md) | 详细索引：[/docs/architecture.md](/docs/architecture.md)
 > 修改脚本后请同步更新本文件中的行数和文件列表。
 
-本目录包含所有核心逻辑脚本。`main.gd` 是中央上帝对象（2208 行），拥有所有管理器实例。
-共 27 个脚本文件，总计约 22,000 行。
+本目录包含所有核心逻辑脚本。`main.gd` 是中央上帝对象（2239 行），拥有所有管理器实例。
+共 28 个脚本文件，总计约 22,000 行。
 
 ## 按行数排列的文件索引（行数大 = 复杂度高）
 
@@ -22,7 +22,7 @@
 | video_player.gd | 750 | 视频播放覆盖层，含控件和 ffmpeg 回退支持 |
 | trigger_system.gd | 754 | 事件触发器：条件（进目录/开文件/执行命令/空闲/等级变化）→ 30 种动作（含 score/perf_warning） |
 | story_loader.gd | 708 | ZIP 解析器，UTF-8/GBK 编码检测 |
-| disc_manager.gd | 698 | 虚拟磁盘：加载/挂载 .scp、加载画面、桌面欢迎信息 |
+| disc_manager.gd | 700 | 虚拟磁盘：加载/挂载 .scp、加载画面、桌面欢迎信息 |
 | document_viewer.gd | 668 | 双页覆盖层，分页，打字动画 |
 | image_viewer.gd | 634 | 全屏 CRT 图像查看器，支持缩放/平移，内含 _ImageCanvas |
 | audio_manager.gd | 586 | 环境音/音效/媒体播放器，ducking、频谱分析、字节加载（MP3/OGG/WAV） |

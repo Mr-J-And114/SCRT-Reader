@@ -1,6 +1,6 @@
 # 数据与内容格式 (Data & Content Formats)
 
-> 最后更新：2026-03-29
+> 最后更新：2026-04-01
 <!-- Extracted from SCRT/AI_HANDOFF.md §5 -->
 
 ## 故事盘格式 (.scp)
@@ -173,6 +173,79 @@ JSON 关键帧时间轴格式：`{time, action, params}`。
 存档文件中的扩展数据键：
 - `extra["env_data"]` / `extra["env_task_data"]` — 环境监测系统状态（传感器读数、任务进度）
 - `extra["camera_data"]` — 摄像头系统状态（每个摄像头：解锁状态、在线状态、信号质量、视口位置、异常冷却）
+
+绩效数据独立存储：
+- `res://saves/{username}/performance.json` — 绩效评分系统存档
+
+### 绩效存档格式 / Performance Save Format (`performance.json`)
+
+```json
+{
+  "current_day": 5,
+  "daily_quota": 3,
+  "overtime_gap": 0,
+  "warning_level": 0,
+  "career_main": 12,
+  "career_daily": 8,
+  "career_side": 5,
+  "career_bonus": 3,
+  "career_overtime": 2,
+  "career_warnings": 1,
+  "day_history": [
+    {"day": 1, "main": 3, "daily": 2, "side": 1, "bonus": 1, "total": 7, "quota": 3, "gap": 0},
+    {"day": 2, "main": 2, "daily": 1, "side": 0, "bonus": 0, "total": 3, "quota": 3, "gap": 0}
+  ]
+}
+```
+
+## 环境监测时间配置 / Environment Time Config (`env_config.json` time section)
+
+系统时钟同步配置（替代了旧的虚拟加速时间方案）：
+
+```json
+{
+  "time": {
+    "use_system_clock": true,
+    "update_interval_seconds": 5.0,
+    "weather_shift_interval_minutes": 45.0,
+    "fictional_year": 2024,
+    "fictional_start_month": 10,
+    "fictional_start_day": 15,
+    "timezone_display": "UTC+11"
+  }
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `use_system_clock` | bool | `true` | 使用系统时钟驱动昼夜节律 |
+| `update_interval_seconds` | float | `5.0` | 传感器读数刷新间隔（真实秒） |
+| `weather_shift_interval_minutes` | float | `45.0` | 天气模式切换间隔（真实分钟） |
+| `fictional_year` | int | `2024` | 虚构年份（仅用于显示） |
+| `fictional_start_month` | int | `10` | 虚构起始月（1-12） |
+| `fictional_start_day` | int | `15` | 虚构起始日（1-31） |
+| `timezone_display` | string | `"UTC+11"` | 时区显示文本 |
+
+## DayConfig 绩效配额覆盖 / DayConfig Performance Override
+
+在 `daily_dialogues` 的天数配置中，可添加 `"performance"` 节覆盖当日绩效配额：
+
+```json
+{
+  "daily_dialogues": {
+    "5": {
+      "on_start": ["day5_morning"],
+      "performance": {
+        "min_quota": 5
+      }
+    }
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `min_quota` | int | 当日最低绩效配额（覆盖 PerformanceManager 默认值） |
 
 ## 电话簿配置 / Dial Directory Config
 
