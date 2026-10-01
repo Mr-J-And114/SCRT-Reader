@@ -79,13 +79,15 @@ Main (Control, fullrect) [main.gd]
 
 | File | Class | Lines | Purpose |
 |---|---|---|---|
-| main.gd | — | 2239 | 上帝对象：初始化、输入路由、模式管理、UI 更新、媒体、效果、绩效集成 |
-| file_system.gd | FileSystem | 472 | 虚拟文件系统树（FSNode）、权限、安全等级、环境音、路径工具 |
-| command_handler.gd | CommandHandler | 2450 | CLI 命令注册（桌面/故事盘/全局）、历史、Tab 补全、所有 `_cmd_*` 处理器 |
+| main.gd | — | 2381 | 中央控制器：初始化、输入路由、模式管理、Vdisc 任务集成及其他子系统 |
+| file_system.gd | FileSystem | 535 | 虚拟文件系统树、权限、路径工具、任务副本文件操作 |
+| command_handler.gd | CommandHandler | 3365 | CLI 命令注册、Vdisc 下载/编辑/上交、隐藏调试系统 |
+| latex_renderer.gd | LatexRenderer | 1720 | LaTeX 公式渲染器：Tokenizer→Parser(AST)→Layout→Image，支持分数/根号(自绘)/矩阵/上下标/定界符/cases |
 | story_loader.gd | StoryLoader | 708 | 解析 .scp ZIP 文件、编码检测（UTF-8/GBK）、构建 manifest + 文件系统 |
-| disc_manager.gd | DiscManager | 700 | 扫描 vdisc/、加载/弹出故事、Mod 支持、自动存档 |
-| crtml_parser.gd | CrtmlParser | 1262 | Markdown→BBCode：标题、粗体、斜体、剧透、表格、媒体标签、效果标签、分页 |
-| typewriter.gd | Typewriter | 520 | 排队式文本输出，逐字打字、内联效果触发、进度条 |
+| disc_manager.gd | DiscManager | 751 | 扫描共用原盘和玩家任务副本、加载/弹出故事、工作副本恢复 |
+| vdisc_task_manager.gd | VdiscTaskManager | 624 | 任务定义、下载登记、工作副本、判定、玩家专属归档和存档 |
+| crtml_parser.gd | CrtmlParser | 1325 | Markdown→BBCode：标题、粗体、斜体、剧透、表格、媒体标签、效果标签、分页、LaTeX [math] 公式 |
+| typewriter.gd | Typewriter | 540 | 排队式文本输出，逐字打字、内联效果触发、进度条 |
 | save_manager.gd | SaveManager | 228 | 每用户每故事 JSON 存档/读档、自动存档 |
 | user_manager.gd | UserManager | 853 | 多用户账户、登录/注册/改密、个人资料、统计、故事进度 |
 | audio_manager.gd | AudioManager | 586 | 环境音（交叉淡化）/音效/媒体播放器、ducking、频谱分析、字节加载 |
@@ -94,8 +96,8 @@ Main (Control, fullrect) [main.gd]
 | boot_sequence.gd | BootSequence | 809 | JSON 关键帧驱动开机/关机动画：黑屏/亮屏/文本/故障/进度条/音频 |
 | loading_screen.gd | LoadingScreen | 543 | 磁盘加载关键帧动画（支持 loading_screen.json 自定义或内置默认） |
 | trigger_system.gd | TriggerSystem | 754 | 事件触发器：进目录/开文件/命令/空闲/等级变化 → 30 种动作（含 score/perf_warning） |
-| performance_manager.gd | PerformanceManager | 404 | 绩效评分：三类绩效(main/daily/side)、配额、加班缺口、4日报告、警告升级 |
-| mail_system.gd | MailSystem | 891 | 邮件收件箱、延迟投递、全局+故事盘邮件、闪烁通知 |
+| performance_manager.gd | PerformanceManager | 413 | 绩效评分：三类绩效(main/daily/side)、配额、加班缺口、4日报告、警告升级、剧情版本门控 |
+| mail_system.gd | MailSystem | 958 | 邮件收件箱、延迟投递、Vdisc 附件领取、邮件阅读对话延迟触发 |
 | effect_system.gd | EffectSystem | 451 | 时间轴效果序列（glitch/shake/sound/text/reboot/brightness 等） |
 | effect_settings.gd | EffectSettings | 175 | 效果强度等级（full/mild/off）、光敏模式 |
 | settings/settings_manager.gd | SettingsManager | 903 | 注册式设置系统：分类、TUI 界面、导入/导出 |
@@ -103,19 +105,19 @@ Main (Control, fullrect) [main.gd]
 | settings/settings_storage.gd | — | 165 | JSON 存储后端：全局 + 用户级、版本迁移 |
 | header_parser.gd | HeaderParser | 247 | 文件头部解析（标记块中的元数据） |
 | cipher_decoder.gd | CipherDecoder | 584 | 凯撒、维吉尼亚、替换、Base64、摩斯、ROT13、Atbash、反转 |
-| morse_engine.gd | MorseEngine | 347 | 摩斯码编解码、播放事件、数字站模式 |
-| radio_audio_generator.gd | RadioAudioGenerator | 311 | 程序化噪声/音调/SSTV 音频生成 |
-| radio_config_parser.gd | RadioConfigParser | 319 | 解析无线电信号定义（配置/manifest）；RadioSignal 数据类 |
-| radio_signal_manager.gd | RadioSignalManager | 344 | 信号数据库、质量计算（渐进接近）、发现跟踪、书签、扫描 |
-| sstv_decoder.gd | SSTVDecoder | 310 | SSTV 图像接收模拟，带扫描线噪声 |
+| morse_engine.gd | MorseEngine | 327 | 摩斯码编解码、播放事件、数字站模式 |
+| radio_audio_generator.gd | RadioAudioGenerator | 304 | 程序化噪声/音调/SSTV 音频生成 |
+| radio_config_parser.gd | RadioConfigParser | 301 | 解析无线电信号定义（配置/manifest）；RadioSignal 数据类 |
+| radio_signal_manager.gd | RadioSignalManager | 324 | 信号数据库、质量计算（渐进接近）、发现跟踪、书签、扫描 |
+| sstv_decoder.gd | SSTVDecoder | 294 | SSTV 图像接收模拟，带扫描线噪声 |
 | package_manager.gd | PackageManager | 817 | Mod 系统：安装/卸载 .scp Mod、钩子分发、Mod 生命周期 |
 | ui_manager.gd | UIManager | 466 | 程序化 UI 样式：光标、滚动条、面板主题、字体设置 |
 | ui_sound.gd | UiSound | 200 | 程序化音效：按键/回车/退格/硬盘读取/点击 |
-| profile_builder.gd | ProfileBuilder | 242 | 构建 3 页用户资料卡片 |
+| profile_builder.gd | ProfileBuilder | 253 | 构建 3 页用户资料卡片 |
 | video_player.gd | VideoPlayerViewer | 750 | 视频播放覆盖层，含控件，ffmpeg 回退支持 |
-| daily_dialogue_manager.gd | DailyDialogueManager | 431 | 每日对话/邮件触发管理、主线剧情加载、故事标记持久化、绩效配额配置 |
-| env_monitor.gd | EnvMonitor | 1173 | 环境模拟：21 传感器 + 6 派生参数、系统时钟同步、传感器间物理关联、天气模式、异常检测 |
-| env_task_manager.gd | EnvTaskManager | 703 | 每日任务清单：检查、读数、校准、报告、绩效加分钩子 |
+| daily_dialogue_manager.gd | DailyDialogueManager | 556 | 每日对话/邮件触发管理、主线剧情加载、场景邮件投递、requires_tasks 条件、requires_flag 数值兼容、故事标记/选择持久化、剧情版本门控、绩效配额配置 |
+| env_monitor.gd | EnvMonitor | 1522 | 环境模拟：21 传感器 + 6 派生参数、系统时钟同步、传感器间物理关联、天气模式、异常检测、Day0 起始天数、剧情版本门控 |
+| env_task_manager.gd | EnvTaskManager | 841 | 旧任务兼容、观测快照／历史、首次日报计分（Day0 剧情计分） |
 | camera_feed.gd | CameraFeed | 320 | 单摄像头数据模型：底图/深度图/照明/异常图像、镜头参数 |
 | camera_manager.gd | CameraManager | 435 | 摄像头注册中心、解锁/锁定、异常触发、存档/读档、图像加载 |
 
@@ -124,29 +126,30 @@ Main (Control, fullrect) [main.gd]
 | 文件 | 类名 | 行数 | 用途 |
 |---|---|---|---|
 | document_viewer.gd | DocumentViewer | 668 | 双页覆盖层（左/右 RTL），分页，打字动画 |
-| explore_viewer.gd | ExploreViewer | 477 | 文件树面板，故事进度显示 |
+| explore_viewer.gd | ExploreViewer | 481 | 文件树面板，任务磁盘进度显示 |
 | image_viewer.gd | ImageViewer | 634 | 可缩放图像查看器，平移，扫描效果，_ImageCanvas 内部类 |
 | oscilloscope.gd | Oscilloscope | 820 | 频谱分析器 + 李萨如图形，_ScopeCanvas 内部类 |
-| radio_receiver.gd | RadioReceiver | 1804 | 完整无线电 UI：调谐/频段/摩斯解码/SSTV/音频电台/隐藏信号/瀑布图，_RadioCanvas 内部类 |
+| radio_receiver.gd | RadioReceiver | 1735 | 完整无线电 UI：调谐/频段/摩斯解码/SSTV/音频电台/隐藏信号/瀑布图，_RadioCanvas 内部类 |
 | decode_viewer.gd | DecodeViewer | 1456 | 密码解码动画查看器，_DecodeCanvas 内部类 |
-| env_viewer.gd | EnvViewer | 578 | 环境数据面板覆盖层，6 页（含派生参数），_EnvCanvas 内部类 |
+| env_viewer.gd | EnvViewer | 821 | 环境命令观测台，地图简报、实时详情、采集证据与日报历史 |
 | camera_viewer.gd | CameraViewer | 656 | CCTV 全屏覆盖层，shader 渲染监控画面，平移/切换控制 |
 
 ### 通讯系统 (`res://comm_system/`)
 
 | 文件 | 类名 | 行数 | 用途 |
 |---|---|---|---|
-| comm_manager.gd | CommManager | 1259 | 对话编排、通话路由、教程流程、`comm` 命令处理 |
-| comm_ui.gd | CommUI | 1289 | 通讯覆盖层 UI（对话条、卡片/会议/演示模式、历史记录） |
-| dial_manager.gd | DialManager | 831 | DTMF 拨号状态机、语音通话路由、调制解调器握手/下载、电话簿 |
-| comm_character.gd | CommCharacter | 426 | 轻量角色数据模型（身份/语音/状态，委托给 animator） |
-| character_asset_library.gd | CharacterAssetLibrary | 420 | 素材配置库、模块化纹理加载（res:// + 虚拟 FS） |
+| comm_manager.gd | CommManager | 1466 | 对话编排、通话路由、教程入口（Day0 由 DailyDialogue 驱动）、对话链续播（目标声明 call_mode 时响铃）、场景邮件投递、拨号条件选择、`comm` 命令处理 |
+| comm_ui.gd | CommUI | 1353 | 通讯覆盖层 UI（对话条、卡片/会议/演示模式、历史记录） |
+| dial_manager.gd | DialManager | 839 | DTMF 拨号状态机、语音通话路由、调制解调器下载与任务登记、电话簿 |
+| comm_character.gd | CommCharacter | 446 | 轻量角色数据模型（身份/语音/状态，委托给 animator） |
+| character_asset_library.gd | CharacterAssetLibrary | 560 | 素材配置库、模块化纹理加载（res:// + 虚拟 FS） |
 | character_animator.gd | CharacterAnimator | 387 | 动画引擎（口型/眨眼/动作帧/图层覆盖/服装） |
-| comm_dialogue_player.gd | CommDialoguePlayer | 377 | 对话播放引擎（逐行/选项/条件/幻灯片/静默停止） |
+| comm_dialogue_player.gd | CommDialoguePlayer | 400 | 对话播放引擎（逐行/选项/条件/幻灯片/静默停止/行级 story_action/meeting 模式延续） |
 | dial_tone_generator.gd | DialToneGenerator | 376 | 程序化音频：DTMF 按键/回铃/忙音/调制解调器/挂断/来电铃声 |
-| character_registry.gd | CharacterRegistry | 297 | 角色生命周期、注册（内置/故事盘/Mod 来源） |
+| character_registry.gd | CharacterRegistry | 318 | 角色生命周期、注册（内置/故事盘/Mod 来源） |
 | presentation_overlay.gd | PresentationOverlay | 295 | 演示模式幻灯片覆盖层（图片显示/适配/对齐/过渡） |
-| comm_voice.gd | — | 188 | 程序化语音合成（正弦/方波/锯齿波） |
+| comm_voice.gd | CommVoice | 106 | 逐字符短音：谐波混合、包络、角色配置、中英文标点静音 |
+| voice_tuner.gd | VoiceTuner | 229 | 编辑器调音覆盖层、实时滑块、循环试听、保存角色预设 |
 | comm_sprite_renderer.gd | — | 181 | 角色精灵渲染（卡片模式） |
 
 ### Mod 系统 (`res://modder/`)
@@ -190,15 +193,15 @@ env_monitor.gd (EnvMonitor) — Core simulation + data generation
 └─ Story pack overrides via manifest "env_config" section
 
 env_task_manager.gd (EnvTaskManager) — Daily task checklist
-├─ 8 required daily tasks (check → read → calibrate → report)
+├─ Legacy task IDs + observation snapshots / 30 reports
 ├─ Task dependency system (report requires all readings)
 ├─ Dynamic special tasks (injected by events/mods)
 ├─ Formatted output generators for each task type
-├─ Performance scoring hooks (task complete → +1 daily, all done → +1 bonus)
+├─ First daily report +1 daily, Day0 story scoring, no per-step bonus
 └─ Day advancement gating (all tasks + report required)
 
 env_viewer.gd (EnvViewer) — CRT overlay panel
-├─ 6 pages: Overview, Atmosphere, Ocean, Geophysics, Composition, Events
+├─ 2 maps + 6 detailed sensor pages + report history
 ├─ Derived parameters display (feels_like, dew_point, beaufort, pressure_tendency)
 ├─ Real-time sensor readings with trend indicators
 ├─ Mini sparkline graphs from reading history
@@ -280,9 +283,10 @@ performance_manager.gd (PerformanceManager)
 | termination | 严重持续不达标 | 故事标记 `performance_termination` + 终端警告 |
 
 ### 集成点
-- `env_task_manager`: 完成任务 → `add_score(1, "daily")`，全部完成 → `add_score(1, "bonus")`
+- `env_task_manager`: 首次日报／特殊任务 → `add_score(1, "daily")`，基础采集不逐项计分（Day 0 教程日屏蔽自动计分，分数由对话 `story_action` 提供）
 - `trigger_system`: `score:N` / `score:N:category` / `perf_warning:level:msg` 动作
-- `daily_dialogue_manager`: DayConfig `"performance"` 节覆盖配额
+- `daily_dialogue_manager`: DayConfig `"performance"` 节覆盖配额；剧情版本门控（`story.version` 不匹配重置存档）
+- `comm_system`: 对话 `story_action`（行级加分）、`deliver_mail`（场景邮件）、`next`（对话链）
 - `main.gd`: 登录时加载、结算、保存绩效数据
 
 ### ModAPI 环境扩展接口
@@ -305,37 +309,39 @@ api.env_get_anomalies()              # Pending anomalies
 ## 文件索引（按行数排序）
 
 ```
-scripts/command_handler.gd|2346  scripts/main.gd|2208  radio/radio_receiver.gd|1804
-scripts/decode_viewer.gd|1456  comm_system/comm_ui.gd|1289
-scripts/crtml_parser.gd|1262  comm_system/comm_manager.gd|1259
-modder/mod_api.gd|1075  env_system/env_monitor.gd|919
-settings/settings_manager.gd|903  scripts/mail_system.gd|891
-scripts/user_manager.gd|853  comm_system/dial_manager.gd|831
+scripts/command_handler.gd|3365  scripts/main.gd|2371  scripts/latex_renderer.gd|1734
+radio/radio_receiver.gd|1804  scripts/decode_viewer.gd|1456
+env_system/env_monitor.gd|1522
+comm_system/comm_ui.gd|1353  scripts/crtml_parser.gd|1325  comm_system/comm_manager.gd|1466
+modder/mod_api.gd|1075  settings/settings_manager.gd|903
+scripts/mail_system.gd|958  scripts/user_manager.gd|852  comm_system/dial_manager.gd|839
 templates/chat_viewer.gd|823  scripts/oscilloscope.gd|820
 scripts/package_manager.gd|817  scripts/boot_sequence.gd|809
 templates/email_viewer.gd|788  scripts/video_player.gd|750
-scripts/trigger_system.gd|726  scripts/story_loader.gd|708
-scripts/disc_manager.gd|698  env_system/env_task_manager.gd|697
-scripts/document_viewer.gd|668  camera_system/camera_viewer.gd|656
+scripts/trigger_system.gd|754  scripts/story_loader.gd|708
+scripts/disc_manager.gd|751  env_system/env_task_manager.gd|841
+scripts/document_viewer.gd|668  camera_system/camera_viewer.gd|689
 scripts/image_viewer.gd|634  scripts/audio_manager.gd|586
 scripts/cipher_decoder.gd|584  templates/two_page_reader.gd|571
-env_system/env_viewer.gd|557  scripts/loading_screen.gd|543
-scripts/typewriter.gd|520  scripts/theme_manager.gd|517
-scripts/explore_viewer.gd|477  scripts/file_system.gd|472
+env_system/env_viewer.gd|821  scripts/loading_screen.gd|543
+scripts/typewriter.gd|540  scripts/theme_manager.gd|517
+scripts/explore_viewer.gd|481  scripts/file_system.gd|535
+scripts/vdisc_task_manager.gd|624
 scripts/ui_manager.gd|466  templates/article_viewer.gd|466
-scripts/effect_system.gd|451  camera_system/camera_manager.gd|435
-comm_system/comm_character.gd|426  comm_system/character_asset_library.gd|420
-scripts/crt_shader.gd|416  scripts/daily_dialogue_manager.gd|415
-comm_system/character_animator.gd|387  comm_system/comm_dialogue_player.gd|377
+scripts/effect_system.gd|451  camera_system/camera_manager.gd|444
+comm_system/comm_character.gd|446  comm_system/character_asset_library.gd|560
+scripts/crt_shader.gd|416  scripts/daily_dialogue_manager.gd|556
+comm_system/character_animator.gd|387  comm_system/comm_dialogue_player.gd|400
 comm_system/dial_tone_generator.gd|376  scripts/morse_engine.gd|347
-radio/radio_signal_manager.gd|344  camera_system/camera_feed.gd|320
+radio/radio_signal_manager.gd|344  camera_system/camera_feed.gd|927
 radio/radio_config_parser.gd|319  radio/radio_audio_generator.gd|311
 scripts/sstv_decoder.gd|310  radio/radio_data_manager.gd|302
-comm_system/character_registry.gd|297  comm_system/presentation_overlay.gd|295
-comm_system/call_handler.gd|285  scripts/header_parser.gd|247
-scripts/profile_builder.gd|242  scripts/save_manager.gd|228
+comm_system/character_registry.gd|318  comm_system/presentation_overlay.gd|295
+comm_system/call_handler.gd|328  scripts/header_parser.gd|247
+scripts/profile_builder.gd|253  scripts/save_manager.gd|228
 settings/settings_registry.gd|225  scripts/ui_sound.gd|200
-comm_system/comm_voice.gd|188  comm_system/comm_sprite_renderer.gd|181
+comm_system/comm_voice.gd|106  comm_system/comm_sprite_renderer.gd|181
+comm_system/voice_tuner.gd|229
 scripts/effect_settings.gd|175  settings/settings_storage.gd|165
 modder/mod_base.gd|92
 总计: ~41,225 行
@@ -363,3 +369,13 @@ modder/mod_base.gd|92
 | 环境监测 | ✅ 完成 | 21 传感器/天气/事件/异常/每日任务/仪表盘 |
 | 摄像头系统 | ✅ 完成 | CCTV 监控：底图/深度/照明/异常/shader 管线/3 种照明/POM 视差/触发器集成 |
 | 每日对话 | ✅ 完成 | 7 种触发钩子/故事标记/选择持久化/对话扩展加载 |
+
+
+## ENV 观测台新增组件（2026-10-01，待人工验收）
+
+| 文件 | 类 | 行数 | 职责 |
+|---|---|---|---|
+| env_system/env_observation.gd | EnvObservation | 295 | 短采集、复测、日报、旧存档迁移、隔离预览 |
+| env_system/env_map_canvas.gd | EnvMapCanvas | 227 | 两种监视盘、SVG 底图入口与方形占位、简报、来源与历史绘制 |
+
+main → EnvObservation → EnvMonitor / EnvTaskManager；EnvViewer → EnvMapCanvas。采集数据存入任务进度；DailyDialogueManager.process_pending 串行播放等待覆盖界面结束的通讯。配置和验收见 docs/upgrade-plans/environment-manual-test-plan.md。

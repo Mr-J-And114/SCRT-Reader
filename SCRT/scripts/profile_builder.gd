@@ -91,6 +91,17 @@ func _build_page2(data: Dictionary) -> String:
 	lines.append(_kv("查阅文件数", str(data.get("files_read_count", 0))))
 	lines.append(_kv("认证失败数", str(data.get("login_fail_count", 0))))
 	lines.append(_kv("已加载磁盘", str(data.get("discs_loaded_count", 0))))
+	if main.perf_mgr:
+		var day_summary: Dictionary = main.perf_mgr.get_day_summary()
+		lines.append("")
+		lines.append("[color=" + w + "]PERFORMANCE — 值班绩效[/color]")
+		lines.append(_kv("今日 / 配额", "%d / %d" % [int(day_summary.get("total", 0)), int(day_summary.get("quota", 3))]))
+		lines.append(_kv("累计绩效", str(main.perf_mgr.career_total)))
+		lines.append(_kv("待补缺口", str(main.perf_mgr.overtime_gap)))
+	if main.env_task_mgr:
+		lines.append(_kv("环境日报", "已提交" if main.env_task_mgr.report_submitted else "未提交"))
+		for report in main.env_task_mgr.observation_history.slice(maxi(0, main.env_task_mgr.observation_history.size() - 5)):
+			lines.append(_kv("第 %d 天日报" % int(report.get("day", 0)), str(report.get("score_note", "旧记录"))))
 	lines.append("")
 	lines.append("[color=" + m + "]" + "-".repeat(30) + "[/color]")
 	lines.append("")

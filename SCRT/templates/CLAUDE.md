@@ -46,3 +46,6 @@
 4. 在 `document_viewer.gd` 的查看器选择逻辑中注册
 5. 遵循覆盖层模式：`is_active` 标志、Panel 覆盖层、ESC/Q 关闭
 6. 更新本文件的文件列表
+
+
+2026-09-30：模板关闭时通过 main._refocus_input.call_deferred() 恢复焦点，下一层查看器若已打开则不会抢焦点。普通后台输出由 main.append_output() 暂存，模板关闭后恢复缓存，所有全屏界面退出后统一显示。

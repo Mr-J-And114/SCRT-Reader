@@ -251,7 +251,7 @@ func close() -> void:
 	main.input_field.visible = _cached_input_visible
 	main.prompt_label.visible = _cached_prompt_visible
 	main._update_status_bar()
-	main.input_field.grab_focus()
+	main._refocus_input.call_deferred()
 
 	if main.has_method("_on_decode_viewer_closed"):
 		main._on_decode_viewer_closed()

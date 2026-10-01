@@ -2,7 +2,7 @@
 
 > **给 AI 助手的第一条指令**：本文件是项目入口文档。每次接手任务前，先通读本文件。
 > 修改代码后，**必须**同步更新相关的 CLAUDE.md 和 docs/ 文档（行数、API、命令列表等）。
-> 本文件最后更新：2026-04-01。
+> 本文件最后更新：2026-10-01。
 
 ---
 
@@ -14,15 +14,21 @@ CLAUDE.md  ← 你在这里（项目总览 + AI 工作规范）
 ├─ DEVELOPMENT_STATUS.md          ← 开发进度总结（代码实现 vs 设计规划的完整对照）
 │
 ├─ docs/                          ← 详细文档（面向 AI + 人类开发者）
+│  ├─ upgrade-plans/README.md      ← 系统升级计划总入口（ENV、无人机、地图、绩效、Vdisc、camera 与预览图）
 │  ├─ architecture.md             ← 依赖图、场景树、全脚本索引（含行数）
 │  ├─ data-formats.md             ← .scp 格式、CRTML 标记语法、加载画面、存档、拨号格式
+│  ├─ env-observation-improvement-plan.md ← ENV 观测台改进方案（短时值班、无人机与岛屿地图、camera/radio 联动；待实施）
+│  ├─ vdisc-task-system-plan.md   ← Vdisc 任务设计与玩家副本实施注记
 │  ├─ extension-guide.md          ← 添加新功能的 7 步流程 + 完整命令列表 + 生命周期
 │  ├─ design-doc.txt              ← 游戏设计文档（28 天剧情规划、角色、4 种结局）
 │  ├─ story-authoring-guide.txt   ← 故事包制作指南（面向非程序员，纯中文）
+│  ├─ writer-onboarding.md       ← 可单独转发的写手手册（试玩范围、角色、系统规则、交付模板、格式与 Day0 全文）
 │  ├─ character-system-guide.md   ← 角色精灵/动画系统（素材规范 + 对话标记）
 │  ├─ bgm-descriptions.md         ← 背景音乐印象描述（20 首，供 AI 音乐生成）
 │  ├─ loading-screen-guide.md     ← 自定义加载画面制作（关键帧时间轴）
-│  └─ camera-asset-guide.txt      ← 摄像头/CCTV 素材制作（底图/深度图/照明图）
+│  ├─ camera-asset-guide.txt      ← 摄像头/CCTV 素材制作（底图/深度图/照明图）
+│  ├─ debug-mode-guide.md         ← 调试模式操作指南（输入 `debug 114514` 激活，40+ 子命令覆盖全子系统）
+│  └─ vdisc-task-system-plan.md   ← Vdisc 解密任务系统实施计划（交接文档：需求/调研索引/设计/4 阶段实施步骤）
 │
 ├─ SCRT/scripts/CLAUDE.md         ← 核心脚本索引（行数、模式标志、架构模式）
 ├─ SCRT/comm_system/CLAUDE.md     ← 通讯系统（对话/角色/拨号/来电/演示模式）
@@ -47,7 +53,7 @@ CLAUDE.md  ← 你在这里（项目总览 + AI 工作规范）
 ## 一、项目概述
 
 **SCRT-Reader** — SCP 主题复古 CRT 终端模拟器 / 互动小说阅读器。
-- 引擎：Godot 4.6（GL Compatibility 渲染器）
+- 引擎：Godot 4.7.1（GL Compatibility 渲染器）
 - 架构：纯 2D UI，单场景 (`main.tscn`)，无 Autoload
 - 语言：GDScript，全类型标注
 - 玩家角色：海岛观测站操作员，通过终端阅读故事包、与角色通讯、监测环境、收听无线电
@@ -60,18 +66,18 @@ CLAUDE.md  ← 你在这里（项目总览 + AI 工作规范）
 
 ### 目录结构
 ```
-SCRT/                        Godot 项目根目录（总计约 42,000 行 GDScript）
-├─ scripts/                  核心脚本（28 个文件，main.gd 2239 行、command_handler.gd 2450 行…）
+SCRT/                        Godot 项目根目录（总计约 44,000 行 GDScript）
+├─ scripts/                  核心脚本（29 个文件，command_handler.gd 2450 行、main.gd 2260 行、latex_renderer.gd 1720 行…）
 ├─ comm_system/              通讯系统（13 脚本：对话引擎/角色注册/拨号状态机/语音合成/演示覆盖层）
 ├─ camera_system/            CCTV 监控（3 脚本 + 1 shader：摄像头注册/查看器/画面数据/监控着色器）
-├─ env_system/               环境监测（3 脚本：传感器模拟 1173 行 + 任务管理 703 行 + 仪表盘 578 行）
+├─ env_system/               环境监测（5 脚本：模拟、任务存档、观测流程、地图绘制、查看器）
 ├─ radio/                    无线电（radio_receiver 1804 行 + 5 支持脚本：信号管理/配置解析/音频生成/数据管理）
 ├─ settings/                 设置系统（3 脚本：管理器 903 行 + 注册表 225 行 + 存储 165 行）
 ├─ modder/                   Mod 系统（mod_api 1075 行提供 16 类沙盒 API + mod_base 92 行基类）
 ├─ templates/                文档模板（4 个查看器：article/chat/email/two_page）
 ├─ shaders/                  着色器（CRT 后处理/背景暗角/logo 效果）
 ├─ scenes/main.tscn          唯一场景（单场景架构）
-├─ data/                     配置与剧情数据（boot_config/dial_directory/radio 信号/主线剧情）
+├─ data/                     配置与剧情数据（tutorial.json 角色配置/env_config.json/radio 信号/主线剧情 manifest）
 ├─ addons/agent/             编辑器内 AI 插件（⚠️ 不要修改）
 └─ vdisc/                    故事盘 (.scp) 存放目录
 ```
@@ -112,6 +118,23 @@ Mod 输入 > 来电铃声 > 通讯对话 > 示波器 > 图片查看 > 视频播�
 | 注册命令 | `CommandHandler._register_commands()` 中添加 `_cmd_<name>` |
 | 注册设置 | `settings_manager.register_category()` / `register_setting()` |
 | 存档数据 | `save_manager.auto_save()` / `load_save()` |
+| 剧情标记/条件 | `daily_mgr.story_flags` / `story_choices`；触发前过滤 `daily_mgr._filter_playable()` |
+| 剧情版本 | `daily_mgr.get_story_version()`；manifest `story.version` 不匹配 → 自动重置相关存档 |
+| 场景邮件投递 | `daily_mgr.deliver_scene_mail(mail_id, character)`；对话 `deliver_mail` 字段自动调用 |
+| 每日配置查询 | `daily_mgr.has_day_config(day)` / `check_dialogue_conditions(dlg_id)` |
+| 拨号对话选择 | `comm_mgr.start_dialogue_from_dial(character)`，条件 `requires_tasks: "all"/"incomplete"` |
+| LaTeX 公式渲染 | `latex_renderer.render_to_texture(latex, font_size)` (async) → `ImageTexture` |
+| LaTeX 缓存查询 | `latex_renderer.get_cached_texture(latex, fs)` → `ImageTexture` (同步，未渲染返回 null) |
+| CRTML 公式标记 | `[math]LaTeX[/math]`（行内）、`[math block]LaTeX[/math]`（块级）|
+
+### LaTeX 公式系统（2026-07-15 新增）
+- **渲染器**：`scripts/latex_renderer.gd`（1720 行），`class_name LatexRenderer extends RefCounted`
+- **架构**：`_Tokenizer`(词法) → `_Parser`(递归下降 AST) → `_Layout`(测量+定位) → `_LatexCanvas`(SubViewport 绘制) → `ImageTexture`
+- **初始化**：`main.gd._ready()` 中创建，注入 4 个 Sarasa 字体，通过 `crtml.set_latex_renderer(latex_renderer)` 注入解析器
+- **集成点**：`crtml_parser.gd._process_inline()` 第 12 步 `_parse_math()`，复用 `_inline_image_cache` 占位符机制（`\u0001IMG:id\u0002`）
+- **支持命令**：`\frac` `\sqrt[n]` `^_` `\sum\int\prod\oint` `\left(\right)` `matrix/pmatrix/bmatrix/cases/aligned` 希腊字母 运算符 箭头 `\hat\vec\overline\dot\tilde` `\mathbf\mathit\mathbb` `\color` `\quad`
+- **缓存**：静态字典 `_cache`，key = `latex|font_size|color_hex`，无上限
+- **注意**：`render_to_texture` 是 async（需 `await`），故事加载时预渲染；`get_cached_texture` 是同步查询
 
 ### Viewer/Overlay 模式
 创建全屏覆盖层的标准模式：
@@ -144,25 +167,35 @@ Mod 输入 > 来电铃声 > 通讯对话 > 示波器 > 图片查看 > 视频播�
 核心终端 | 文件系统 | 故事加载 | 用户系统 | 存档系统 | 通讯系统 |
 邮件系统 | 无线电系统 | Mod 系统 | 设置系统 | 触发器系统 | 效果系统 |
 所有查看器 | CRTML 解析 | 拨号系统 | 环境监测 | 摄像头系统 | 每日对话管理器 |
-绩效系统 | 系统时钟同步 | 大气科学派生参数
+绩效系统 | 系统时钟同步 | 大气科学派生参数 | LaTeX 公式渲染 |
+剧情变量系统（story_flags/story_choices + 条件门控） | 对话链续播（next） |
+场景内邮件投递（deliver_mail） | 拨号条件对话选择（requires_tasks） | 剧情版本门控
 
-### 已有剧情内容
-- 序章（Day 1-3）+ 第一章（Day 4-7）的每日对话配置
-- AVA 角色完整精灵素材（分层/口型/眨眼）
-- 4 个无线电信号 + 5 个摄像头测试素材
+### 已有剧情内容（2026-08-19 重写）
+- **Day0 教程日**（周六）全量剧情：10 场景（D0-01~D0-10 全部入引擎）、2 封场景邮件（M00-01/M00-02 全文内嵌）、QTE 选择暂用普通选项、隐藏彩蛋信号 S-00（未知数字电台 5.473MHz）
+- **D0-05 会议接入流程**（2026-08-19）：d0_04 结束 → next 链检测 d0_05 的 call_mode=answerable 响铃 → 接听后 Ava 邀请 → 玩家选择接入（d0_meeting_1 会议模式，kanda 右侧滑入）/拒绝（d0_meeting_2）/拒接来电（d0_05_reject）
+- 角色：Ava Lacant（真人设定，O5 秘书长）、神田玲（空白占位立绘）、七海灯子（沿用内置）
+- 变量与绩效表：13 个剧情变量（initial_flags）、Day0 绩效口径（配额 3）
+- 旧剧情（AVA-AI 版 Day 1-7 等）已归档至 `data/_story_archive_20260819/`
+- 剧情源稿：`D:\360baiduyun\Novels\novel-skill\E-scrt\脚本\`（day0/角色表/变量与绩效表）
+
+### 2026-08-19 实测修复
+- **requires_flag 数值陷阱**：JSON.parse 把 `1` 解析为 float `1.0`，与 int 型 flag 的 `str()` 比较失败 → 拨号对话（ava_report_ok/fail）被过滤显示"当前不可用"。已改为数值兼容比较（daily_dialogue_manager.gd `_check_conditions`）
+- **邮件阅读触发来电重叠**：读邮件关闭查看器即触发 Ava 来电，来电 UI 与邮件界面重叠 → 改为所有邮件查看器关闭后统一触发（mail_system.gd 延迟队列）
+- **mail 按钮误呼出**：加载/通话/各查看器打开时点击 [Mail] 误开收件箱 → main.gd `_is_mail_icon_clickable()` 守卫 + 收件箱防重复打开
 
 ### 未完成事项（按优先级排序）
 
 | 优先级 | 项目 | 说明 |
 |---|---|---|
+| ★★★★★ | **Day 1-7 剧情内容** | 第一周每日对话/邮件/无线电（源稿待出） |
+| ★★★★★ | **QTE 限时选项** | D0-02 现为普通选项；限时+超时默认选项待开发（开发需求#1） |
 | ★★★★★ | **DayConfig 系统扩展** | daily_dialogues 缺少：文件解锁、环境参数覆盖、传感器偏移、强制事件 |
-| ★★★★★ | **Day 8-28 剧情内容** | 第二章至终章的对话/文件/邮件/无线电内容 |
-| ★★★★☆ | **剧情变量系统** | trust_ava、truth_discovered 等变量追踪，用于条件判断 |
 | ★★★★☆ | **每日拨号对话轮换** | 同角色不同天数返回不同对话 |
-| ★★★☆☆ | **结局判定系统** | 4 种结局条件判定（见 design-doc.txt §6.3） |
+| ★★★☆☆ | **结局判定系统** | 3 分支结局条件判定（见 变量与绩效表.md §三） |
 | ★★★☆☆ | **角色关系系统** | 对话选择影响关系值，关系值影响对话内容 |
 | ★★☆☆☆ | **BGM 音乐** | 已有 20 首设计说明（bgm-descriptions.md），缺音频文件 |
-| ★★☆☆☆ | **更多角色素材** | 只有 AVA 有完整精灵，researcher 仅临时占位 |
+| ★★☆☆☆ | **角色立绘素材** | 神田玲立绘空白占位（开发需求#7）；researcher 仅临时占位 |
 
 > 详见 `docs/design-doc.txt` 第八节"待实现的关键系统"
 
@@ -198,3 +231,9 @@ Mod 输入 > 来电铃声 > 通讯对话 > 示波器 > 图片查看 > 视频播�
 3. ☐ 大文件行数是否有显著变化？→ 更新 `docs/architecture.md`
 4. ☐ 是否完成了"未完成事项"中的某项？→ 更新本文件第五节
 5. ☐ 新增的子系统是否有 CLAUDE.md？→ 如无则创建
+
+
+## 2026-10-01 Environment demo 升级
+
+观测台代码已接入，等待玩家验收；圆盘中以正方形暂代用户地图，无无人机。env 打开界面，S短采集、Enter手动提交，R/F/N/K核对与关注，H历史、D详情。保留 Day0任务条件和旧日报，首次日报 +1 daily（Day0剧情计分），防重复奖励。profile 第二页加入绩效概览；每日剧情通讯队列避免覆盖界面重叠。详见 docs/upgrade-plans/environment-manual-test-plan.md；未运行Godot。
+

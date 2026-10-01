@@ -22,9 +22,21 @@ class AssetProfile:
 	## 素材模式: "layered" / "static" / "minimal"
 	var mode: String = "minimal"
 
+	## ★ 图片画布原始尺寸（所有图层共用同一画布，用于精确计算缩放和底部对齐）
+	var canvas_size: Vector2 = Vector2(1216, 1803)
+
+	## ★ 显示调整参数（用于适配不同画布尺寸的素材）
+	var display_scale: float = 1.0              # 整体缩放比例
+	var display_offset: Vector2 = Vector2.ZERO  # 位置偏移 (px)
+	var meeting_offset: Vector2 = Vector2.ZERO  # 仅 meeting 模式的额外位置偏移 (px)
+	var clip_rect: Rect2 = Rect2()              # 裁剪区域 (空=不裁剪)
+	var anchor_point: Vector2 = Vector2(0.5, 1.0)  # 锚点 (0.5,1.0=底部中心)
+
 	## 分层渲染顺序（从底到顶）
 	## 例: ["body", "head", "nose", "eye_L", "eye_R", "mouth", "eyehair", "glasses"]
 	var layer_order: Array[String] = []
+	var idle_eye_state: String = "open"
+	var idle_mouth_key: String = "MBP"
 
 	## 静态图层文件映射 { "head": "ava-head.png", "body": "ava-body-1.png", ... }
 	var layer_files: Dictionary = {}
@@ -58,7 +70,15 @@ class AssetProfile:
 		return {
 			"base_dir": base_dir,
 			"mode": mode,
+			"canvas_size": [canvas_size.x, canvas_size.y],
+			"display_scale": display_scale,
+			"display_offset": [display_offset.x, display_offset.y],
+			"meeting_offset": [meeting_offset.x, meeting_offset.y],
+			"clip_rect": [clip_rect.position.x, clip_rect.position.y, clip_rect.size.x, clip_rect.size.y] if clip_rect.size != Vector2.ZERO else [],
+			"anchor_point": [anchor_point.x, anchor_point.y],
 			"layer_order": layer_order,
+			"idle_eye_state": idle_eye_state,
+			"idle_mouth_key": idle_mouth_key,
 			"layer_files": layer_files,
 			"eye_files": eye_files,
 			"mouth_files": mouth_files,
@@ -74,9 +94,34 @@ class AssetProfile:
 		p.base_dir = str(data.get("base_dir", ""))
 		p.mode = str(data.get("mode", "minimal"))
 
+		# 显示调整参数
+		if data.has("canvas_size") and data["canvas_size"] is Array:
+			var cs: Array = data["canvas_size"]
+			if cs.size() >= 2:
+				p.canvas_size = Vector2(float(cs[0]), float(cs[1]))
+		p.display_scale = float(data.get("display_scale", 1.0))
+		if data.has("display_offset") and data["display_offset"] is Array:
+			var off: Array = data["display_offset"]
+			if off.size() >= 2:
+				p.display_offset = Vector2(float(off[0]), float(off[1]))
+		if data.has("meeting_offset") and data["meeting_offset"] is Array:
+			var meeting_off: Array = data["meeting_offset"]
+			if meeting_off.size() >= 2:
+				p.meeting_offset = Vector2(float(meeting_off[0]), float(meeting_off[1]))
+		if data.has("clip_rect") and data["clip_rect"] is Array:
+			var cr: Array = data["clip_rect"]
+			if cr.size() >= 4:
+				p.clip_rect = Rect2(float(cr[0]), float(cr[1]), float(cr[2]), float(cr[3]))
+		if data.has("anchor_point") and data["anchor_point"] is Array:
+			var ap: Array = data["anchor_point"]
+			if ap.size() >= 2:
+				p.anchor_point = Vector2(float(ap[0]), float(ap[1]))
+
 		if data.has("layer_order") and data["layer_order"] is Array:
 			for item in data["layer_order"]:
 				p.layer_order.append(str(item))
+		p.idle_eye_state = str(data.get("idle_eye_state", "open"))
+		p.idle_mouth_key = str(data.get("idle_mouth_key", "MBP"))
 
 		if data.has("layer_files") and data["layer_files"] is Dictionary:
 			p.layer_files = data["layer_files"]
@@ -370,6 +415,13 @@ static func create_ava_profile() -> AssetProfile:
 	var p := AssetProfile.new()
 	p.base_dir = "res://images/character/ava/"
 	p.mode = "layered"
+
+	# ★ 显示调整参数（根据实际效果调整）
+	p.display_scale = 0.95              # 90%大小
+	p.display_offset = Vector2(0, 0)   # 位置偏移（可调整）
+	p.clip_rect = Rect2()              # 不裁剪
+	p.anchor_point = Vector2(0.5, 1.0) # 底部中心锚点
+
 	p.layer_order = ["head", "nose", "eye_L", "eye_R", "mouth", "eyehair", "glasses", "body"]
 	p.layer_files = {
 		"head": "ava-head.png",
@@ -396,6 +448,94 @@ static func create_ava_profile() -> AssetProfile:
 		"UW": "ava-M-6-UW.png",
 		"FV": "ava-M-7-FV.png",
 		"LNTS": "ava-M-8-LNTS.png",
+	}
+	return p
+
+## 神田玲（Rei）：PSD 从上到下为 eyes / nose / mouth / head / body / braid。
+static func create_rei_profile() -> AssetProfile:
+	var p := AssetProfile.new()
+	p.base_dir = "res://images/character/rei/"
+	p.mode = "layered"
+	p.canvas_size = Vector2(3150, 4455)
+	p.display_scale = 1.20
+	p.display_offset = Vector2(0, 50)
+	p.meeting_offset = Vector2(0, 70)  # 仅 meeting 模式微调；抵消大图下沉，不影响头像卡片
+	p.anchor_point = Vector2(0.5, 1.0)
+	p.layer_order = ["braid", "body", "head", "mouth", "nose", "eye_L", "eye_R", "eyehair"]
+	p.idle_eye_state = "default"
+	p.idle_mouth_key = "default"
+	p.layer_files = {
+		"braid": "rei-braid-1.png",
+		"body": "rei-body-1-crossedarms.png",
+		"head": "rei-head-1.png",
+		"nose": "rei-nose.png",
+		"eyehair": "rei-eyehair.png",
+	}
+	p.eye_files = {
+		"eye_L_default": "rei-eyes-0-L-naughty.png",
+		"eye_R_default": "rei-eyes-0-R-naughty.png",
+		"eye_L_open": "rei-eyes-1-L-open.png",
+		"eye_R_open": "rei-eyes-1-R-open.png",
+		"eye_L_half": "rei-eyes-2-L-half.png",
+		"eye_R_half": "rei-eyes-2-R-half.png",
+		"eye_L_close": "rei-eyes-3-L-close.png",
+		"eye_R_close": "rei-eyes-3-R-close.png",
+	}
+	p.mouth_files = {
+		"default": "rei-M-0-naughty.png",
+		"MBP": "rei-M-1-MBP-closed.png",
+		"slight": "rei-M-2-slightopen.png",
+		"A": "rei-M-3-A.png",
+		"EI": "rei-M-4-EI.png",
+		"O": "rei-M-5-O.png",
+		"UW": "rei-M-6-UW.png",
+		"FV": "rei-M-7-FV.png",
+		"LNTS": "rei-M-8-LNTS.png",
+	}
+	return p
+
+## 创建 Nanami 的素材 profile
+static func create_nanami_profile() -> AssetProfile:
+	var p := AssetProfile.new()
+	p.base_dir = "res://images/character/nanami/"
+	p.mode = "layered"
+
+	# ★ 显示调整参数（根据实际效果调整）
+	p.display_scale = 1.1              # 110%大小
+	p.display_offset = Vector2(0, 0)   # 位置偏移（x,y），负值为上/右
+	p.clip_rect = Rect2()              # 不裁剪
+	p.anchor_point = Vector2(0.5, 1.0) # 底部中心锚点
+
+	p.layer_order = ["head", "nose", "eye_L", "eye_R", "fronthair", "mouth", "eyehair", "body"]
+	p.layer_files = {
+		"head": "nanami-head.png",
+		"nose": "nanami-nose.png",
+		"eyehair": "nanami-eyehair.png",
+		"fronthair": "nanami-fronthair.png",
+		"body": "nanami-body-1-labcoat.png",
+	}
+	p.eye_files = {
+		"eye_L_open": "nanami-eyes-1-L-open.png",
+		"eye_L_half": "nanami-eyes-2-L-half.png",
+		"eye_L_close": "nanami-eyes-3-L-close.png",
+		"eye_R_open": "nanami-eyes-1-R-open.png",
+		"eye_R_half": "nanami-eyes-2-R-half.png",
+		"eye_R_close": "nanami-eyes-3-R-close.png",
+		"eye_L_special1": "nanami-eyes-4-L-0.25close.png",
+		"eye_R_special1": "nanami-eyes-4-R-0.25close.png",
+		"eye_L_special2": "nanami-eyes-5-L-happyclose.png",
+		"eye_R_special2": "nanami-eyes-5-R-happyclose.png",
+	}
+	p.mouth_files = {
+		"MBP": "nanami-M-1-MBP-closed.png",
+		"slight": "nanami-M-2-slightopen.png",
+		"A": "nanami-M-3-A.png",
+		"EI": "nanami-M-4-EI.png",
+		"O": "nanami-M-5-O.png",
+		"UW": "nanami-M-6-UW.png",
+		"FV": "nanami-M-7-FV.png",
+		"LNTS": "nanami-M-8-LNTS.png",
+		"unhappy": "nanami-M-9-unhappy-closed.png",
 	}
 	return p
 

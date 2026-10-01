@@ -794,12 +794,12 @@ func _resolve_color(color_name: String) -> String:
 func is_active() -> bool:
 	return _active
 
-func skip() -> void:
+func skip(force: bool = false) -> void:
 	if not _active:
 		return
 	# 跳过：立即停止音频，直接完成
 
-	if not skippable:
+	if not skippable and not force:
 		return  # 首次开机不可跳过
 
 	if _boot_audio_player and _boot_audio_player.playing:

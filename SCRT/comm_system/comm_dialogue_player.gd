@@ -73,6 +73,8 @@ func start_dialogue(dialogue_id: String, dialogue_data: Dictionary) -> void:
 func stop_dialogue(silent: bool = false) -> void:
 	if not is_active:
 		return
+	if _comm_mgr and _comm_mgr._voice:
+		_comm_mgr._voice.stop()
 	_typing_active = false
 	_waiting = false
 	_click_to_continue = false
@@ -101,6 +103,8 @@ func advance() -> void:
 ## 跳过当前行的打字效果
 func skip_typing() -> void:
 	if _typing_active:
+		if _comm_mgr and _comm_mgr._voice:
+			_comm_mgr._voice.stop()
 		_typing_active = false
 		_displayed_chars = _full_text.length()
 		line_finished.emit(current_line_index)
@@ -172,7 +176,10 @@ func _play_current_line() -> void:
 			_comm_mgr.set_display_mode(display_mode)
 
 		# meeting/presentation 模式下设置角色位置
-		if (display_mode == "meeting" or display_mode == "presentation") and not char_id.is_empty():
+		# 行显式声明 meeting/presentation，或当前已在会议模式（后续行仅写 meeting_slot）都生效
+		var _ui: Variant = _comm_mgr._ui if _comm_mgr else null
+		var in_meeting_mode: bool = _ui != null and (_ui._display_mode == "meeting" or _ui._display_mode == "presentation")
+		if (display_mode == "meeting" or display_mode == "presentation" or in_meeting_mode) and not char_id.is_empty():
 			_comm_mgr.set_meeting_char(char_id, meeting_slot)
 
 		# 播放角色动画（card/meeting 均可用）
@@ -202,8 +209,8 @@ func _play_current_line() -> void:
 			if line.has("slide_align"):
 				slide_config["align"] = str(line.get("slide_align"))
 			_comm_mgr.show_presentation_slide(slide_config)
-		elif line.has("slide_hide"):
-			# JSON: "slide_hide": true  或 "slide_hide": "slide_left"
+		elif line.get("slide_hide", false) != false:
+			# JSON: "slide_hide": true  或 "slide_hide": "slide_left"（false 时不触发）
 			var hide_transition: String = str(line.get("slide_hide", "fade"))
 			if hide_transition == "true" or hide_transition == "True":
 				hide_transition = "fade"
@@ -219,6 +226,14 @@ func _play_current_line() -> void:
 	if not sound.is_empty():
 		_play_sound(sound)
 
+	# ── 剧情动作（触发器动作字符串，如 "score:1:daily"）──
+	var story_action = line.get("story_action")
+	if story_action is String and not str(story_action).is_empty():
+		_execute_story_action(str(story_action))
+	elif story_action is Array:
+		for act in story_action:
+			_execute_story_action(str(act))
+
 	# 开始逐字显示
 	_full_text = text
 	_displayed_chars = 0
@@ -227,6 +242,8 @@ func _play_current_line() -> void:
 	_pause_timer = 0.0
 
 	if _comm_mgr:
+		if _comm_mgr._voice:
+			_typing_speed = _comm_mgr._voice.get_char_delay()
 		_comm_mgr._start_speaking()
 
 ## 检查行结束后的行为
@@ -313,6 +330,12 @@ func _trigger_screen_effect(effect: String) -> void:
 ## 播放音效
 func _play_sound(sound_path: String) -> void:
 	pass
+
+## 执行剧情动作（转发给触发器系统）
+func _execute_story_action(action_str: String) -> void:
+	if _main == null or _main.trigger_sys == null:
+		return
+	_main.trigger_sys._execute(action_str, {})
 
 # ══════════════════════════════════════════
 #  每帧更新

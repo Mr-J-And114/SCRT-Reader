@@ -5,6 +5,16 @@
 # ============================================================
 class_name Typewriter
 extends Node
+const PROGRESS_BAR_WIDTH: int = 30
+const PROGRESS_FILLED: String = "█"
+
+## 终端及弹窗共用的字符进度条；负值表示总长度未知。
+static func format_progress_bar(progress: float, caption: String = "加载中") -> String:
+	if progress < 0.0:
+		return caption + " [等待数据长度]"
+	var ratio: float = clampf(progress, 0.0, 1.0)
+	var filled: int = int(ratio * PROGRESS_BAR_WIDTH)
+	return "%s [%s%s] %3d%%" % [caption, PROGRESS_FILLED.repeat(filled), " ".repeat(PROGRESS_BAR_WIDTH - filled), int(ratio * 100.0)]
 
 # ============================================================
 # UI 节点引用（由 main.gd 初始化时传入）
@@ -67,6 +77,9 @@ func setup(p_output: RichTextLabel, p_scroll: ScrollContainer, p_main = null) ->
 # 外部接口：追加文本到队列
 # ============================================================
 func append(text: String, extra_newline: bool = true) -> void:
+	if main_ref and main_ref.is_terminal_covered():
+		main_ref.append_output(text + ("\n" if extra_newline else ""), false, false)
+		return
 	queue.append({"text": text, "extra_newline": extra_newline})
 	if not is_typing:
 		_process_queue()
@@ -153,6 +166,9 @@ func _typewrite_text(text: String, extra_newline: bool = true) -> void:
 	_current_char_speed = base_speed
 
 	while i < length:
+		# 全屏查看器使用独立文本，终端协程暂停，防止写穿覆盖层或丢失输出。
+		while main_ref and main_ref.is_terminal_covered():
+			await get_tree().process_frame
 		# 如果中途切换为即时模式，把剩余文本一次性输出
 		if instant:
 			var remaining: String = _strip_tw_tags(text.substr(i))
@@ -323,7 +339,9 @@ func _typewrite_text(text: String, extra_newline: bool = true) -> void:
 # 进度条动画
 # ============================================================
 func show_progress_bar(file_size: int, speed_override: float = -1.0) -> void:
-	var bar_width: int = 30
+	while main_ref and main_ref.is_terminal_covered():
+		await get_tree().process_frame
+	var bar_width: int = PROGRESS_BAR_WIDTH
 	var speed: float = progress_bar_speed
 	if speed_override > 0.0:
 		speed = speed_override
@@ -339,11 +357,13 @@ func show_progress_bar(file_size: int, speed_override: float = -1.0) -> void:
 	output_text.append_text("[color=" + bar_color + "]加载中 [[/color]")
 
 	for i in range(bar_width):
+		while main_ref and main_ref.is_terminal_covered():
+			await get_tree().process_frame
 		if instant:
 			var remaining: int = bar_width - i
-			output_text.append_text("[color=" + bar_color + "]" + "█".repeat(remaining) + "[/color]")
+			output_text.append_text("[color=" + bar_color + "]" + PROGRESS_FILLED.repeat(remaining) + "[/color]")
 			break
-		output_text.append_text("[color=" + bar_color + "]█[/color]")
+		output_text.append_text("[color=" + bar_color + "]" + PROGRESS_FILLED + "[/color]")
 		_do_scroll()
 
 		var jitter: float = randf_range(0.7, 1.5)

@@ -1,9 +1,9 @@
 ==============================================================
  SCRT-Reader 监控摄像头系统 — 素材制作与集成指导
 ==============================================================
- 版本: 1.0
- 适用于: SCRT-Reader camera_system 模块
- 最后更新: 2026-03-04
+  版本: 1.1
+  适用于: SCRT-Reader camera_system 模块（含 Region-Based Depth）
+  最后更新: 2026-07-14
 ==============================================================
 
 
@@ -304,7 +304,211 @@ Infrared 热力图:
   duration        float    持续秒数（默认 3.0）
   min_interval    float    最小间隔秒数（默认 60.0）
   effects         Array    附带效果 ["glitch:强度", "noise_burst:强度", ...]
-  action          String   触发器动作串（同 trigger_system 语法）
+   action          String   触发器动作串（同 trigger_system 语法）
+
+
+7.2 Region Config — Region-Based Depth（区域深度，进阶）
+============================================================
+
+7.2.0 概述
+-------------------------------------------------------------
+
+从 2026-07-14 起，摄像头系统支持 Region-Based Depth，
+用人工区域划分取代/增强逐像素深度图，解决 POM 视差中
+不同物体被错误归为一类的"空间结构错位"问题。
+
+三种互补的深度定义方式，可同时使用也可任选 1-2 种：
+
+  ┌────────────────┬──────────────────────────────────────┐
+  │ Polygon        │ JSON 顶点坐标定义规则多边形区域       │
+  │ 适用:          │ 天花板、地板、墙面等规则形状          │
+  ├────────────────┼──────────────────────────────────────┤
+  │ PNG Mask       │ 透明/黑白 PNG 定义任意复杂形状        │
+  │ 适用:          │ 树冠、云朵、不规则物体轮廓            │
+  ├────────────────┼──────────────────────────────────────┤
+  │ Multi-Layer    │ 独立底图 + 独立深度图 + z_offset      │
+  │ 适用:          │ 飞鸟、路灯、前景装饰等独立物体        │
+  └────────────────┴──────────────────────────────────────┘
+
+优先级链（每个像素独立计算）:
+  layer (z_offset 最大) → mask (priority 最高) → polygon
+  → raw depth_map fallback → global_default_distance
+
+不提供 region_config 时行为与旧版完全一致（向后兼容）。
+
+
+7.2.1 配置总览
+-------------------------------------------------------------
+
+在 manifest 的摄像头配置中添加 "region_config" 顶层字段：
+
+  "region_config": {
+    "global_default_distance": 0.3,
+    "smooth_radius": 0.02,
+    "use_raw_depth_fallback": true,
+    "polygons": [ ... ],
+    "masks":    [ ... ],
+    "layers":   [ ... ]
+  }
+
+全局参数:
+  global_default_distance   float    0-1，未定义像素的默认深度（默认 0.3）
+  smooth_radius             float    区域边界平滑半径比例（默认 0.02，0=禁用）
+  use_raw_depth_fallback    bool     未覆盖像素回退到原始 depth_map（默认 true）
+
+
+7.2.2 Polygon 区域（规则形状）
+-------------------------------------------------------------
+
+  "polygons": [
+    {
+      "id": "wall_back",
+      "label": "后方墙壁",
+      "ref_distance": 0.1,
+      "light_absorption": 0.9,
+      "points": [
+        [0.0, 0.0], [1.0, 0.0],
+        [1.0, 0.4], [0.0, 0.4]
+      ]
+    },
+    {
+      "id": "floor",
+      "label": "地面",
+      "ref_distance": 0.8,
+      "light_absorption": 0.3,
+      "points": [
+        [0.0, 0.6], [1.0, 0.6],
+        [1.0, 1.0], [0.0, 1.0]
+      ]
+    }
+  ]
+
+每个 Polygon 字段:
+  id                唯一标识（不写则自动生成 "poly_0"）
+  label             显示标签（可选，调试用）
+  ref_distance      参考距离 0-1（0=远/黑，1=近/白，默认 0.5）
+  light_absorption  吸光系数 0-1（0=不吸光，1=完全吸光，默认 0.5）
+  points            顶点数组 [[x0,y0],[x1,y1],...]，坐标 0-1，至少 3 个
+
+顶点坐标从左上角 [0,0] 到右下角 [1,1]。
+系统使用扫描线填充算法光栅化多边形。
+
+
+7.2.3 PNG Mask 区域（不规则形状）
+-------------------------------------------------------------
+
+  "masks": [
+    {
+      "id": "tree_crown",
+      "label": "树冠",
+      "image": "cameras/exterior_01/mask_tree.png",
+      "ref_distance": 0.6,
+      "light_absorption": 0.7,
+      "priority": 2
+    },
+    {
+      "id": "clouds",
+      "label": "云层",
+      "image": "cameras/exterior_01/mask_clouds.png",
+      "ref_distance": 0.95,
+      "light_absorption": 0.1,
+      "priority": 3
+    }
+  ]
+
+每个 Mask 字段:
+  id                唯一标识
+  label             显示标签（可选）
+  image             Mask PNG 路径（相对 data/ 目录）
+  ref_distance      参考距离 0-1（默认 0.5）
+  real_distance     真实物理距离（米，可选，替代 ref_distance）
+  priority          优先级，越大越靠前覆盖（默认 0）
+  light_absorption  吸光系数 0-1（默认 0.5）
+
+Mask PNG 制作要点:
+  - 格式: 透明背景 PNG，物体区域为不透明
+  - 半透明边缘自动插值过渡（利用 alpha 通道做渐变）
+  - 灰度值也可作辅助权重混合
+  - 建议用 Photoshop/GIMP 画笔手工绘制，利用 alpha 通道做软边
+  - 可叠加多张 Mask，数量不限
+
+相比 Polygon，Mask 的优势是可以精细勾勒任意复杂形状的
+轮廓（树冠的不规则边缘、云朵的絮状轮廓、人物剪影等），
+并且通过 alpha 通道实现手工绘制的自然边缘过渡，远超
+算法自动生成的平滑效果。
+
+
+7.2.4 Multi-Layer 区域（独立物体层）
+-------------------------------------------------------------
+
+  "layers": [
+    {
+      "id": "bird",
+      "label": "飞鸟",
+      "base_image": "cameras/exterior_01/layer_bird_base.png",
+      "depth_map": "cameras/exterior_01/layer_bird_depth.png",
+      "z_offset": 0.3,
+      "real_distance": 15.0
+    },
+    {
+      "id": "lamp",
+      "label": "路灯",
+      "base_image": "cameras/exterior_01/layer_lamp_base.png",
+      "depth_map": "cameras/exterior_01/layer_lamp_depth.png",
+      "z_offset": 0.15,
+      "real_distance": 8.0
+    }
+  ]
+
+每个 Layer 字段:
+  id                唯一标识
+  label             显示标签（可选）
+  base_image        独立底图路径（PNG，必须带透明通道）
+  depth_map         独立深度图路径（灰度 PNG）
+  z_offset          Z 轴偏移 0-1，决定该层距镜头的深度（默认 0.0）
+  real_distance     真实物理距离（米，可选）
+
+Layer 合成流程（运行时自动执行）:
+  1. 按 z_offset 从小到大排序（从远到近）
+  2. 将所有层底图 α-合成到摄像头底图上（生成 composite base image）
+  3. 每层深度图按 z_offset 偏移后写入 region_depth_map
+  4. 上层透明像素 → 穿透到下层
+  5. 上层不透明像素 → 覆盖下层（含 α 混合）
+
+Layer 适用于需要独立深度信息的物体：
+  - 飞鸟、飞机等在前景和背景间移动的物体
+  - 前景装饰（路灯、栏杆）——它们离镜头更近，应有独立视差
+  - 特效层（粒子、雾气等半透明覆盖物）
+
+
+7.2.5 玩家操作与存档
+-------------------------------------------------------------
+
+查看器中按 R 键可实时切换 Region Depth ↔ Per-Pixel Depth。
+左下角显示当前深度模式:
+  - DEPTH: REGION —— 使用 Region-Based Depth
+  - DEPTH: PER-PIXEL —— 使用原始逐像素深度图
+
+切换状态保存在存档中，重新加载时自动恢复。
+
+
+7.2.6 制作建议与实践
+-------------------------------------------------------------
+
+  - 三种方式可混合使用，也可只选 1-2 种
+  - 不提供 region_config 时，行为与旧版完全一致（向后兼容）
+  - 先用 Polygon 快速框出大结构（墙壁/地板/天花板）
+  - 再用 Mask 精修不规则形状（树冠/云朵/人物轮廓）
+  - Layers 仅用于需要独立深度的物体（前景装饰、移动物体）
+  - 未覆盖区域自动回退到原始 depth_map
+  - 建议 smooth_radius 设为 0.01-0.03，消除 polygon 硬边缘
+  - 制作流程示例:
+      1. 准备底图 (base_image) + 深度图 (depth_map)
+      2. 在 manifest 中为摄像头添加 region_config
+      3. 添加 2-3 个 polygon 定义主体结构
+      4. 如有不规则物体，制作 mask PNG 并添加 mask 定义
+      5. 如有独立前景物体，制作 layer base + depth 并添加 layer 定义
+      6. 在查看器中按 R 对比效果
 
 
 8. 触发器动作
@@ -362,7 +566,14 @@ Infrared 热力图:
       │   │   ├── base.png
       │   │   └── depth.png
       │   └── exterior_01/
-      │       └── base.jpg           ← 只有底图也完全可以
+      │       ├── base.jpg           ← 只有底图也完全可以
+      │       ├── depth.png          ← 逐像素深度图
+      │       ├── mask_tree.png      ← Region Config: Mask PNG
+      │       ├── mask_clouds.png    ← Region Config: Mask PNG
+      │       ├── layer_bird_base.png    ← Region Config: Layer 底图
+      │       ├── layer_bird_depth.png   ← Region Config: Layer 深度图
+      │       ├── layer_lamp_base.png    ← Region Config: Layer 底图
+      │       └── layer_lamp_depth.png   ← Region Config: Layer 深度图
       └── ...（其他故事文件）
 
 
@@ -396,18 +607,27 @@ Infrared 热力图:
   - 异常图的变化幅度越小越诡异（如只是多了个影子）
   - 配合声音效果（action: "sound:..."）增强冲击力
 
-12.3 照明选择
+12.6 Region-Based Depth 设计建议
+  - 先决定是否使用 region_depth（不是所有摄像头都需要）
+  - 简单场景（单一室内房间）→ Polygon 即可
+  - 复杂自然场景（户外/森林）→ Mask PNG 为主
+  - 有独立视觉元素的场景 → Layers 补充
+  - 用 R 键在查看器中实时切换对比效果
+  - smooth_radius 设 0.01-0.02 消除硬边，太高会模糊细节
+  - 多种方式混合时，优先级自动处理，无需手动协调
+
+12.7 照明选择
   - 室内有灯光 → spotlight 模式
   - 夜间/停电 → nightvision 模式（氛围好）
   - 特殊设施/SCP 主题 → infrared 模式（科技感）
   - 室外白天 → none 模式即可
 
-12.4 信号质量叙事
+12.8 信号质量叙事
   - 降低 signal_quality 制造「信号不好」的紧张感
   - 可通过触发器动态调整：camera_signal:cam_id:0.3
   - 信号很低时雪花点和噪点会自动增加
 
-12.5 解锁节奏
+12.9 解锁节奏
   - 初始只给 1-2 个基础摄像头
   - 随安全等级提升逐步解锁更多
   - 某些摄像头可以是「发现后才解锁」（通过读取文件触发）

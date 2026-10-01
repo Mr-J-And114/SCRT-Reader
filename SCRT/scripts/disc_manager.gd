@@ -24,6 +24,7 @@ var _loaded_external_mod_id: String = ""
 # ══════════════════════════════════════════
 var available_stories: Array[Dictionary] = []
 var vdisc_dir: String = ""
+var current_loaded_path: String = ""
 # ══════════════════════════════════════════
 #  初始化
 # ══════════════════════════════════════════
@@ -60,6 +61,7 @@ func reset_all() -> void:
 	main.story_id = ""
 	main.story_manifest = {}
 	main.current_story_index = -1
+	current_loaded_path = ""
 	main.audio_manager.stop_ambient(0.5)
 	# 无线电接收器不再随 vdisc 关闭（radio 已独立于 vdisc）
 	# 重置触发器系统
@@ -173,6 +175,9 @@ func scan_stories(silent: bool = false) -> void:
 	var filename: String = dir.get_next()
 	while not filename.is_empty():
 		if not dir.current_is_dir() and filename.get_extension().to_lower() == "scp":
+			if main.vdisc_task_mgr and main.user_mgr.is_logged_in and not main.vdisc_task_mgr.get_task_for_filename(filename).is_empty():
+				filename = dir.get_next()
+				continue
 			var full_path: String = vdisc_dir + filename
 			var info: Dictionary = _quick_read_manifest(full_path)
 			info["filename"] = filename
@@ -187,6 +192,24 @@ func scan_stories(silent: bool = false) -> void:
 			available_stories.append(info)
 		filename = dir.get_next()
 	dir.list_dir_end()
+	if main.vdisc_task_mgr and main.user_mgr.is_logged_in:
+		var inbox_dir: String = main.vdisc_task_mgr.get_inbox_dir()
+		var inbox := DirAccess.open(inbox_dir)
+		if inbox:
+			inbox.list_dir_begin()
+			var own_name: String = inbox.get_next()
+			while not own_name.is_empty():
+				if not inbox.current_is_dir() and own_name.get_extension().to_lower() == "scp":
+					var own_path: String = inbox_dir.path_join(own_name)
+					var own_info: Dictionary = _quick_read_manifest(own_path)
+					own_info["filename"] = own_name
+					own_info["path"] = own_path
+					own_info["_player_copy"] = true
+					own_info["_is_package"] = false
+					own_info["_package_type"] = ""
+					available_stories.append(own_info)
+				own_name = inbox.get_next()
+			inbox.list_dir_end()
 	# 非静默模式：显示扫描进度条和结果
 	if not silent:
 		main.append_output("[color=" + str(T.muted_hex) + "]正在扫描 vdisc/ 目录...[/color]\n", false)
@@ -231,6 +254,8 @@ func scan_stories(silent: bool = false) -> void:
 					save_marker = " [color=" + w + "][存档][/color]"
 				# ★ 包类型标记
 				var type_marker: String = ""
+				if bool(story.get("_player_copy", false)):
+					type_marker = " [color=" + p + "][个人任务盘][/color]"
 				if is_pkg:
 					if pkg_type_str == "internal":
 						type_marker = " [color=" + T.warning_hex + "][内部软件][/color]"
@@ -308,11 +333,14 @@ func load_story(args: Array) -> void:
 	if not story_loader.load_story(path):
 		main.append_output("[color=" + T.error_hex + "]磁盘加载失败: " + story_loader.error_message + "[/color]\n", false)
 		return
+	current_loaded_path = path
 	# ★ 在设置 FS 前，从 story_loader 直接提取 loading_screen.json
 	var ls_config: Dictionary = _extract_loading_screen(story_loader.file_system)
 	# 设置文件系统（loading_screen 的 sound 动作需要访问虚拟FS）
 	fs.file_system = story_loader.file_system
 	main.story_manifest = story_loader.manifest
+	if main.vdisc_task_mgr:
+		main.vdisc_task_mgr.load_tasks_from_manifest(main.story_manifest)
 	main.current_story_index = index
 	var story_dict: Dictionary = main.story_manifest.get("story", {}) as Dictionary
 	# ★ 注入磁盘信息到载入画面
@@ -452,6 +480,8 @@ func load_story(args: Array) -> void:
 		main.read_files.clear()
 		main.unlocked_passwords.clear()
 		main.current_path = "/"
+	if main.vdisc_task_mgr:
+		main.vdisc_task_mgr.apply_modifications(story_id)
 	# 清屏，切换到磁盘模式
 	main.output_text.text = ""
 	tw.clear_queue()
@@ -504,13 +534,15 @@ func load_story(args: Array) -> void:
 		print("[DiscManager] 环境监测系统已加载")
 	if main.env_task_mgr:
 		if not main.env_task_mgr.load_task_progress():
-			main.env_task_mgr.reset_for_new_day()
-		elif main.env_task_mgr.can_advance_day() and main.env_monitor:
-			main.env_monitor.advance_day()
-			main.env_task_mgr.reset_for_new_day()
-			main.env_monitor.save_env_progress()
-			main.env_task_mgr.save_task_progress()
-			print("[DiscManager] 自动推进至第 %d 天" % main.env_monitor.current_day)
+			main.env_task_mgr.reset_for_new_day(false)
+		else:
+			main.env_observation.migrate_legacy()
+			if main.env_task_mgr.can_advance_day() and main.env_monitor:
+				main.env_monitor.advance_day()
+				main.env_task_mgr.reset_for_new_day()
+				main.env_monitor.save_env_progress()
+				main.env_task_mgr.save_task_progress()
+				print("[DiscManager] 自动推进至第 %d 天" % main.env_monitor.current_day)
 	# ── ★ 加载每日剧情对话覆盖 ──
 	if main.daily_dialogue_mgr:
 		main.daily_dialogue_mgr.load_from_manifest(main.story_manifest)
@@ -666,6 +698,11 @@ func show_story_info() -> void:
 	if main._desktop_mode:
 		main.append_output("[color=" + p + "]vdisc 目录: [/color][color=" + m + "]" + vdisc_dir + "[/color]\n", false)
 		main.append_output("[color=" + p + "]磁盘数量: [/color][color=" + m + "]" + str(available_stories.size()) + "[/color]\n", false)
+		if main.vdisc_task_mgr:
+			for task in main.vdisc_task_mgr.get_task_list():
+				main.append_output("  [color=" + p + "]" + str(task["title"]) + "[/color]  [" + str(task["status"]) + "]  ID: " + str(task["id"]) + "\n", false)
+			if not main.vdisc_task_mgr.archive.is_empty():
+				main.append_output("[color=" + m + "]个人归档: " + str(main.vdisc_task_mgr.archive.size()) + " 条记录[/color]\n", false)
 		if available_stories.size() > 0:
 			main.append_output("[color=" + m + "]输入 scan 查看详细列表。[/color]\n", false)
 		return
@@ -689,6 +726,20 @@ func show_story_info() -> void:
 	lines.append("  [color=" + m + "]权限等级:[/color]  [color=" + w + "]" + str(fs.player_clearance) + "[/color]")
 	lines.append("  [color=" + m + "]已读文件:[/color]  [color=" + p + "]" + str(main.read_files.size()) + "[/color]")
 	lines.append("  [color=" + m + "]当前路径:[/color]  [color=" + p + "]" + main.current_path + "[/color]")
+	if main.vdisc_task_mgr:
+		var task_id: String = main.vdisc_task_mgr.get_task_for_story(sid)
+		if not task_id.is_empty():
+			var progress: Dictionary = main.vdisc_task_mgr.get_progress_detail(sid)
+			lines.append("  [color=" + m + "]任务进度:[/color]  [color=" + p + "]%d/%d (%d%%)[/color]" % [int(progress["read"]), int(progress["total"]), int(progress["percent"])])
+			var task: Dictionary = main.vdisc_task_mgr.definitions[task_id]
+			var verdict: Dictionary = main.vdisc_task_mgr.check_requirements(task_id)
+			lines.append("  任务：" + str(task.get("title", task_id)))
+			lines.append("  上交命令：submit " + str(task.get("giver_number", "")))
+			if bool(verdict["passed"]):
+				lines.append("  [color=" + p + "]已满足上交要求，可执行上述命令。[/color]")
+			else:
+				for reason in verdict["missing"]:
+					lines.append("  [color=" + w + "]待完成：" + str(reason) + "[/color]")
 
 	# ★ 显示外部模组信息
 	if _loaded_external_mod != null:

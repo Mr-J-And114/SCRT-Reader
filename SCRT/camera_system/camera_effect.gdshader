@@ -9,6 +9,10 @@ uniform sampler2D base_texture : filter_linear, repeat_disable;
 uniform sampler2D depth_texture : filter_linear, repeat_disable;
 uniform sampler2D light_texture : filter_linear, repeat_disable;
 
+// ── Region-Based Depth ──
+uniform bool use_region_depth = false;
+uniform sampler2D region_depth_texture : filter_linear, repeat_disable;
+
 // ── 异常叠加 ──
 uniform sampler2D anomaly_texture : filter_linear, repeat_disable;
 uniform sampler2D anomaly_depth : filter_linear, repeat_disable;
@@ -76,6 +80,18 @@ float value_noise(vec2 p) {
 }
 
 // ============================================================
+// 统一深度采样（支持 Region-Based Depth）
+// CPU 端 build_region_depth_map() 已处理 raw depth fallback，
+// shader 端无需再做阈值判断，直接使用 region_depth_texture
+// ============================================================
+float get_depth(vec2 uv) {
+	if (use_region_depth) {
+		return texture(region_depth_texture, uv).r;
+	}
+	return texture(depth_texture, uv).r;
+}
+
+// ============================================================
 // 视差遮蔽映射（Parallax Occlusion Mapping）
 // ============================================================
 vec2 parallax_mapping(vec2 uv, vec2 view_dir) {
@@ -83,15 +99,15 @@ vec2 parallax_mapping(vec2 uv, vec2 view_dir) {
 		return uv;
 	}
 
-	// 采样深度
-	float height = texture(depth_texture, uv).r;
+	// 采样深度（POM 内部 clamp 到 [0,1]，防止 region depth > 1.0 导致插值外推）
+	float height = clamp(get_depth(uv), 0.0, 1.0);
 
 	// 计算偏移
 	float layer_depth = 1.0 / float(parallax_layers);
 	float current_layer_depth = 0.0;
 	vec2 delta_uv = view_dir * parallax_scale / float(parallax_layers);
 	vec2 current_uv = uv;
-	float current_depth = texture(depth_texture, current_uv).r;
+	float current_depth = clamp(get_depth(current_uv), 0.0, 1.0);
 
 	// 陡峭视差映射
 	for (int i = 0; i < parallax_layers; i++) {
@@ -99,14 +115,14 @@ vec2 parallax_mapping(vec2 uv, vec2 view_dir) {
 			break;
 		}
 		current_uv -= delta_uv;
-		current_depth = texture(depth_texture, current_uv).r;
+		current_depth = clamp(get_depth(current_uv), 0.0, 1.0);
 		current_layer_depth += layer_depth;
 	}
 
 	// 视差遮蔽映射（插值优化）
 	vec2 prev_uv = current_uv + delta_uv;
 	float after_depth = current_depth - current_layer_depth;
-	float before_depth = texture(depth_texture, prev_uv).r - current_layer_depth + layer_depth;
+	float before_depth = clamp(get_depth(prev_uv), 0.0, 1.0) - current_layer_depth + layer_depth;
 	float weight = after_depth / (after_depth - before_depth);
 
 	return mix(current_uv, prev_uv, weight);
@@ -136,7 +152,7 @@ void fragment() {
 
 	// ── 4. 采样底图和深度 ──
 	vec4 base_col = texture(base_texture, base_uv);
-	float depth = texture(depth_texture, base_uv).r;
+	float depth = get_depth(base_uv);
 
 	// ── 5. 异常混合 ──
 	if (anomaly_blend > 0.01) {

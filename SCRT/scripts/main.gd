@@ -13,11 +13,14 @@ var disc_mgr = null
 var user_mgr = null
 var crtml = null
 var pkg_mgr: PackageManager = null
+# ★ LaTeX 公式渲染器
+var latex_renderer: LatexRenderer = null
 
 var settings_mgr: SettingsManager = null
 ## 通讯系统
 var comm_mgr: CommManager = null
 var dial_mgr: DialManager = null
+var vdisc_task_mgr: VdiscTaskManager = null
 # 触发器
 var trigger_sys: TriggerSystem = null
 var mail_sys: MailSystem = null
@@ -67,6 +70,7 @@ var _file_password_mode: bool = false
 var _file_password_target: String = ""
 var _file_password_filename: String = ""
 var _command_running: bool = false
+var _deferred_terminal_output: Array[String] = []
 # 滚动控制（用帧计数代替 await，避免协程堆积）
 var _scroll_pending_frames: int = 0
 var _theme_confirm_mode: bool = false
@@ -107,6 +111,7 @@ var _decode_mode: bool = false
 var env_monitor: EnvMonitor = null
 var env_task_mgr: EnvTaskManager = null
 var env_viewer: EnvViewer = null
+var env_observation: EnvObservation = null
 var _env_viewer_mode: bool = false
 var daily_dialogue_mgr: DailyDialogueManager = null
 # ★ 绩效系统
@@ -172,6 +177,15 @@ func _ready() -> void:
 	_register_settings_apply_callbacks()
 	crtml = CrtmlParser.new()
 	crtml.setup(T, fs, self)
+	# ★ LaTeX 渲染器初始化
+	latex_renderer = LatexRenderer.new()
+	var _lf_reg: Font = load(CrtmlParser.FONT_REGULAR) as Font
+	var _lf_bold: Font = load(CrtmlParser.FONT_BOLD) as Font
+	var _lf_ital: Font = load(CrtmlParser.FONT_ITALIC) as Font
+	var _lf_bi: Font = load(CrtmlParser.FONT_BOLD_ITALIC) as Font
+	latex_renderer.setup(self, _lf_reg, _lf_bold, _lf_ital, _lf_bi)
+	latex_renderer.set_default_color(Color(T.primary_hex) if T.primary_hex.begins_with("#") else Color(0.78, 0.9, 0.78))
+	crtml.set_latex_renderer(latex_renderer)
 	disc_mgr = DiscManager.new()
 	disc_mgr.setup(self, fs, T, tw, story_loader, save_mgr)
 	cmd_handler = CommandHandler.new()
@@ -186,10 +200,9 @@ func _ready() -> void:
 	dial_mgr = DialManager.new()
 	dial_mgr.setup(self, comm_mgr, audio_manager, T)
 	# 注册系统内置号码
-	dial_mgr.register_system_voice("1001-0001", "ava", "系统联络员 (AVA)")
-	dial_mgr.register_system_voice("1001-0002", "ava", "AVA 设施简报 (演示)")
-	dial_mgr.register_system_voice("1002-0001", "researcher", "高级研究员 (Dr. Zhang)")
-	dial_mgr.register_system_voice("1000-9999", "ava", "多方视频会议室")
+	dial_mgr.register_system_voice("1001-0001", "ava", "Ava Lacant（O5 秘书长）")
+	dial_mgr.register_system_voice("1001-0002", "kanda", "神田玲（操作指导员）")
+	dial_mgr.register_system_voice("1003-0001", "nanami", "初级研究员（七海灯子）")
 
 	# ★ 触发器系统
 	trigger_sys = TriggerSystem.new()
@@ -258,12 +271,16 @@ func _ready() -> void:
 	env_monitor.setup(self, T)
 	env_task_mgr = EnvTaskManager.new()
 	env_task_mgr.setup(self, env_monitor, T)
+	env_observation = EnvObservation.new()
+	env_observation.setup(self, env_monitor, env_task_mgr)
 	env_viewer = EnvViewer.new()
 	env_viewer.setup(self, env_monitor, T)
 	env_monitor.start_new_game()
 	env_task_mgr.reset_for_new_day()
 	daily_dialogue_mgr = DailyDialogueManager.new()
 	daily_dialogue_mgr.setup(self)
+	vdisc_task_mgr = VdiscTaskManager.new()
+	vdisc_task_mgr.setup(self, fs, save_mgr, disc_mgr)
 	# ★ 初始化绩效系统
 	perf_mgr = PerformanceManager.new()
 	perf_mgr.setup(self, T)
@@ -511,6 +528,11 @@ func _full_ui_refresh() -> void:
 #  登录完成后进入桌面
 # ══════════════════════════════════════════
 func _enter_desktop_after_login(message: String) -> void:
+	if env_observation:
+		env_observation.set_preview("clear")
+		env_observation.suspended = true
+	if daily_dialogue_mgr:
+		daily_dialogue_mgr._pending_dialogues.clear()
 	var m: String = T.muted_hex
 	output_text.append_text("\n[color=" + m + "]" + message + "[/color]\n")
 	# 加载用户自定义开机配置
@@ -535,13 +557,27 @@ func _enter_desktop_after_login(message: String) -> void:
 	# ★ 登录后恢复已安装的模组
 	if pkg_mgr:
 		pkg_mgr.load_installed_mods()
+	if vdisc_task_mgr:
+		vdisc_task_mgr.load_player_state()
 	disc_mgr.scan_stories(true)
 	_update_status_bar()
 	disc_mgr.show_desktop_welcome(true)
 	# ★ NEW: 分发用户登录钩子
 	if pkg_mgr and user_mgr.is_logged_in:
 		pkg_mgr.dispatch_user_login(user_mgr.get_username())
-	# ★ 新用户教程触发
+	# ★ 登录后加载主线存档并触发每日剧情对话
+	if daily_dialogue_mgr:
+		daily_dialogue_mgr.load_main_storyline()  # 先加载主线剧情配置
+		daily_dialogue_mgr.load_story_save()
+		# ★ 剧情版本传播（各进度存档做版本门控：版本变化自动重置旧进度）
+		var _sv: String = daily_dialogue_mgr.get_story_version()
+		if env_monitor:
+			env_monitor.save_story_version = _sv
+		if env_task_mgr:
+			env_task_mgr.save_story_version = _sv
+		if perf_mgr:
+			perf_mgr.save_story_version = _sv
+	# ★ 教程入口（Day0 由 DailyDialogueManager 驱动，须在主线配置加载后判断）
 	if comm_mgr:
 		comm_mgr.try_trigger_tutorial()
 	# ★ 确保 COMM UI 已构建
@@ -549,10 +585,6 @@ func _enter_desktop_after_login(message: String) -> void:
 		comm_mgr._ui._build_ui()
 		if comm_mgr._ui._root:
 			comm_mgr._ui._root.visible = true
-	# ★ 登录后加载主线存档并触发每日剧情对话
-	if daily_dialogue_mgr:
-		daily_dialogue_mgr.load_main_storyline()  # 先加载主线剧情配置
-		daily_dialogue_mgr.load_story_save()
 	# ★ 登录后加载全局邮箱（必须在 trigger_day_start 之前，否则 delivered_ids 为空导致重复投递）
 	if mail_sys:
 		mail_sys.load_global_inbox()
@@ -565,18 +597,23 @@ func _enter_desktop_after_login(message: String) -> void:
 		perf_mgr.load_progress()
 	if env_task_mgr:
 		if not env_task_mgr.load_task_progress():
-			env_task_mgr.reset_for_new_day()  # 新玩家：初始化当日任务
+			env_task_mgr.reset_for_new_day(false)  # 清除前一账号的历史，加载当前玩家数据
 			env_task_mgr.save_task_progress()
-		elif env_task_mgr.can_advance_day() and env_monitor:
-			# 上次会话任务已全部完成，结算绩效后推进到下一天
-			if perf_mgr:
-				perf_mgr.settle_day(env_monitor.current_day)
-				perf_mgr.save_progress()
-			env_monitor.advance_day()
-			env_task_mgr.reset_for_new_day()
-			env_monitor.save_env_progress()
-			env_task_mgr.save_task_progress()
-			print("[Main] 自动推进至第 %d 天" % env_monitor.current_day)
+		else:
+			env_observation.migrate_legacy()
+			if (env_task_mgr.can_advance_day() or env_monitor.current_day == 0) and env_monitor:
+				# 上次会话任务已全部完成，结算绩效后推进到下一天
+				# ★ Day0 教程日：无论任务是否完成都强制推进至 Day1（未完成=绩效缺口）
+				if perf_mgr:
+					perf_mgr.settle_day(env_monitor.current_day)
+					perf_mgr.save_progress()
+				env_monitor.advance_day()
+				env_task_mgr.reset_for_new_day()
+				env_monitor.save_env_progress()
+				env_task_mgr.save_task_progress()
+				print("[Main] 自动推进至第 %d 天" % env_monitor.current_day)
+	if env_observation:
+		env_observation.suspended = false
 	if daily_dialogue_mgr and env_monitor:
 		daily_dialogue_mgr.trigger_day_start(env_monitor.current_day)
 	# ★ 登录后加载主线剧情摄像头（只加载一次，不受故事包影响）
@@ -643,6 +680,14 @@ func _get_default_placeholder() -> String:
 #  回车提交
 # ══════════════════════════════════════════
 func _on_input_submitted(_text: String) -> void:
+	if _env_viewer_mode and env_viewer and env_viewer.is_active:
+		if is_terminal_covered(true):
+			return
+		_last_input_length = 0
+		env_viewer.execute_command(_text)
+		return
+	if is_terminal_covered():
+		return
 	var raw: String = input_field.text.strip_edges()
 	input_field.text = ""
 	input_field.clear()
@@ -1170,11 +1215,59 @@ func _run_command(raw: String) -> void:
 	_refocus_input.call_deferred()
 
 func _refocus_input() -> void:
+	_sync_terminal_visibility()
+	if not input_field.is_visible_in_tree() or is_terminal_covered(_env_viewer_mode):
+		return
 	input_field.grab_focus()
+
+## 普通终端和全屏界面共用此判定，新增覆盖界面须登记在这里。
+func is_terminal_covered(ignore_env: bool = false) -> bool:
+	if vdisc_task_mgr and vdisc_task_mgr.is_download_open():
+		return true
+	if comm_mgr and comm_mgr.is_voice_tuner_open():
+		return true
+	for viewer in [doc_viewer, email_viewer, chat_viewer, article_viewer, two_page_viewer,
+		image_viewer, video_player_viewer, radio_receiver, decode_viewer, explore_viewer,
+		env_viewer, camera_viewer]:
+		if ignore_env and viewer == env_viewer:
+			continue
+		if viewer != null and viewer.is_active:
+			return true
+	return _oscilloscope_mode
+
+func _sync_terminal_visibility() -> void:
+	var covered: bool = is_terminal_covered()
+	output_text.visible = not covered
+	if covered:
+		if not (_env_viewer_mode and env_viewer and env_viewer.is_active and not is_terminal_covered(true)):
+			input_field.release_focus()
+	elif not _deferred_terminal_output.is_empty():
+		# 查看器先恢复其缓存的终端记录，再追加后台结果，避免被 close() 覆盖。
+		var pending: Array[String] = _deferred_terminal_output.duplicate()
+		_deferred_terminal_output.clear()
+		for message in pending:
+			append_output(message, false, false)
 # ══════════════════════════════════════════
 #  输入事件处理
 # ══════════════════════════════════════════
 func _input(event: InputEvent) -> void:
+	if vdisc_task_mgr and vdisc_task_mgr.is_download_open():
+		if event is InputEventKey:
+			vdisc_task_mgr.handle_download_input(event)
+			get_viewport().set_input_as_handled()
+		return
+	# 调音面板使用自己的 GUI 焦点，终端不拦截滑块、输入框或鼠标。
+	if comm_mgr and comm_mgr.is_voice_tuner_open():
+		if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+			comm_mgr.close_voice_tuner()
+			get_viewport().set_input_as_handled()
+		return
+	# 编辑器内测试快捷键：开机动画期间按 F12 强制跳过（包括首次开机）
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F12:
+		if OS.has_feature("editor") and boot_sequence and boot_sequence.is_active():
+			boot_sequence.skip(true)
+			get_viewport().set_input_as_handled()
+			return
 	# ★ 模组输入捕获优先处理
 	if pkg_mgr and pkg_mgr.handle_input(event):
 		get_viewport().set_input_as_handled()
@@ -1219,7 +1312,8 @@ func _input(event: InputEvent) -> void:
 		if env_viewer.handle_input(event):
 			_env_viewer_mode = false if not env_viewer.is_active else true
 			get_viewport().set_input_as_handled()
-			return
+		# 观测台输入由自身 GUI 接收，禁止继续触发桌面快捷键。
+		return
 	# ★ 监控摄像头模式
 	if _camera_viewer_mode and camera_viewer and camera_viewer.is_active:
 		if camera_viewer.handle_input(event):
@@ -1262,6 +1356,9 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 
+	# 查看器未处理的鼠标/按键交给其 GUI，不继续操作隐藏的终端。
+	if is_terminal_covered():
+		return
 	# --- 鼠标按下事件 ---
 	if event is InputEventMouseButton and event.pressed:
 		match event.button_index:
@@ -1286,7 +1383,7 @@ func _input(event: InputEvent) -> void:
 				var mouse_pos: Vector2 = event.position
 				# ★ 检测邮件图标点击
 				if mail_icon != null and mail_icon.get_global_rect().has_point(mouse_pos):
-					if user_mgr != null and user_mgr.is_logged_in and mail_sys != null:
+					if _is_mail_icon_clickable() and user_mgr != null and user_mgr.is_logged_in and mail_sys != null:
 						mail_sys.handle_mail_command([])
 					get_viewport().set_input_as_handled()
 					return
@@ -1408,6 +1505,10 @@ func _find_common_prefix(strings: Array[String]) -> String:
 #  输出工具
 # ══════════════════════════════════════════
 func append_output(text: String, use_typewriter: bool = false, beep: bool = true) -> void:
+	if is_terminal_covered():
+		output_text.hide()
+		_deferred_terminal_output.append(text)
+		return
 	if use_typewriter:
 		# ★ 打字机模式下，先处理内联图片占位符（分段输出）
 		var segments: Array[Dictionary] = _split_inline_image_segments(text)
@@ -1486,10 +1587,12 @@ func _insert_inline_image(seg: Dictionary) -> void:
 	if texture == null or not (texture is ImageTexture):
 		output_text.append_text("[IMG]")
 		return
-	var w: int = int(seg.get("width", 200))
-	var h: int = int(seg.get("height", 150))
+	var w: float = float(seg.get("width", 200))
+	var h: float = float(seg.get("height", 150))
 	output_text.newline()
-	output_text.add_image(texture as Texture2D, w, h, Color.WHITE, 5, Rect2(), null, false, "", false)
+	output_text.add_image(texture as Texture2D, w, h, Color.WHITE, 5, Rect2(), null,
+		0, "",
+		0)
 	output_text.newline()
 ## 打字机完成一段输出后的回调
 func _on_typing_completed() -> void:
@@ -1628,6 +1731,10 @@ func _comm_scroll_to_bottom() -> void:
 #  每帧处理
 # ══════════════════════════════════════════
 func _process(delta: float) -> void:
+	_sync_terminal_visibility()
+	# 下载弹窗期间暂停查看器、通讯等交互，网络请求和下载协程继续运行。
+	if vdisc_task_mgr and vdisc_task_mgr.is_download_open():
+		return
 	# ★ 载入画面独占模式：loading screen 期间只驱动它自身和滚动，
 	# 阻止 typewriter / trigger / mail 等系统写入 output_text 干扰 BBCode 缓冲区
 	if disc_mgr and disc_mgr.loading_screen and disc_mgr.loading_screen.is_active():
@@ -1682,6 +1789,10 @@ func _process(delta: float) -> void:
 	# ★ 环境监测系统每帧更新
 	if env_monitor:
 		env_monitor.process(delta)
+	if env_observation:
+		env_observation.process(delta)
+	if daily_dialogue_mgr:
+		daily_dialogue_mgr.process_pending(delta)
 	if env_viewer and env_viewer.is_active:
 		env_viewer.process(delta)
 	# ★ 监控摄像头系统
@@ -1693,8 +1804,39 @@ func _process(delta: float) -> void:
 # ══════════════════════════════════════════
 #  超链接处理
 # ══════════════════════════════════════════
+## mail 按钮仅在无全屏覆盖层/通讯/拨号/加载动画时可用
+func _is_mail_icon_clickable() -> bool:
+	if disc_mgr != null and disc_mgr.loading_screen != null and disc_mgr.loading_screen.is_active():
+		return false
+	if comm_mgr != null and comm_mgr.is_active:
+		return false
+	if dial_mgr != null and dial_mgr.is_active():
+		return false
+	if doc_viewer != null and doc_viewer.is_active:
+		return false
+	if email_viewer != null and email_viewer.is_active:
+		return false
+	if chat_viewer != null and chat_viewer.is_active:
+		return false
+	if article_viewer != null and article_viewer.is_active:
+		return false
+	if two_page_viewer != null and two_page_viewer.is_active:
+		return false
+	if explore_viewer != null and explore_viewer.is_active:
+		return false
+	if _oscilloscope_mode or _image_viewer_mode or _video_player_mode or _radio_mode or _env_viewer_mode or _camera_viewer_mode or _decode_mode:
+		return false
+	return true
+
 func _on_meta_clicked(meta: Variant) -> void:
 	var meta_str: String = str(meta)
+	if vdisc_task_mgr and vdisc_task_mgr.is_download_open():
+		return
+	if meta_str.begins_with("vdisc://mail/"):
+		if vdisc_task_mgr:
+			var result: Dictionary = await vdisc_task_mgr.download_mail_attachment(meta_str.substr(13).uri_decode())
+			append_output(str(result.get("message", "")) + "\n", false)
+		return
 	# ★ 内联音频：播放/暂停切换
 	if meta_str.begins_with("audio://toggle/"):
 		var audio_path: String = meta_str.substr(15)

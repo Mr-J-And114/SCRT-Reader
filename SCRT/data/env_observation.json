@@ -1,0 +1,19 @@
+{
+  "capture_seconds": 2.4,
+  "map_texture": "",
+  "map_note": "地图占位，等待冷战风格 SVG 矢量地形；设施位置为示意",
+  "nearshore_radius_m": 600,
+  "nearshore_grid_m": 50,
+  "sea_radius_nm": 30,
+  "sea_grid_nm": 5,
+  "contacts": [],
+  "regions": [
+    {"id": "station", "name": "本站", "position": [0, 0], "source": "固定观测站", "sensors": ["air_temp", "visibility", "pressure"], "view": "nearshore"},
+    {"id": "atmosphere", "name": "大气观测", "position": [-0.34, -0.26], "source": "本站大气传感器（位置示意）", "sensors": ["pressure", "wind_speed", "visibility"], "view": "nearshore"},
+    {"id": "ocean", "name": "海况观测", "position": [0.38, 0.26], "source": "本站海洋传感器（位置示意）", "sensors": ["sea_temp", "tide_level", "wave_height"], "view": "nearshore"},
+    {"id": "geophysics", "name": "地物观测", "position": [0.22, -0.4], "source": "本站地物传感器（位置示意）", "sensors": ["mag_field", "radiation", "seismic"], "view": "nearshore"},
+    {"id": "composition", "name": "成分观测", "position": [-0.28, 0.33], "source": "本站成分传感器（位置示意）", "sensors": ["o2_concentration", "co2_concentration"], "view": "nearshore"},
+    {"id": "buoy_01", "name": "浮标 B-01", "position": [-0.38, -0.5], "source": "未接入，仅位置示意", "sensors": [], "kind": "buoy", "view": "sea"},
+    {"id": "sonar_01", "name": "声纳 S-01", "position": [0.52, -0.24], "source": "未接入，仅位置示意", "sensors": [], "kind": "sonar", "view": "sea"}
+  ]
+}

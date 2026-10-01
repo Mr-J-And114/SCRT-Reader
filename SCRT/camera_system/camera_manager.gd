@@ -57,9 +57,6 @@ func load_main_storyline_cameras() -> void:
 # ============================================================
 # 从 manifest 加载摄像头配置
 # ============================================================
-# ============================================================
-# 从 manifest 加载摄像头配置
-# ============================================================
 func load_from_manifest(manifest: Dictionary, merge: bool = false) -> void:
 	if not merge:
 		reset()
@@ -361,6 +358,7 @@ func get_save_data() -> Dictionary:
 	var signal_qualities: Dictionary = {}
 	var viewport_positions: Dictionary = {}
 	var cooldowns: Dictionary = {}
+	var region_depth_enabled: Dictionary = {}
 
 	for cam_id in _camera_order:
 		var cam: SecurityCameraFeed = _cameras[cam_id]
@@ -375,12 +373,16 @@ func get_save_data() -> Dictionary:
 		# 保存冷却状态
 		if not cam._anomaly_cooldowns.is_empty():
 			cooldowns[cam_id] = cam._anomaly_cooldowns.duplicate()
+		# 保存 Region Depth 启用状态
+		if not cam.region_config.is_empty():
+			region_depth_enabled[cam_id] = cam.use_region_depth
 
 	data["unlocked"] = unlocked_ids
 	data["online_states"] = online_states
 	data["signal_qualities"] = signal_qualities
 	data["viewport_positions"] = viewport_positions
 	data["cooldowns"] = cooldowns
+	data["region_depth_enabled"] = region_depth_enabled
 	return data
 
 func load_save_data(data: Dictionary) -> void:
@@ -423,6 +425,13 @@ func load_save_data(data: Dictionary) -> void:
 			var cam: SecurityCameraFeed = get_camera(str(cam_id))
 			if cam and data["cooldowns"][cam_id] is Dictionary:
 				cam._anomaly_cooldowns = data["cooldowns"][cam_id].duplicate()
+
+	# 恢复 Region Depth 启用状态
+	if data.has("region_depth_enabled"):
+		for cam_id in data["region_depth_enabled"]:
+			var cam: SecurityCameraFeed = get_camera(str(cam_id))
+			if cam and not cam.region_config.is_empty():
+				cam.use_region_depth = data["region_depth_enabled"][cam_id]
 
 # ============================================================
 # 重置

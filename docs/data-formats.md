@@ -37,6 +37,36 @@ Markdown 风格语法 → BBCode 转换：
 - `> quote` 引用块
 - `![alt](path)` 图片、`!audio[label](path)` 音频、`!video[label](path)` 视频
 - `|col1|col2|` 表格语法
+- `[math]LaTeX[/math]` 行内公式（渲染为图片插入文本流）
+- `[math block]LaTeX[/math]` 块级公式（独占一行居中）
+
+**LaTeX 公式支持的命令：**
+- 分数：`\frac{}{}`、`\binom{}{}`
+- 根号：`\sqrt{}`、`\sqrt[n]{}`
+- 上下标：`^{}`、`_{}`
+- 大运算符：`\sum` `\int` `\prod` `\oint` `\lim`（含 `\limits`/`\nolimits`）
+- 可缩放定界符：`\left( \right)`、`\left[ \right]`、`\left\{ \right\}`、`\left| \right|`
+- 环境：`\begin{matrix}` `\begin{pmatrix}` `\begin{bmatrix}` `\begin{cases}` `\begin{aligned}`
+- 希腊字母：`\alpha`~`\omega`、`\Alpha`~`\Omega`（含 `var` 变体）
+- 运算符：`\times` `\div` `\pm` `\leq` `\geq` `\neq` `\approx` `\to` `\cdot` `\cdots` `\ldots`
+- 集合论：`\in` `\notin` `\subset` `\supset` `\cup` `\cap` `\emptyset` `\setminus`
+- 逻辑：`\forall` `\exists` `\nabla` `\partial` `\infty` `\neg`
+- 装饰：`\overline{}` `\underline{}` `\hat{}` `\vec{}` `\dot{}` `\ddot{}` `\tilde{}` `\bar{}`
+- 字体：`\mathbf{}` `\mathit{}` `\mathrm{}` `\text{}` `\mathbb{}` `\boldsymbol{}`
+- 间距：`\,` `\:` `\;` `\quad` `\qquad` `\!`
+- 箭头：`\rightarrow` `\leftarrow` `\Rightarrow` `\Leftarrow` `\leftrightarrow` `\mapsto`
+- 函数名：`\sin` `\cos` `\tan` `\log` `\ln` `\exp` `\lim` `\max` `\min` 等
+- 颜色：`\color{name/hex}`、`\textcolor{name/hex}{content}`
+
+**LaTeX 技术细节：**
+- 渲染器：`scripts/latex_renderer.gd`（`LatexRenderer` 类）
+- 流程：Tokenizer → Parser(递归下降 AST) → Layout(测量+定位) → SubViewport 绘制 → ImageTexture
+- 字体：Sarasa Mono SC 系列（Regular/SemiBold/Italic/SemiBoldItalic），通过 `main.gd._ready()` 注入
+- 缓存：静态字典 `_cache`，key = `latex|font_size|color_hex`，无上限
+- 行内公式字号 18px，块级公式字号 22px
+- √ 根号符号为自绘 V 形（draw_line），高度随 radicand 自适应，避免字体字形裁剪
+- `render_to_texture()` 是 async，故事加载时需预渲染；`get_cached_texture()` 是同步查询
+- CRTML 集成：`crtml_parser.gd._process_inline()` 第 12 步 `_parse_math()`，复用 `_inline_image_cache` 占位符机制
 
 **打字机控制标签：**
 - `{speed=N}` / `{/speed}` 打字速度
@@ -153,6 +183,43 @@ Markdown 风格语法 → BBCode 转换：
 }
 ```
 
+## Vdisc 任务（`vdisc_tasks`）
+
+主线 `res://data/main/manifest.json` 可在顶层声明 `vdisc_tasks`。每个任务需要唯一任务 ID、`title`、`story_id`、`giver_number` 和 `download.filename`。`story_id` 必须与下载的 `.scp` 包内 `manifest.json` 的 `story.id` 一致。
+
+```json
+"vdisc_tasks": {
+  "sample_task": {
+    "title": "调查盘任务",
+    "story_id": "sample_story",
+    "giver": "kanda",
+    "giver_number": "1001-0002",
+    "download": {
+      "number": "9900-0002",
+      "filename": "sample.scp",
+      "url": "",
+      "mail_attachment": "MAIL-01"
+    },
+    "requirements": {
+      "min_read_percent": 20,
+      "required_files": ["/reports/summary.txt"],
+      "min_total_files": 5,
+      "min_size_kb": 1
+    },
+    "on_success": {"score": "side:1", "flags": {"sample_done": 1}},
+    "on_fail": {"message": "请继续调查。"},
+    "wrong_recipient": {
+      "default": {"action": "return"},
+      "ava": {"action": "confiscate", "score": "main:1"}
+    }
+  }
+}
+```
+
+玩家用 `download <任务ID>`、`dial <download.number>` 或 `mail download <邮件ID/编号>` 获取磁盘；邮件附件须先投递对应邮件。空 `download.url` 从游戏 `vdisc/` 中复制同名源包，非空 URL 由 HTTP 请求获取。副本位于 `saves/<用户名>/vdisc/inbox/`；上交或没收后移动到该玩家的 `submitted/` 或 `confiscated/`，共用原包保留。任务状态、归档记录及文件修改记录写入玩家 `profile.json` 的 `vdisc_task_data`。
+
+磁盘模式中可用 `cp`、`mv`、`rm`、`mkfile` 修改任务副本，`submit <接收方号码>` 上交。已读百分比按当前可访问、未隐藏文件计算；文件大小按文本 UTF-8 字节和二进制字节计算。满足数量、必需文件和体积即可过关；有文件修改时写入 `<任务ID>_fake_pass` 标记，供后续剧情判断。新任务字段对旧故事包没有要求。
+
 ## 开机/关机配置 / Boot/Shutdown Config (`res://boot_config.json`)
 
 JSON 关键帧时间轴格式：`{time, action, params}`。
@@ -250,15 +317,23 @@ JSON 关键帧时间轴格式：`{time, action, params}`。
 ## 电话簿配置 / Dial Directory Config
 
 电话号码从多个来源加载（优先级：故事盘 > 系统注册 > 预设）：
-- **预设**：`res://data/dial_directory.json` — 内置号码，启动时加载
+- **预设**：main.gd `_ready()` 中编程注册（`dial_mgr.register_system_voice()`），2026-08-19 起不再使用 `res://data/dial_directory.json`（旧文件已归档）
 - **故事盘**：`manifest.json` → `dial_directory` 节，由 DiscManager 加载时注入
 - **系统注册**：通过 `register_system_voice()` / `register_system_modem()` 编程注册
+
+当前内置号码（main.gd:200-202）：
+
+| 号码 | 角色 | 标签 |
+|---|---|---|
+| 1001-0001 | ava | Ava Lacant（O5 秘书长） |
+| 1001-0002 | kanda | 神田玲（操作指导员） |
+| 1003-0001 | nanami | 初级研究员（七海灯子） |
 
 Format:
 ```json
 {
   "voice": {
-    "1001-0001": { "character": "ava", "label": "AVA - Liaison Officer" }
+    "1001-0001": { "character": "ava", "label": "Ava Lacant（O5 秘书长）" }
   },
   "modem": {
     "9900-0001": {
@@ -301,6 +376,22 @@ Format:
 | `caller_name` | string | 角色标签 | 响铃时显示的来电者名称 |
 
 触发器格式：`comm:dialogue_id:forced` 或 `comm:dialogue_id:answerable`。
+
+### 剧情驱动字段 / Story-Driven Fields（2026-08-19 新增，Day0 剧情使用）
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `skippable` | bool | 默认 `true`；设为 `false` 时禁止 ESC 跳过（主线剧情对话） |
+| `next` | array | 对话自然结束后自动续播的对话 ID 队列（0.3s 间隔） |
+| `deliver_mail` | string/array | 对话结束时投递当日配置中 `deliver_on: "scene"` 的邮件 ID |
+| `flags_add` | object | 对话开始时对剧情标记（story_flags）增量累加，如 `{"anger_ava": 1}` |
+| `requires_tasks` | string | `"all"`（当日 env 任务+日报全部完成）/ `"incomplete"`（未全部完成），用于拨号触发对话的条件过滤 |
+| `story_action` | 行级 | string/array，行开始播放时执行触发器动作（如 `"score:1:daily"` 给当日绩效加分） |
+
+拨号触发对话选择顺序（`comm_manager.start_dialogue_from_dial`）：
+1. 角色名模式匹配（`{char}_chat` / `{char}_greeting` / `{char}_main` / `comm_{char}`）
+2. 兜底：首个说话角色匹配 + 可呼叫 + 条件通过（未完成或可重复 + `_is_dial_available` 剧情条件）
+3. 全部失败 → "联络员 XXX 当前不可用"
 
 ### 视频/会议模式字段 / Video / Meeting Mode Fields
 
@@ -372,3 +463,11 @@ Format:
   ]
 }
 ```
+
+## 2026-10-01 ENV 观测台配置与进度
+
+独立配置 SCRT/data/env_observation.json：capture_seconds、map_texture（空字符串时方形占位）、nearshore_radius_m/nearshore_grid_m、sea_radius_nm/sea_grid_nm、regions（id/name/position/source/sensors/view/kind）、contacts（id/kind/position/track/source；默认空）。位置相对圆盘半径归一化，右下为正，view=nearshore/sea。配置不包含无人机。
+
+map_texture 可填写 SVG 的 res:// 路径，用于用户绘制的冷战风格矢量地形。建议正方形 viewBox、本站居中；当前显示区域为逻辑尺寸 410×410。Godot 导入 SVG 为纹理，按显示需求调整导入分辨率。底图先绘制，网格和动态标记随后叠加，保持独立配置。
+
+EnvTaskManager 存档新增 observation_data（day/hour/weather/readings/collected/issues/submitted/score_note/notify_pending）及 observation_history（最近30份日报）。readings 无有效值用null。issue 包含首次值、复测值与时间、标记、可选校准记录。老存档缺字段可加载，已提交日报补归档不重复奖励。DailyDialogueManager 新增 pending_dialogues（ids/day/delay），等终端无遮挡且无通讯拨号后串行触发。

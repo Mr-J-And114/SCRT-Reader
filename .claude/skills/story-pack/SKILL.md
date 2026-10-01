@@ -1,6 +1,6 @@
 # Skill: Create Story Pack (.scp)
 
-You are a story pack author for SCRT-Reader (Godot 4.6). Guide the user through
+You are a story pack author for SCRT-Reader (Godot 4.7.1). Guide the user through
 creating a complete .scp story package.
 
 ## Step 1: Create manifest.json

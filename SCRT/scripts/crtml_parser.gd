@@ -16,6 +16,9 @@ var main_ref = null  # ★ main 引用，用于获取当前路径做相对→绝
 # ★ 内联图片缓存（placeholder_id → info dict）
 var _inline_image_cache: Dictionary = {}
 
+# ★ LaTeX 渲染器引用（用于 [math]...[/math] 公式渲染）
+var _latex: LatexRenderer = null
+
 # ★ 原始文本块保护用
 var _raw_blocks: Array[String] = []
 
@@ -100,6 +103,12 @@ func _resolve_media_path(media_path: String) -> String:
 			return fs.normalize_path(joined)
 	# 无法解析，原样返回
 	return media_path
+
+# ============================================================
+# ★ LaTeX 渲染器注入
+# ============================================================
+func set_latex_renderer(latex: LatexRenderer) -> void:
+	_latex = latex
 
 # ============================================================
 # 主解析函数：将 CRT-ML 转换为 BBCode
@@ -280,6 +289,9 @@ func _process_inline(text: String) -> String:
 	# 11. 行内代码 `代码`
 	result = _parse_inline_code(result)
 
+	# 12. ★ LaTeX 公式 [math]...[/math] 和 [math block]...[/math]
+	result = _parse_math(result)
+
 	return result
 
 # ============================================================
@@ -429,8 +441,59 @@ func _parse_inline_code(text: String) -> String:
 	return result
 
 # ============================================================
-# 涂黑遮蔽 ||文本||（点击可显示）
+# ★ LaTeX 公式 [math]...[/math] / [math block]...[/math]
+# 渲染为内联图片，复用 _inline_image_cache 机制
+# 需要先通过 set_latex_renderer() 注入渲染器
+# 公式必须在加载时预渲染（render_to_texture 是异步的）
 # ============================================================
+func _parse_math(text: String) -> String:
+	if _latex == null:
+		return text
+	var result: String = ""
+	var pos: int = 0
+	while pos < text.length():
+		var block_start: int = text.find("[math block]", pos)
+		var inline_start: int = text.find("[math]", pos)
+		var nearest: int = -1
+		var is_block: bool = false
+		if block_start >= 0 and (inline_start < 0 or block_start < inline_start):
+			nearest = block_start
+			is_block = true
+		elif inline_start >= 0:
+			nearest = inline_start
+		if nearest < 0:
+			result += text.substr(pos)
+			break
+		if nearest > pos:
+			result += text.substr(pos, nearest - pos)
+		var tag: String = "[math block]" if is_block else "[math]"
+		var content_start: int = nearest + tag.length()
+		var end_pos: int = text.find("[/math]", content_start)
+		if end_pos < 0:
+			result += text.substr(nearest)
+			break
+		var latex_str: String = text.substr(content_start, end_pos - content_start)
+		var fs: int = 22 if is_block else 18
+		var tex: ImageTexture = _latex.get_cached_texture(latex_str, fs)
+		if tex:
+			var placeholder_id: String = "LATEX_" + str(_inline_image_cache.size())
+			_inline_image_cache[placeholder_id] = {
+				"path": "latex:" + latex_str,
+				"texture": tex,
+				"width": tex.get_width(),
+				"height": tex.get_height(),
+				"placeholder": placeholder_id,
+				"original_size": Vector2(tex.get_width(), tex.get_height()),
+			}
+			if is_block:
+				result += "\n\u0001IMG:" + placeholder_id + "\u0002\n"
+			else:
+				result += "\u0001IMG:" + placeholder_id + "\u0002"
+		else:
+			var m: String = _get_muted_hex()
+			result += "[color=" + m + "][" + latex_str + "][/color]"
+		pos = end_pos + 7
+	return result
 func _parse_spoiler(text: String) -> String:
 	var result: String = ""
 	var i: int = 0

@@ -209,10 +209,20 @@ _registry.setup_my_char()
 
 ## 3. 素材规范
 
+三位内置角色的说话短音集中在 `SCRT/comm_system/voice_presets.json`，启动时覆盖 `tutorial.json` 中的旧语音配置。Ava 使用 `warm`（正弦 + 三角，345 Hz），神田玲使用 `sharp`（锯齿谐波，480 Hz），七海使用 `clear`（正弦 + 二次谐波，390 Hz）；这些是待试听微调的初始预设。
+
+在 Godot 编辑器中运行并结束当前对话后，输入 `debug 114514 voice` 可用滑块实时调整、循环试听并保存。`base_frequency_hz` 控制音高，`brightness` 控制谐波明亮度，`pitch_variance` 是相对音高的随机波动幅度，`char_sound_duration` / `attack_ms` / `release_ms` 控制单音包络，`volume_db` 控制音量，`voice_every_n` 控制每几个正文字符发声一次。空白及中英文标点静音；标点保留停顿。旧故事盘的 `base_pitch` 仍按 220 Hz 倍率兼容，`speed` 控制逐字速度。跳过打字或停止对话会停止短音。
+
 ### 分层模式图层说明
 
 所有图层尺寸必须一致（推荐 1216×1803 px，即 AVA 的原始尺寸）。
 图层从底到顶按 `layer_order` 数组顺序叠加渲染。
+
+神田玲（角色 ID `kanda`）使用 `images/character/rei/` 的 3150×4455 PNG 图层。PSD 从上到下为 eyes、nose、mouth、head、body、braid，因此渲染顺序反向排列；单独的 `eyehair` 叠在眼睛之上。文件名带 `-0` 的眼睛和嘴型是无对话、无动作时的默认状态，说话时切换到常规睁眼和 1–8 嘴型，眨眼沿用 2/3 状态。
+
+会议模式的人物可见区域随对话栏上沿变化，超出区域的原始 PNG 图层被裁剪，不会覆盖对话文字。在 `character_asset_library.gd` 的 `create_rei_profile()` 中修改 `display_scale` 调大小（当前 `1.20`），修改 `display_offset = Vector2(x, y)` 调整卡片及 meeting 模式的基础位置；修改 `meeting_offset = Vector2(x, y)` 可单独微调 meeting 立绘，不影响头像卡片。X 正数向右、Y 正数向下。Rei 当前 `meeting_offset` 为 `(0, -50)`，用来抵消大图下沉。角色的画布宽高比用于计算显示宽度。
+
+卡片模式的分层立绘裁剪到头像卡片边界，放大图层不会溢出卡片。
 
 ```
 layer_order 示例:

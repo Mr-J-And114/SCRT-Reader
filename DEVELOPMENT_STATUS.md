@@ -1,13 +1,28 @@
 # SCRT-Reader 开发进度总结
 
-> 最后更新：2026-04-01
+> 2026-09-30 修复：移除 Vdisc 下载提示框的默认焦点描边；显式关闭控件边框和阴影，保留终端字符框作为唯一外框。待玩家目视确认。
+
+> 2026-09-30 再补充：统一全屏界面下终端输出与焦点隔离，普通提示退出覆盖界面后回放；Vdisc 弹窗改为系统字符框与字符进度条。新增个人任务盘扫描标记、后台提示 debug 探针和完整手动测试方案 docs/upgrade-plans/vdisc-manual-test-plan.md。待玩家验收。
+
+> 2026-09-30 修复：Vdisc 下载弹窗改为 CRT 后处理前渲染，统一终端字体与主题。已存在个人磁盘时需确认重新下载；成功后重置该盘进度，下载/校验失败保留旧盘。待玩家测试。
+
+> 2026-09-30 补充：Vdisc 邮件附件支持点击下载，命令/邮件共用进度窗口；新增实际 HTTP 接收进度、本地模拟传输、失败提示和防重复领取。vdisc 显示任务缺口与上交命令。仅检查源文件，等待玩家通过 debug 验收。
+
+> 2026-09-29 补充：会议立绘新增随对话栏上沿变化的裁剪区域，Rei 显示比例从 0.95 提至 1.20，直接渲染原始 PNG 图层；等待玩家在 Godot 中确认视觉大小与位置。
+
+> 2026-09-29 补充：神田玲（`kanda`）已接入 Rei 的 22 张分层 PNG，按 PSD 顺序配置渲染层，并将 `-0` 眼睛、嘴型设为无活动时的默认状态。等待玩家在 Godot 中查看实际立绘；本次未运行游戏内测试。
+
+> 2026-09-29 补充：Vdisc 任务系统已接入代码，含玩家专属磁盘副本、任务判定、文件修改、上交/没收、三种领取入口和联调样例 `demo_site19`。等待玩家在 Godot 中按 `docs/debug-mode-guide.md` 验收；本次没有执行游戏内测试。Day0 限时选项按当前安排暂缓。
+
+> 最后更新：2026-09-12
 > 基于代码实际审计结果，非文档描述。
+> 本次更新：Day0 教程日剧情修复、来电系统改造、隐藏调试系统、全项目审查。
 
 ---
 
 ## 一、项目总览
 
-**SCRT-Reader** 是一款 SCP 主题的复古 CRT 终端模拟器 / 互动小说阅读器，基于 Godot 4.6（GL Compatibility）开发。玩家扮演海岛观测站操作员，通过终端界面阅读故事、与角色通讯、监测环境数据、收听无线电信号。
+**SCRT-Reader** 是一款 SCP 主题的复古 CRT 终端模拟器 / 互动小说阅读器，基于 Godot 4.7.1（GL Compatibility）开发。玩家扮演海岛观测站操作员，通过终端界面阅读故事、与角色通讯、监测环境数据、收听无线电信号。
 
 **设计目标**：28 天完整剧情体验，5 幕结构（序章 + 3 章 + 终章），4 种结局，5 条叙事通道并行推进。
 
@@ -43,11 +58,15 @@
 | 文档查看器 | ✅ 完成 | article/chat/email/two_page 四模板 |
 | 图片/视频查看器 | ✅ 完成 | 全屏覆盖/状态缓存/ESC 关闭 |
 | 解码查看器 | ✅ 完成 | 示波器/解码工具 |
+| LaTeX 公式渲染 | ✅ 完成 | Tokenizer→Parser(AST)→Layout→Image，支持分数/根号/矩阵/cases 等，集成 CRTML [math] 标记 |
 | 每日内容配置 (DayConfig) | ❌ 未实现 | 文件解锁/环境覆盖/传感器偏移/强制事件 |
 | 剧情变量系统 (StoryVariables) | ⚠️ 部分 | 仅有字符串标记，无数值变量追踪 |
 | 结局判定系统 (EndingResolver) | ❌ 未实现 | 无任何结局条件判定代码 |
 | 角色关系系统 | ❌ 未实现 | 无信任度/关系值追踪 |
 | 每日拨号轮换 | ❌ 未实现 | 拨号系统无天数感知 |
+| 来电系统 | ✅ 完成 | 2026-09-12 改造：铃声统一 1 次、FORCED 强制接听提示、ANSWERABLE 玩家选择、错过来电回拨补救 |
+| 拒接后果触发 | ✅ 完成 | reject_consequence 已修复（此前永不执行），comm: 前缀走 handle_trigger_action |
+| 调试系统 | ✅ 完成 | 隐藏调试命令（debug 114514 激活），覆盖全子系统 |
 
 ---
 
@@ -57,6 +76,8 @@
 
 **全局命令**（桌面 + 故事盘均可用，38 条）：
 `help` `clear`/`cls` `whoami` `status` `mail` `theme` `volume`/`vol` `reboot` `exit`/`quit` `profile` `logout` `passwd` `birthday` `nickname` `gender` `users` `decode` `fx_level` `fx_safe` `sound` `packages`/`pkg` `uninstall` `comm` `dial` `phonebook`/`pb` `settings`/`set` `env` `monitor` `camera`/`cam`/`cctv` `save` `perf`/`performance`
+
+**隐藏调试命令**（2026-09-12 新增）：输入 `debug 114514` 激活，不在 `help` 显示、不在命令表注册。9 大类 40+ 子命令（登录/剧情/变量/环境/邮件/绩效/摄像头/特效/系统），操作文档见 `docs/debug-mode-guide.md`。
 
 **桌面专用命令**（7 条）：
 `scan` `load` `vdisc` `deluser` `explore` `install` `radio`
@@ -134,13 +155,24 @@
 
 | 章节 | 天数 | 对话内容 | 文件内容 | 邮件内容 | 无线电 | 环境数据 |
 |---|---|---|---|---|---|---|
+| **教程日** | Day 0 | ✅ 完整（D0-01~D0-10 全入引擎） | — | ✅ 2 封场景邮件（M00-01/M00-02） | ✅ S-00 彩蛋信号 | ✅ 默认配置 |
 | **序章**（适应期） | Day 1-3 | ✅ 已有 | ⚠️ 有测试文件 | ✅ 3 封 | ✅ 4 信号 | ✅ 默认配置 |
 | **第一章**（初兆） | Day 4-7 | ✅ 已有 | ⚠️ 有测试文件 | ❌ 无 | 同上 | 同上 |
 | **第二章**（暗涌） | Day 8-14 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 |
 | **第三章**（真相） | Day 15-21 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 |
 | **终章**（结局） | Day 22-28 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 |
 
-### 4.2 已有对话详情
+### 4.1b Day0 教程日（2026-08-19 重写 / 2026-09-12 修复）
+
+**剧情链**：on_start→d0_01（投递 M00-01）→ 读邮件 → d0_02（forced 来电，flags_add d0_welcome_read=1，QTE 暂用普通选项）→ choice:d0_qte → d0_qte_1/d0_qte_2 → next [d0_04, d0_05] → d0_04 投递 M00-02 → **d0_05 来电接入**（answerable，玩家选 d0_meeting_1 会议/d0_meeting_2 拒绝/d0_05_reject 拒接）→ env 上报 → d0_06（首测来电 answerable）→ 拨 1001-0001 → ava_report_ok（requires_tasks=all）/ava_report_fail → next [d0_08, d0_09]。
+
+**2026-09-12 修复**：
+- 拨号"当前不可用"根因：`requires_flag` 的 JSON float vs int 比较失败 → 数值兼容
+- D0-05 会议接入：next 链检测 call_mode 响铃 + meeting 延续逻辑
+- 错过来电可回拨，reject_consequence 已修复
+
+**对话清单**（14 个）：d0_01, d0_02, d0_qte_1, d0_qte_2, d0_04, d0_05, d0_meeting_1, d0_meeting_2, d0_05_reject, d0_06, ava_report_ok, ava_report_fail, d0_08, d0_09
+
 
 **manifest.json 内定义**（Day 1-3 + default）：
 
@@ -256,10 +288,11 @@ day_config = {
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
-| 修复现有 bug | ✅ 完成 | 本次审计修复 10 个 bug |
+| 修复现有 bug | ✅ 完成 | 本次审计修复 10 个 bug；2026-09-12 修复 5 个（reject_consequence、debug list_mail、超时提示、slide_hide、requires_flag） |
+| Day0 教程日 | ✅ 完成 | D0-01~D0-10 全入引擎，会议接入/拨号/错过来电回拨完善 |
 | 完善 DayConfig 系统 | ❌ 未开始 | 需将 daily_dialogues 扩展为完整日配置 |
 | 编写 7 天完整内容 | ⚠️ 部分 | Day 1-7 有对话框架，缺文件/邮件/环境细节 |
-| 验证完整单日循环 | ⚠️ 部分 | 基础循环可运行，缺内容驱动验证 |
+| 验证完整单日循环 | ⚠️ 部分 | Day0 已完整验证，Day 1+ 缺内容驱动验证 |
 
 ### Phase 2: 叙事深化 — 未开始
 
@@ -292,57 +325,71 @@ day_config = {
 
 ## 七、下一步优先事项
 
-按依赖关系和优先级排序：
+按依赖关系和优先级排序（2026-09-12 更新）：
 
-1. **扩展 DayConfig 系统**（Phase 1 核心阻塞项）
+1. **QTE 限时选项**（★★★★★，建议最先做）
+   - D0-02 现为普通选项，需限时 + 超时默认选项（开发需求#1）
+   - 纯前端引擎改动，不依赖新剧情源稿，能立即验证
+
+2. **扩展 DayConfig 系统**（Phase 1 核心阻塞项）
    - 在 `daily_dialogue_manager.gd` 或新脚本中实现 `day_configs` 解析
    - 支持文件解锁、环境覆盖、传感器偏移、强制事件、密码发放
    - 支持行为触发器（读文件→动作）
 
-2. **实现每日拨号轮换**（Phase 1）
+3. **实现每日拨号轮换**（Phase 1）
    - `dial_manager.gd` 增加天数感知路由
    - 按天数查找 `{character}_call_day{N}`，回退到 `_call_default`
 
-3. **完善 Day 1-7 内容**（Phase 1）
+4. **完善 Day 1-7 内容**（Phase 1）
    - 补充 Day 4-7 的 `on_start_actions` 和 `mail_deliveries`
    - 添加前任操作员日志文件
    - 添加加密目录和密码线索
 
-4. **扩展 StoryVariables 为数值系统**（Phase 2）
+5. **扩展 StoryVariables 为数值系统**（Phase 2）
    - 在现有 flag 基础上增加数值变量
    - 支持加减运算和范围比较
    - 对话播放器自动写入标记
 
-5. **实现 EndingResolver**（Phase 3）
+6. **实现 EndingResolver**（Phase 3）
    - 基于 StoryVariables 的条件表达式求值
    - 4 种结局分支判定
 
-6. **编写 Day 8-28 剧情内容**（Phase 2-3）
+7. **编写 Day 8-28 剧情内容**（Phase 2-3）
    - 第二章：暗涌（Day 8-14）
    - 第三章：真相（Day 15-21）
    - 终章：结局（Day 22-28）
 
 ---
 
-## 八、代码规模参考
+## 八、代码规模参考（2026-09-12 实际值）
 
 | 脚本 | 行数 | 说明 |
 |---|---|---|
-| command_handler.gd | 2450 | 命令注册与执行（含 perf 命令） |
-| main.gd | 2239 | 核心路由/模式管理/绩效集成 |
+| command_handler.gd | 3142 | 命令注册与执行（含隐藏 debug 调试系统 40+ 子命令） |
+| main.gd | 2284 | 核心路由/模式管理/绩效集成/LaTeX 渲染器初始化/mail 按钮守卫 |
+| latex_renderer.gd | 1720 | LaTeX 公式渲染器（Tokenizer→Parser→Layout→Image） |
 | radio_receiver.gd | 1804 | 无线电接收器 |
-| crtml_parser.gd | 1262 | CRTML→BBCode |
-| comm_manager.gd | 1259 | 通讯系统管理 |
-| env_monitor.gd | 1173 | 环境监测（21传感器+6派生参数+系统时钟） |
+| crtml_parser.gd | 1325 | CRTML→BBCode（含 LaTeX [math] 公式） |
+| comm_manager.gd | 1344 | 通讯系统管理（含来电路由、错过来电回拨、拒接后果） |
+| mail_system.gd | 937 | 邮件系统（含邮件阅读对话延迟触发、收件箱防重开） |
+| env_monitor.gd | 1522 | 环境监测（21传感器+6派生参数+系统时钟） |
 | modder/mod_api.gd | 1075 | Mod API |
 | user_manager.gd | 853 | 用户账户 |
 | boot_sequence.gd | 809 | 开关机动画 |
 | trigger_system.gd | 754 | 触发器系统（含 score/perf_warning） |
 | video_player.gd | 750 | 视频播放器 |
-| env_task_manager.gd | 703 | 环境任务管理 |
+| env_task_manager.gd | 828 | 环境任务管理 |
 | disc_manager.gd | 700 | 故事盘管理 |
 | env_viewer.gd | 578 | 环境仪表盘（含派生参数） |
-| daily_dialogue_manager.gd | 431 | 每日对话管理（含绩效配额） |
-| performance_manager.gd | 404 | 绩效评分系统 |
+| daily_dialogue_manager.gd | 534 | 每日对话管理（含 requires_flag 数值兼容、绩效配额） |
+| performance_manager.gd | 413 | 绩效评分系统 |
+| comm_system/call_handler.gd | 328 | 呼叫模式处理器（SILENT/FORCED/ANSWERABLE、错过来电记录） |
+| comm_system/comm_dialogue_player.gd | 394 | 对话播放引擎（含 meeting 模式延续） |
 
-总代码量：约 42,000 行 GDScript
+总代码量：约 44,000 行 GDScript
+
+
+## 2026-10-01 ENV 观测台升级（待人工验收）
+
+接入圆形近海／海域监视盘、正方形地图占位、短采集、固定快照、复测／关注／设备校准、手动日报与历史、profile 绩效概览、隔离 debug。基础任务改为首次日报 +1（Day0 仍由剧情计分），防重复奖励；日常通讯改为覆盖界面结束后排队播放。地图等待用户手绘，无无人机或 3D 拍照。未运行 Godot，验收见 docs/upgrade-plans/environment-manual-test-plan.md。
+

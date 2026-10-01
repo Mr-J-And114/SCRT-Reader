@@ -99,6 +99,27 @@ func setup_ava() -> void:
 			ch.layer_textures.size(), ch.mouth_textures.size()
 		])
 
+func setup_rei() -> void:
+	var profile: CharacterAssetLibrary.AssetProfile = CharacterAssetLibrary.create_rei_profile()
+	_asset_library.register_profile("kanda", profile)
+	if _characters.has("kanda"):
+		var ch: CommCharacter = _characters["kanda"]
+		ch.init_from_asset_library(_asset_library)
+		print("[CharacterRegistry] Rei 分层立绘已加载 (%d layers, %d mouth shapes)" % [
+			ch.layer_textures.size(), ch.mouth_textures.size()
+		])
+
+## 注册内置 Nanami 角色的素材 profile 并加载
+func setup_nanami() -> void:
+	var profile: CharacterAssetLibrary.AssetProfile = CharacterAssetLibrary.create_nanami_profile()
+	_asset_library.register_profile("nanami", profile)
+	if _characters.has("nanami"):
+		var ch: CommCharacter = _characters["nanami"]
+		ch.init_from_asset_library(_asset_library)
+		print("[CharacterRegistry] Nanami 分层头像已加载 (%d layers, %d mouth shapes)" % [
+			ch.layer_textures.size(), ch.mouth_textures.size()
+		])
+
 ## 注册内置 Researcher 角色的素材 profile 并加载
 func setup_researcher() -> void:
 	var profile: CharacterAssetLibrary.AssetProfile = CharacterAssetLibrary.create_researcher_profile()

@@ -10,16 +10,16 @@ enum CallMode { SILENT, FORCED, ANSWERABLE }
 enum CallState { IDLE, RINGING, WAITING_ANSWER }
 
 signal call_accepted(dialogue_id: String)
-signal call_rejected(dialogue_id: String)
+signal call_rejected(dialogue_id: String, consequence: String)
 signal ring_started()
 signal ring_ended()
 
 # ══════════════════════════════════════════
 #  常量
 # ══════════════════════════════════════════
-const RING_INTERVAL: float = 3.0         # 每次铃声间隔(秒)
-const FORCED_RING_COUNT: int = 2         # 强制呼叫铃声次数
-const ANSWERABLE_RING_COUNT: int = 4     # 可接听呼叫铃声次数
+const RING_INTERVAL: float = 3.0         # 每次铃声间隔(秒)（保留兼容，当前只响一次）
+const FORCED_RING_COUNT: int = 1         # 强制呼叫铃声次数（统一一次）
+const ANSWERABLE_RING_COUNT: int = 1     # 可接听呼叫铃声次数（统一一次）
 const RING_TIMEOUT: float = 30.0         # 可接听呼叫超时(秒)
 
 # ══════════════════════════════════════════
@@ -47,6 +47,10 @@ var _max_rings: int = FORCED_RING_COUNT
 var _ring_playing: bool = false
 var _ring_duration: float = 0.0
 var _total_ring_timer: float = 0.0
+
+# ★ 错过的来电记录（玩家可回拨补救）
+# { dialogue_id: { "caller_name": String, "reject_consequence": String, "call_mode": int } }
+var _missed_calls: Dictionary = {}
 
 # ══════════════════════════════════════════
 #  初始化
@@ -158,7 +162,9 @@ func _show_forced_connect_message() -> void:
 	if _main == null:
 		return
 	var p_hex: String = _T.primary_hex if _T else "#00ff00"
-	_main.append_output("[color=%s]CONNECTED -- — %s[/color]\n\n" % [p_hex, _pending_caller_name], false)
+	var w_hex: String = _T.warning_hex if _T else "#ffff00"
+	_main.append_output("[color=%s]CONNECTED -- — %s[/color]\n" % [p_hex, _pending_caller_name], false)
+	_main.append_output("[color=%s]（本次通讯为强制接听，无法拒绝）[/color]\n\n" % w_hex, false)
 
 func _show_answer_prompt() -> void:
 	if _main == null:
@@ -190,16 +196,29 @@ func accept_call() -> void:
 	call_accepted.emit(dlg_id)
 
 ## 拒接来电
-func reject_call() -> void:
+func reject_call(is_timeout: bool = false) -> void:
 	if state != CallState.WAITING_ANSWER:
 		return
 	var dlg_id: String = _pending_dialogue_id
 	var consequence: String = _pending_reject_consequence
 	var m_hex: String = _T.muted_hex if _T else "#888888"
-	if _main:
+	if _main and not is_timeout:
 		_main.append_output("[color=%s]REJECTED -- — %s[/color]\n\n" % [m_hex, _pending_caller_name], false)
+	# ★ 记录错过的来电（仅 ANSWERABLE 模式，供玩家回拨补救）
+	if _pending_call_mode == CallMode.ANSWERABLE:
+		_missed_calls[dlg_id] = {
+			"caller_name": _pending_caller_name,
+			"reject_consequence": consequence,
+		}
+		_show_missed_call_hint()
 	_reset_state()
-	call_rejected.emit(dlg_id)
+	call_rejected.emit(dlg_id, consequence)
+
+func _show_missed_call_hint() -> void:
+	if _main == null:
+		return
+	var m_hex: String = _T.muted_hex if _T else "#888888"
+	_main.append_output("[color=%s]（错过本次来电。如需回拨，拨打对方号码即可。）[/color]\n\n" % m_hex, false)
 
 ## 强制中断（如系统需要取消当前呼叫）
 func cancel_call() -> void:
@@ -223,7 +242,7 @@ func process(delta: float) -> void:
 			var m_hex: String = _T.muted_hex if _T else "#888888"
 			if _main:
 				_main.append_output("[color=%s]CALL TIMED OUT.[/color]\n\n" % m_hex, false)
-			reject_call()
+			reject_call(true)
 
 func _process_ringing(delta: float) -> void:
 	_total_ring_timer += delta
@@ -258,6 +277,30 @@ func get_pending_dialogue_id() -> String:
 
 func get_pending_reject_consequence() -> String:
 	return _pending_reject_consequence
+
+# ══════════════════════════════════════════
+#  错过的来电查询
+# ══════════════════════════════════════════
+
+## 是否有错过的来电
+func has_missed_call(dialogue_id: String) -> bool:
+	return _missed_calls.has(dialogue_id)
+
+## 获取错过的来电信息
+func get_missed_call(dialogue_id: String) -> Dictionary:
+	return _missed_calls.get(dialogue_id, {})
+
+## 清除一条错过的来电记录（接听后调用）
+func clear_missed_call(dialogue_id: String) -> void:
+	_missed_calls.erase(dialogue_id)
+
+## 获取所有错过的来电 ID 列表
+func get_missed_call_ids() -> Array:
+	return _missed_calls.keys()
+
+## 清空所有错过的来电记录
+func clear_all_missed_calls() -> void:
+	_missed_calls.clear()
 
 # ══════════════════════════════════════════
 #  工具

@@ -1,311 +1,499 @@
 {
-	"_comment": "主线剧情清单 —— 定义每日对话、角色、事件触发等。可由 .scp 故事包覆盖或扩展。",
+	"_comment": "主线剧情清单 —— Demo 剧情 v0.1（2026-08-17）。Day0 教程日全量内容；Day1 起通用配置（后续周次剧情待补）。场景 ID 对应 脚本/day0/day0.md。",
 	"story": {
 		"id": "main_storyline",
-		"title": "OB-7K 观测站",
-		"description": "萨哈林岛 Site-██ 环境监测前哨站日常运营主线剧情",
-		"version": "0.2.0"
+		"title": "SCRTs 海域通信与雷达遥测站",
+		"description": "Site-514 海岛观测站操作员主线剧情（Demo：Day0 教程日）",
+		"version": "0.3.0"
+	},
+	"vdisc_tasks": {
+		"demo_site19": {
+			"_comment": "系统联调样例，不参与 Day0 剧情",
+			"title": "Vdisc 联调：Site-19 调查盘",
+			"story_id": "site19_incident_0117_2",
+			"giver": "kanda",
+			"giver_number": "1001-0002",
+			"download": {
+				"number": "9900-0002",
+				"filename": "test_story_V0.3.2_1.scp",
+				"url": "",
+				"mail_attachment": "MTEST-VDISC"
+			},
+			"requirements": {
+				"min_read_percent": 20,
+				"required_files": ["/reports/summary.txt"],
+				"min_total_files": 8,
+				"min_size_kb": 1
+			},
+			"on_success": {"score": "side:1", "flags": {"demo_site19_done": 1}},
+			"on_fail": {"message": "调查盘仍缺少必要内容。"},
+			"wrong_recipient": {
+				"default": {"action": "return", "message": "收件人不符，磁盘已退回。"},
+				"ava": {"action": "confiscate", "score": "main:1", "message": "磁盘已被 Ava 没收；可重新下载。"}
+			}
+		}
+	},
+	"initial_flags": {
+		"_comment": "剧情变量初始值（变量与绩效表.md 第一章）",
+		"anger_ava": 0,
+		"rel_nanami": 0,
+		"vdisc_damaged": false,
+		"nanami_betrayed": false,
+		"tsingtao_progress": 0,
+		"overtime_penalty": false,
+		"prev_clue": false,
+		"prev_hint": false,
+		"s0_heard": false,
+		"s1_heard": false,
+		"s2_heard": false,
+		"termination_eligible": false
 	},
 	"daily_dialogues": {
-		"_comment": "每日对话触发配置。day 编号对应 env_monitor.current_day。on_start_actions 用于触发器动作（如 radio 更新）。",
-		"1": {
+		"0": {
+			"_comment": "Day0 周六·教程日（场景脚本见 脚本/day0/day0.md 日配置）",
 			"on_start": [
-				"day1_briefing"
+				"d0_01"
 			],
 			"on_scan_complete": [
-				"day1_scan_done"
+				"d0_06"
 			],
 			"on_anomaly": [],
-			"on_start_actions": [
-				"radio_update:weather_broadcast:content_text=VVV DE OB7K WX REPORT DAY 1 SAKHALIN ISLAND TEMP MINUS 12C WIND NW 15KT VISIBILITY 8KM OVERCAST BAROMETER 1013HPA FORECAST STABLE NO PRECIPITATION EXPECTED AR",
-				"radio_reload"
+			"on_mail_read": [
+				"d0_02"
 			],
+			"on_start_actions": [],
+			"performance": {
+				"min_quota": 3
+			},
 			"mail_deliveries": [
 				{
-					"id": "welcome_mail",
-					"title": "欢迎抵达 OB-7K",
-					"from": "AVA <ava@site-ob7k.scp>",
+					"id": "M00-01",
+					"title": "欢迎来到 SCRTs 观测站",
+					"from": "神田玲 <kanda.rei@scrts.scp>",
 					"persistent": true,
-					"body": "From: AVA <ava@site-ob7k.scp>\nTo: {username}@site-ob7k.scp\nSubject: 欢迎抵达 OB-7K\n---\n操作员，\n\n欢迎来到 OB-7K 观测站。作为新到任的环境监测操作员，以下是你的日常工作流程：\n\n1. 每天登录后执行 env scan 完成自动检测\n2. 查看 env view 仪表盘确认数据\n3. 完成所有任务后关闭终端，系统将自动推进至下一天\n\n桌面模式下输入 [color=#ffaa00]radio[/color] 可启动无线电接收器，监听周边信号。\n如需帮助，输入 help 查看可用命令。\n\n祝工作顺利。\n\n—— AVA, 联络 AI"
-				}
-			]
-		},
-		"2": {
-			"on_start": [
-				"day2_morning"
-			],
-			"on_scan_complete": [],
-			"on_anomaly": [
-				"day2_anomaly_reaction"
-			],
-			"on_start_actions": [
-				"radio_update:weather_broadcast:content_text=VVV DE OB7K WX REPORT DAY 2 SAKHALIN ISLAND TEMP MINUS 15C WIND NW 25KT GUSTING 35KT VISIBILITY 3KM HEAVY SNOW BAROMETER 998HPA STORM WARNING IN EFFECT SECURE ALL OUTDOOR EQUIPMENT AR",
-				"radio_visible:hq_directive:true",
-				"radio_reload"
-			],
-			"mail_deliveries": [
+					"deliver_on": "scene",
+					"body": "新来的操作员，欢迎。\n\n这里是 SCRTs 海域通信与雷达遥测站【Sea-region Communications & Radar Telemetry station】。从现在起，你是这座岛上唯一的人类了——别紧张，我当年也在这里值过班，这地方没看起来那么糟。\n\n以下是你需要先知道的三件事：\n\n[b]一、环境监测是本站的本职。[/b]\n每天开工后执行 [color=#ffaa00]env[/color] 打开观测台，输入 scan 采集，查看变化摘要，再输入 report 提交日报。遇到疑点可以复测，不确定就如实记录。总部需要的是报告；而你的考勤上，也会留下提交记录。\n\n[b]二、邮件是你与外界联系最稳妥的渠道。[/b]\n邮件开头的 [T] 是系统临时邮件，第二天自动清除；[G] 是全局邮件，永久保存。顺带一提，本系统不支持删除邮件——这功能是给那些喜欢\"假装没看到\"的人准备的。\n\n[b]三、通讯系统稍后再说。[/b]\n今天有位大人物会亲自接管你的通讯频道。你听到铃声别犹豫，接就是了。有些电话，错过了比接了更麻烦。\n\n一些基本命令：[color=#ffaa00]help[/color] 查看命令列表，[color=#ffaa00]status[/color] 查看系统状态，[color=#ffaa00]save[/color] 手动存档。关机之前，记得 save。\n\n最后——欢迎。认真干活，不懂就问。前提是，问得到我的话。\n\n—— 神田玲，SCRTs 操作指导员"
+				},
 				{
-					"id": "day2_report",
-					"title": "昨日数据汇总",
-					"from": "HQ-CONTROL <hq@foundation.scp>",
+					"id": "M00-02",
+					"title": "任务 A-001：岗前热身（Day0）",
+					"from": "Ava Lacant <ava.lacant@o5-secretariat.scp>",
 					"persistent": true,
-					"body": "From: HQ-CONTROL <hq@foundation.scp>\nTo: OB-7K Operator\nSubject: 昨日数据汇总\n---\n操作员，\n\n总部已收到你第一天的环境监测报告。数据质量合格。\n\n请注意：昨晚自动气象站记录到微弱信号波动。\n可能是风暴前兆，也可能是其他因素。\n\n另外，总部已开放 HF 14.300 MHz 通讯频道。\n你可以在桌面模式下使用 radio 命令尝试接收。\n\n请保持警惕，继续执行日常监测。\n\n—— 总部管控中心"
-				}
-			]
-		},
-		"3": {
-			"on_start": [
-				"day3_morning"
-			],
-			"on_scan_complete": [],
-			"on_anomaly": [],
-			"on_start_actions": [
-				"radio_update:weather_broadcast:content_text=VVV DE OB7K WX REPORT DAY 3 SAKHALIN ISLAND TEMP MINUS 18C WIND N 40KT VISIBILITY 1KM BLIZZARD CONDITIONS BAROMETER 992HPA EXTREME WEATHER WARNING ALL PERSONNEL REMAIN INDOORS AR",
-				"radio_visible:numbers_station:true",
-				"radio_visible:emergency_beacon:true",
-				"radio_update:hq_directive:content_text=CQ CQ CQ DE HQ CONTROL PRIORITY MESSAGE ALL STATIONS ANOMALOUS READINGS CONFIRMED LEVEL 2 ALERT ACTIVATED INCREASE MONITORING FREQUENCY REPORT ANY UNUSUAL OBSERVATIONS IMMEDIATELY AR",
-				"radio_reload"
-			],
-			"mail_deliveries": [
-				{
-					"id": "day3_notice",
-					"title": "[机密] 异常评估报告",
-					"from": "Site Director <director@site-██.scp>",
-					"persistent": true,
-					"body": "From: Site Director\nTo: OB-7K Operator\nSubject: [机密] 异常评估报告\nPriority: HIGH\n---\n操作员，\n\n经过 48 小时的数据分析，总部对你提交的异常报告做出了初步评估：\n\n  分类：待定（暂标为 Euclid 级）\n  风险等级：中\n  建议措施：持续监测，保持每日报告\n\n此外，我们在 HF 5.473 MHz 频率上截获了来源不明的数字信号。\n同时国际遇险频率 2.182 MHz 出现了 SOS 信号。\n请使用 radio 命令调查这些信号来源。\n\n此信息为 Level-2 机密。请勿在非加密信道讨论。\n\n—— Site Director"
+					"deliver_on": "scene",
+					"body": "操作员 {username}：\n\n今天是你的热身日。没有正式工作，但不代表你可以闲着。请在今日内完成以下三项：\n\n[color=#ffcc00]任务一[/color]　熟悉邮件系统。阅读本邮件即视为完成。\n\n[color=#ffcc00]任务二[/color]　熟悉环境监测系统。执行 [color=#ffaa00]env[/color] 打开观测台，输入 scan 采集并查看摘要，再输入 report 提交日报。这是你明天开始的每日工作，早学会早轻松。\n\n[color=#ffcc00]任务三[/color]　熟悉通讯系统。完成前两项后，[color=#ffaa00]dial 1001-0001[/color] 主动联络我，我会检查你的完成情况，并演示通讯系统的各项功能。\n\n上述任务全部完成后，我将按当日配额记录你的绩效。如果完不成……我会知道的。\n\n—— Ava Lacant，O5 议会直属秘书处秘书长\n\n（附：本邮件不得外传。SCRTs 站内一切通讯均在监控之下。）"
 				}
 			]
 		},
 		"default": {
-			"_comment": "没有特定定义的天数使用此默认配置",
-			"on_start": [
-				"daily_routine_greeting"
-			],
+			"_comment": "Day1 起通用配置（后续周次剧情待补）",
+			"on_start": [],
 			"on_scan_complete": [],
 			"on_anomaly": [],
-			"on_start_actions": [
-				"radio_update:weather_broadcast:content_text=VVV DE OB7K WX REPORT SAKHALIN ISLAND CONDITIONS UNCHANGED MONITORING CONTINUES AR",
-				"radio_reload"
-			]
-		}
-	},
-	"comm_characters": {
-		"hq_control": {
-			"id": "hq_control",
-			"name": "总部管控",
-			"title": "HQ-CONTROL",
-			"voice": {
-				"tone": "square",
-				"base_pitch": 0.7,
-				"pitch_variance": 0.05,
-				"speed": "normal"
-			}
+			"on_start_actions": [],
+			"mail_deliveries": []
 		}
 	},
 	"comm_dialogues": {
-		"day1_briefing": {
-			"title": "第一天 — 到岗报告",
+		"d0_01": {
+			"_comment": "D0-01 注册完成·前辈登场（强制接入·无铃声·系统后门伏笔）",
+			"title": "前辈登场",
 			"callable": false,
 			"repeatable": false,
+			"skippable": false,
+			"deliver_mail": "M00-01",
 			"lines": [
 				{
-					"character": "ava",
-					"text": "操作员，欢迎抵达 OB-7K 观测站。我是你的联络 AI，代号 AVA。",
-					"speed": 30.0
+					"character": "kanda",
+					"text": "哦哦，你好啊新来的操作员。我看到你登录进系统了——这说明你已经正常到岗，开始上班了。很好。",
+					"speed": 30
 				},
 				{
-					"character": "ava",
-					"text": "从今天起，你将负责这座前哨站的日常环境监测工作。",
-					"speed": 30.0
+					"character": "kanda",
+					"text": "不错，没缺胳膊少腿，至少是安全抵达的，这算是今天第一个好消息。不过……呃……你应该有接受相应操作的培训……对吧？",
+					"speed": 28
 				},
 				{
-					"character": "ava",
-					"text": "流程很简单：输入 [color=#ffaa00]env scan[/color] 执行自动检测。也可以用 [color=#ffaa00]mail[/color] 查看邮件。",
-					"speed": 28.0
+					"character": "kanda",
+					"text": "果然没有。希望只是我多虑了……听好了，我刚刚收到通知，待会有个大人物要来找你，你和这个监测站以后应该就归她管了。你要认真听她的话，表现好一点。希望你不会在第一天就把这份工作丢了。",
+					"speed": 28
 				},
 				{
-					"character": "ava",
-					"text": "观测站配备了无线电接收器。回到桌面后输入 [color=#ffaa00]radio[/color] 即可启动。目前气象广播频道已就绪。",
-					"speed": 28.0
-				},
-				{
-					"character": "ava",
-					"text": "完成工作后关闭终端，下次启动将自动进入新的一天。祝工作顺利。",
-					"speed": 30.0
+					"character": "kanda",
+					"text": "哦对，我刚才给你发了一封邮件，注意事项都在里面。以你的实力，看一遍应该就知道怎么做了。那就这样，我这边还有点其它的事情，有问题咱们回头再聊。",
+					"speed": 30
 				}
 			]
 		},
-		"day1_scan_done": {
-			"title": "第一天 — 扫描完成",
+		"d0_02": {
+			"_comment": "D0-02 大人物来电（强制接入·电话铃响；QTE 限时选项待开发，现为普通选项）",
+			"title": "大人物来电",
 			"callable": false,
 			"repeatable": false,
+			"skippable": false,
+			"call_mode": "forced",
+			"requires_mail": "M00-01",
+			"flags_add": {
+				"d0_welcome_read": 1
+			},
 			"lines": [
 				{
 					"character": "ava",
-					"text": "第一次自动扫描已完成。数据已上传至总部。",
-					"speed": 30.0
+					"text": "你好，操作员{username}。我是 O5 议会直属秘书处的秘书长 Ava Lacant。现在，你和这个站点，归我管辖了。",
+					"speed": 25,
+					"story_action": "score:1:daily"
 				},
 				{
 					"character": "ava",
-					"text": "你可以用 [color=#ffaa00]save[/color] 手动保存进度。关闭终端后再次启动将进入下一天。",
-					"speed": 28.0
+					"text": "我不知道你从哪来，也不关心你为什么来。到了这里，就只需要像士兵一样服从命令。你明白了吧？\n\n  [color=#ffcc00][1][/color] Yes Madam\n  [color=#ffcc00][2][/color]（沉默）",
+					"speed": 25,
+					"wait_for": "choice:d0_qte"
 				}
 			]
 		},
-		"day2_morning": {
-			"title": "第二天 — 晨间通讯",
+		"d0_qte_1": {
+			"_comment": "D0-03 服从声明·分支1（Yes Madam）",
+			"title": "服从声明（Yes Madam）",
 			"callable": false,
 			"repeatable": false,
-			"lines": [
-				{
-					"character": "ava",
-					"text": "早安，操作员。新的一天开始了。你应该收到了总部的邮件。",
-					"speed": 30.0
-				},
-				{
-					"character": "ava",
-					"text": "昨晚自动气象站记录到一些微弱的信号波动。请执行 [color=#ffaa00]env scan[/color] 确认状态。",
-					"speed": 28.0
-				},
-				{
-					"character": "ava",
-					"text": "对了，总部在 HF 14.300 MHz 开放了通讯频道。你可以用 [color=#ffaa00]radio[/color] 尝试接收。",
-					"speed": 28.0
-				}
-			]
-		},
-		"day2_anomaly_reaction": {
-			"title": "第二天 — 异常反应",
-			"callable": false,
-			"repeatable": false,
-			"lines": [
-				{
-					"character": "ava",
-					"text": "注意——扫描结果中检测到异常数据。我已经标记并上报总部。",
-					"speed": 28.0,
-					"action": "glitch"
-				},
-				{
-					"character": "ava",
-					"text": "请保持关注。如果情况恶化，总部会发送进一步指令。",
-					"speed": 30.0
-				}
-			]
-		},
-		"day3_morning": {
-			"title": "第三天 — 例行通讯",
-			"callable": false,
-			"repeatable": false,
-			"lines": [
-				{
-					"character": "ava",
-					"text": "第三天。查看你的邮件——Site Director 发来了一份机密评估报告。",
-					"speed": 28.0
-				},
-				{
-					"character": "ava",
-					"text": "总部对之前的异常做出了初步分类。请继续日常检测。",
-					"speed": 30.0
-				},
-				{
-					"character": "ava",
-					"text": "还有一件事——我们在无线电频谱上发现了异常信号。HF 5.473 MHz 有不明数字电台，2.182 MHz 遇险频率出现了 SOS。请用 [color=#ffaa00]radio[/color] 调查。",
-					"speed": 26.0
-				}
-			]
-		},
-		"daily_routine_greeting": {
-			"title": "日常晨间通讯",
-			"callable": false,
-			"repeatable": true,
-			"lines": [
-				{
-					"character": "ava",
-					"text": "新的一天，操作员。系统状态正常。请执行日常检测。",
-					"speed": 30.0
-				}
-			]
-		}
-	},
-	"camera_system": {
-		"_comment": "主线剧情监控摄像头配置。素材存放在 data/main/cameras/ 目录下。",
-		"base_path": "res://data/main/cameras",
-		"defaults": {
-			"unlocked": false,
-			"online": true,
-			"viewport_size": [
-				0.8,
-				0.6
+			"skippable": false,
+			"next": [
+				"d0_04",
+				"d0_05"
 			],
-			"viewport_pos": [
-				0.5,
-				0.5
-			],
-			"pan_speed": 0.015,
-			"pan_bounds": [
-				0.0,
-				0.0,
-				1.0,
-				1.0
-			],
-			"noise_intensity": 0.15,
-			"scanline_intensity": 0.3,
-			"vignette": 0.4,
-			"timestamp_visible": true,
-			"signal_quality": 1.0,
-			"snow_intensity": 0.0,
-			"light_mode": "none",
-			"light_radius": 0.5,
-			"light_falloff": 2.0
+			"lines": [
+				{
+					"character": "ava",
+					"text": "很好，你的职责就是\"少说话，多做事\"。完成基金会交给你的任务，这样对我们都好。但是——若有失职，甚至渎职的行为……",
+					"speed": 26
+				},
+				{
+					"character": "ava",
+					"text": "你是知道基金会的风格和手段的。希望你能明智一点，不要像 Si——（咳嗽）咳咳。总之，接下来听我的命令就是。",
+					"speed": 26
+				}
+			]
 		},
-		"cameras": {
-			"cam_entrance": {
-				"name": "入口拐角监控",
-				"location": "主入口 1F 西南方",
-				"unlocked": true,
-				"base_image": "camera_test_main.jpg",
-				"depth_map": "camera_test_depth.jpg",
-				"spotlight_image": "camera_test_light.jpg",
-				"nightvision_image": "camera_test_nvg.jpg",
-				"infrared_image": "camera_test_heat.jpg",
-				"use_prerendered": true,
-				"use_parallax": true,
-				"parallax_scale": 0.03,
-				"parallax_layers": 8,
-				"viewport_size": [
-					0.9,
-					0.7
-				],
-				"viewport_pos": [
-					0.5,
-					0.5
-				],
-				"pan_speed": 0.02,
-				"rotation_enabled": true,
-				"rotation_center": [
-					0.5,
-					0.5
-				],
-				"rotation_radius": 0.25,
-				"rotation_angle_range": 60.0,
-				"light_mode": "none",
-				"anomalies": [
-					{
-						"id": "anomaly_01",
-						"image": "entrance_anomaly.png",
-						"depth_map": "entrance_anomaly_depth.png",
-						"trigger": "random",
-						"probability": 0.03,
-						"duration": 2.0,
-						"min_interval": 10.0,
-						"effects": [
-							"glitch:0.4",
-							"noise_burst:0.3"
-						],
-						"action": "trigger:event_anomaly_detected"
-					}
-				]
-			}
+		"d0_qte_2": {
+			"_comment": "D0-03 服从声明·分支2（沉默）——anger_ava+1",
+			"title": "服从声明（沉默）",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"flags_add": {
+				"anger_ava": 1
+			},
+			"next": [
+				"d0_04",
+				"d0_05"
+			],
+			"lines": [
+				{
+					"character": "ava",
+					"text": "……我就当你是不熟悉操作，才没有回答我的。你记住，在这里，只需要服从我的命令。",
+					"speed": 26
+				},
+				{
+					"character": "ava",
+					"text": "但若发生比\"不回应上级命令\"更严重的失职甚至渎职行为……",
+					"speed": 24
+				},
+				{
+					"character": "ava",
+					"text": "你是知道基金会的风格和手段的。希望你能明智一点，不要像 Si——（咳嗽）咳咳。",
+					"speed": 26
+				}
+			]
+		},
+		"d0_04": {
+			"_comment": "D0-04 任务布置（场景内投递 M00-02）",
+			"title": "任务布置",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"deliver_mail": "M00-02",
+			"lines": [
+				{
+					"character": "ava",
+					"text": "嗯……今天按规程是没有正式工作的。你熟悉熟悉操作系统即可。",
+					"speed": 26
+				},
+				{
+					"character": "ava",
+					"text": "额，我当然知道你之前没有经受过任何培训——不然你以为这个岗位是谁安排给你的？",
+					"speed": 26
+				},
+				{
+					"character": "ava",
+					"text": "算了，我懒得找人手把手来教你。不过好在我至少知道这个系统是什么东西。我会通过邮件给你布置任务热身，记得完成它们。如果你没有完成的话……我会知道的。",
+					"speed": 24
+				}
+			]
+		},
+		"d0_05": {
+			"_comment": "D0-05 神田接入申请（来电+玩家选择接入；选中后进入多人会议 d0_meeting_1）",
+			"title": "接入申请",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"call_mode": "answerable",
+			"reject_consequence": "comm:d0_05_reject:silent",
+			"lines": [
+				{
+					"character": "ava",
+					"text": "……稍等，有人请求接入。是 SCRTs 的操作指导员，神田玲。她说按规程，新手操作员的岗前指导由她负责，要求旁听本次交接。\n\n[color=#ffcc00][1][/color] 允许接入\n[color=#ffcc00][2][/color] 拒绝接入",
+					"speed": 26,
+					"wait_for": "choice:d0_meeting"
+				}
+			]
+		},
+		"d0_meeting_1": {
+			"_comment": "D0-05a 职责分配（多人会议：神田玲右侧滑入，Ava 在左）",
+			"title": "职责分配",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"lines": [
+				{
+					"character": "kanda",
+					"text": "抱歉打扰，秘书长。按规程，新手操作员的岗前指导由 SCRTs 操作指导员负责——也就是我。",
+					"speed": 28,
+					"display_mode": "meeting",
+					"meeting_slot": "right"
+				},
+				{
+					"character": "ava",
+					"text": "哦？你的意思是，我的任务清单不如你的规程重要？",
+					"speed": 24,
+					"meeting_slot": "left"
+				},
+				{
+					"character": "kanda",
+					"text": "我的意思是，人是我教，考核归你。这岛上就他一个人，教坏了，报废的是你的验收。",
+					"speed": 28,
+					"meeting_slot": "right"
+				},
+				{
+					"character": "ava",
+					"text": "呵。好一张利嘴。行，教学归你，验收归我。别教太久——他的时间是按天算钱的。",
+					"speed": 24,
+					"meeting_slot": "left"
+				},
+				{
+					"character": "kanda",
+					"text": "听到没，你的时间是按天算钱的。认真学。",
+					"speed": 30,
+					"meeting_slot": "right"
+				},
+				{
+					"character": "ava",
+					"text": "通讯结束。",
+					"speed": 0,
+					"meeting_slot": "left"
+				}
+			]
+		},
+		"d0_meeting_2": {
+			"_comment": "D0-05b 拒绝神田接入分支",
+			"title": "拒绝接入",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "神田指导员，今天的交接由我负责。岗前指导的事，改天再说。",
+					"speed": 24
+				},
+				{
+					"character": "kanda",
+					"text": "……明白。那我晚点再来。",
+					"speed": 28
+				},
+				{
+					"character": "ava",
+					"text": "通讯结束。",
+					"speed": 0
+				}
+			]
+		},
+		"d0_05_reject": {
+			"_comment": "D0-05 拒接来电后果（call_mode=answerable 时玩家拒接触发）",
+			"title": "未接来电",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"lines": [
+				{
+					"character": "ava",
+					"text": "（线路已挂断）……算了，神田指导员的事我回头处理。先安排你的任务。",
+					"speed": 24
+				},
+				{
+					"character": "ava",
+					"text": "通讯结束。",
+					"speed": 0
+				}
+			]
+		},
+		"d0_06": {
+			"_comment": "D0-06 首测通过（env 教学小结·可接听）★绩效 daily+1",
+			"title": "首测通过",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"call_mode": "answerable",
+			"requires_flag": {
+				"d0_welcome_read": 1
+			},
+			"lines": [
+				{
+					"character": "kanda",
+					"text": "干得不错。我看到你的第一组扫描数据已经上传了——数值中规中矩，设备也都醒着。这套老古董没有看起来那么难伺候，对吧？",
+					"speed": 28,
+					"display_mode": "card",
+					"story_action": "score:1:daily"
+				},
+				{
+					"character": "kanda",
+					"text": "记住每天的流程：[color=#ffaa00]env[/color] 打开观测台，采集、查看摘要、提交日报。哪天数据不对劲，系统会标出疑点，可以复测；还没查清就如实记录，用不着你猜。",
+					"speed": 26
+				},
+				{
+					"character": "kanda",
+					"text": "还有，如果哪天看见 [color=#ff4444][!][/color] 红色警告标记，先别慌，也别急着删。记下来，上报。这岛上没有看起来那么简单。",
+					"speed": 24
+				}
+			]
+		},
+		"ava_report_ok": {
+			"_comment": "D0-07 主动汇报·任务全部完成（玩家主动 dial Ava）★绩效 main+1",
+			"title": "主动汇报",
+			"description": "主动汇报（任务检查）",
+			"callable": true,
+			"repeatable": false,
+			"skippable": false,
+			"requires_flag": {
+				"d0_welcome_read": 1
+			},
+			"requires_tasks": "all",
+			"next": [
+				"d0_08",
+				"d0_09"
+			],
+			"lines": [
+				{
+					"character": "ava",
+					"text": "这里是 Ava Lacant。接到你的来电了，操作员。你主动打过来，就意味着任务已经全部完成——让我检查一下。",
+					"speed": 26,
+					"story_action": "score:1:main"
+				},
+				{
+					"character": "ava",
+					"text": "哦？环境监测、邮件、通讯……都过了一遍。不错，看来你不算完全的废物。这个任务，我给你记上一分。记住，周日开始就要动真格了。",
+					"speed": 26
+				}
+			]
+		},
+		"ava_report_fail": {
+			"_comment": "D0-07 主动汇报·任务未完成（当日缺额记入绩效缺口）",
+			"title": "主动汇报",
+			"description": "主动汇报（任务检查）",
+			"callable": true,
+			"repeatable": false,
+			"skippable": false,
+			"requires_flag": {
+				"d0_welcome_read": 1
+			},
+			"requires_tasks": "incomplete",
+			"next": [
+				"d0_08",
+				"d0_09"
+			],
+			"lines": [
+				{
+					"character": "ava",
+					"text": "这里是 Ava Lacant。接到你的来电了，操作员。你主动打过来，就意味着任务已经全部完成——让我检查一下。",
+					"speed": 26
+				},
+				{
+					"character": "ava",
+					"text": "很不幸，你在此事上辜负了我的期望——虽然我本来就不对你抱什么期望就是了。",
+					"speed": 26
+				},
+				{
+					"character": "ava",
+					"text": "未完成的任务不会消失，只会变成你的绩效缺口。周一开始之前，把这笔账补上。至于怎么补……你会知道的。",
+					"speed": 24
+				}
+			]
+		},
+		"d0_08": {
+			"_comment": "D0-08 通讯教学展示（通话/会议/简报三模式演示）",
+			"title": "通讯教学展示",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"next": [
+				"d0_09"
+			],
+			"lines": [
+				{
+					"character": "ava",
+					"text": "很好，闲话少说。你今天至少还得继续了解通讯功能。看清楚了，这可能是你以后保命的东西。",
+					"speed": 26,
+					"display_mode": "card"
+				},
+				{
+					"character": "ava",
+					"text": "首先就是你目前看到的通话系统。由于设备老旧，你在通话期间基本无法进行其他操作——也算好事，防止操作者走神。",
+					"speed": 24
+				},
+				{
+					"character": "ava",
+					"text": "多人会议模式下，不同参与者占据画面不同位置，当前说话者高亮到前景。刚才的场面，你已经见识过了。",
+					"speed": 22,
+					"display_mode": "meeting",
+					"meeting_slot": "center"
+				},
+				{
+					"character": "ava",
+					"text": "最后是简报模式。我用它开过十七次站点简报——现在为你开第十八次。演示完毕。",
+					"speed": 22,
+					"display_mode": "presentation",
+					"meeting_slot": "center"
+				},
+				{
+					"character": "ava",
+					"text": "拨号用 [color=#ffaa00]dial[/color] 加号码，查号用 [color=#ffaa00]phonebook[/color]。我的号码已经存进你的号码簿了。有事找我，没事别找。",
+					"speed": 24
+				}
+			]
+		},
+		"d0_09": {
+			"_comment": "D0-09 收工（前辈叮嘱·可接听）",
+			"title": "收工",
+			"callable": false,
+			"repeatable": false,
+			"skippable": false,
+			"call_mode": "answerable",
+			"lines": [
+				{
+					"character": "kanda",
+					"text": "今天到这儿吧。第一天，能全须全尾地坐到天黑，就是及格。",
+					"speed": 28,
+					"display_mode": "card"
+				},
+				{
+					"character": "kanda",
+					"text": "这岛到了晚上很安静，安静得能听见海。睡不着的话，可以去调调无线电——当然，别告诉秘书长是我说的。",
+					"speed": 24
+				},
+				{
+					"character": "kanda",
+					"text": "关终端之前记得 [color=#ffaa00]save[/color]。明天周日，正式开工。晚安，新来的。",
+					"speed": 30
+				}
+			]
 		}
 	}
 }

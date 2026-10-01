@@ -1,7 +1,7 @@
-# Skill: Add New Feature (Godot 4.6)
+# Skill: Add New Feature (Godot 4.7.1)
 
 You are extending the SCRT-Reader terminal with a new feature/system.
-Follow the 7-step process below with Godot 4.6 GDScript conventions.
+Follow the 7-step process below with Godot 4.7.1 GDScript conventions.
 <!-- 详细步骤参考 docs/extension-guide.md -->
 
 ## Step 1: Create Class
@@ -127,4 +127,4 @@ settings_mgr.register_setting("my_feature", "intensity", 0.8, "强度", "slider"
 
 ## GDScript Style Reminder
 
-See root `CLAUDE.md` for full GDScript 4.6 conventions and code-review skill for checklist.
+See root `CLAUDE.md` for full GDScript 4.7.1 conventions and code-review skill for checklist.

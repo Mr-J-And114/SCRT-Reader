@@ -3,7 +3,7 @@
 # 环境监测站数据显示面板 —— CRT 风格覆盖层 UI
 #
 # 遵循 DocumentViewer / RadioReceiver 的 overlay 模式：
-# 对齐到 OutputArea 区域，隐藏输入栏，
+# 对齐到 OutputArea 区域，复用底部输入栏，
 # 自定义 _draw() 绘制环境仪表盘。
 # ============================================================
 class_name EnvViewer
@@ -22,14 +22,34 @@ var T = null
 var overlay_panel: Panel = null
 var _scroll: ScrollContainer = null  # ★ 滚动容器
 var canvas: Control = null   # _EnvCanvas 内部类实例
+var map_canvas: EnvMapCanvas = null
+var _layer: CanvasLayer = null
+var command_log: RichTextLabel = null
+var command_input: LineEdit = null
+var command_panel: Panel = null
+var _feedback_lines: Array[String] = []
+var _last_observation_message: String = ""
+var _command_history: Array[String] = []
+var _history_cursor: int = 0
+# 后续无人机模块注册 callable(Array[String]) -> String；当前没有飞行实现。
+var command_extensions: Dictionary = {}
+
+func register_command_extension(command_name: String, handler: Callable) -> void:
+	command_extensions[command_name.to_lower()] = handler
+
+func unregister_command_extension(command_name: String) -> void:
+	command_extensions.erase(command_name.to_lower())
+var selected_region: String = ""
+var history_index: int = 0
+var _sweep_angle: float = 0.0
 
 # ══════════════════════════════════════════
 #  显示状态
 # ══════════════════════════════════════════
 var is_active: bool = false
-var current_page: int = 0       # 0=总览, 1=大气, 2=海洋, 3=地物, 4=成分, 5=事件
-var page_names: Array = ["总览", "大气", "海洋", "地球物理", "大气成分", "事件/异常"]
-const MAX_PAGES: int = 6
+var current_page: int = 0       # 0/1地图，2..7实时详情，8历史，9采集证据
+var page_names: Array = ["岛屿/近海", "海域", "总览", "大气", "海洋", "地球物理", "大气成分", "事件/异常", "日报历史"]
+const MAX_PAGES: int = 11
 
 ## 闪烁计时器（异常指示灯）
 var _blink_timer: float = 0.0
@@ -55,21 +75,31 @@ func open() -> void:
 	if is_active:
 		return
 	is_active = true
+	main._env_viewer_mode = true
+	main.env_observation.migrate_legacy()
 	current_page = 0
 	_ensure_overlay()
 	_align_overlay()
 	# 缓存并隐藏终端 UI
 	_cached_input_visible = main.input_field.visible
 	_cached_prompt_visible = main.prompt_label.visible
-	main.input_field.visible = false
-	main.prompt_label.visible = false
+	main.input_field.visible = true
+	main.prompt_label.visible = true
 	_cached_output_text = main.output_text.text
 	main.output_text.text = ""
 	# 更新路径栏提示
 	if main.path_label:
-		main.path_label.text = "ENV MONITOR | ←/→ 切换  TAB 下一页  Q/ESC 关闭"
+		main.path_label.text = "ENV | Tab 近海／远海 · manual 操作说明 · exit 返回桌面"
 
 	overlay_panel.visible = true
+	_refresh_page()
+	_feedback_lines.clear()
+	command_log.clear()
+	selected_region = ""
+	_log("环境观测终端就绪。输入 manual 阅读操作说明。\n常用流程：scan → issues / retest → report\n地图：map nearshore / map sea")
+	_last_observation_message = main.env_observation.message
+	command_input.clear()
+	command_input.grab_focus()
 	# ★ 重置滚动位置
 	if _scroll:
 		_scroll.scroll_vertical = 0
@@ -78,6 +108,7 @@ func close() -> void:
 	if not is_active:
 		return
 	is_active = false
+	main._env_viewer_mode = false
 	# 隐藏覆盖层
 	if overlay_panel and is_instance_valid(overlay_panel):
 		overlay_panel.visible = false
@@ -104,30 +135,180 @@ func toggle() -> void:
 func handle_input(event: InputEvent) -> bool:
 	if not is_active:
 		return false
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and current_page in [0, 1]:
+		var action: String = map_canvas.action_at(map_canvas.get_local_mouse_position())
+		if not action.is_empty():
+			if action == "deselect":
+				selected_region = ""
+			elif action.begins_with("contact:"):
+				selected_region = action
+				_log("已选择目标：" + action.trim_prefix("contact:"))
+			else:
+				perform_action(action)
+				_log("已选择设施：" + selected_region)
+			command_input.grab_focus()
+			return true
 	if event is InputEventKey and event.pressed:
-		match event.keycode:
-			KEY_ESCAPE, KEY_Q:
-				close()
-				return true
-			KEY_LEFT:
-				current_page = (current_page - 1 + MAX_PAGES) % MAX_PAGES
-				_reset_scroll()
-				if canvas:
-					canvas.queue_redraw()
-				return true
-			KEY_RIGHT:
-				current_page = (current_page + 1) % MAX_PAGES
-				_reset_scroll()
-				if canvas:
-					canvas.queue_redraw()
-				return true
-			KEY_TAB:
-				current_page = (current_page + 1) % MAX_PAGES
-				_reset_scroll()
-				if canvas:
-					canvas.queue_redraw()
-				return true
+		if event.keycode == KEY_TAB:
+			if not event.echo:
+				perform_action("nearshore" if current_page == 1 else "sea")
+				command_input.grab_focus()
+			return true
+		if command_input.has_focus() and event.keycode in [KEY_UP, KEY_DOWN] and not _command_history.is_empty():
+			_history_cursor = clampi(_history_cursor + (-1 if event.keycode == KEY_UP else 1), 0, _command_history.size())
+			command_input.text = _command_history[_history_cursor] if _history_cursor < _command_history.size() else ""
+			command_input.caret_column = command_input.text.length()
+			return true
 	return false
+
+func _log(value: String) -> void:
+	for line in value.split("\n"):
+		_feedback_lines.append(line)
+	if _feedback_lines.size() > 250:
+		_feedback_lines = _feedback_lines.slice(-250)
+	_render_feedback()
+
+func _render_feedback() -> void:
+	# 按当前字号与可见高度保留末尾反馈，无滚动条，不依赖自动滚动。
+	var font: Font = main.output_text.get_theme_font("normal_font")
+	var fs: int = command_log.get_theme_font_size("normal_font_size")
+	var wrapped: Array[String] = []
+	for line in _feedback_lines:
+		var row: String = ""
+		for character in line:
+			if not row.is_empty() and font.get_string_size(row + character, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > command_log.size.x - 10:
+				wrapped.append(row)
+				row = ""
+			row += character
+		wrapped.append(row)
+	var capacity: int = maxi(1, int(command_log.size.y / (font.get_height(fs) + 4)))
+	command_log.text = "\n".join(wrapped.slice(maxi(0, wrapped.size() - capacity)))
+
+func execute_command(raw: String) -> void:
+	var line: String = raw.strip_edges()
+	command_input.clear()
+	if line.is_empty():
+		return
+	_log("> " + line)
+	_command_history.append(line)
+	if _command_history.size() > 100:
+		_command_history.pop_front()
+	_history_cursor = _command_history.size()
+	var parts: PackedStringArray = line.to_lower().split(" ", false)
+	if parts[0] == "env":
+		parts.remove_at(0)
+	if parts.is_empty():
+		parts.append("help")
+	var verb: String = parts[0]
+	var args: Array[String] = []
+	for i in range(1, parts.size()):
+		args.append(parts[i])
+	var obs: EnvObservation = main.env_observation
+	match verb:
+		"help", "manual", "guide":
+			current_page = 10
+			_log("已打开 ENV 操作说明；map 返回地图，exit 返回桌面。")
+		"scan", "collect": perform_action("capture")
+		"retest", "mark", "calibrate": perform_action(verb)
+		"report", "submit": perform_action("submit")
+		"next":
+			perform_action("next_issue")
+			_log("当前疑点：%d / %d" % [obs.selected_issue + 1 if not obs.issues().is_empty() else 0, obs.issues().size()])
+		"status":
+			_log("%s %s / %s\n采集：%s / 日报：%s / 疑点：%d" % [env_monitor.get_day_display(), env_monitor.get_current_hour_display(), env_monitor.get_weather_name(), "完成" if obs.is_collected() else "未完成", "已提交" if obs.is_submitted() else "未提交", obs.issues().size()])
+		"issues":
+			if obs.issues().is_empty(): _log("暂无疑点；未采集时请先 scan。")
+			for i in range(obs.issues().size()):
+				_log("%d. %s [%s]" % [i + 1, obs.issues()[i].get("name", ""), obs.issues()[i].get("region", "")])
+		"select":
+			if args.size() != 1:
+				_log("用法：select <设施ID/疑点编号>；设施ID：station atmosphere ocean geophysics composition buoy_01 sonar_01")
+			elif args[0].is_valid_int():
+				var index: int = int(args[0]) - 1
+				if index >= 0 and index < obs.issues().size():
+					obs.selected_issue = index
+					selected_region = str(obs.current_issue().get("region", "station"))
+					_log("已选择：" + str(obs.current_issue().get("name", "")))
+				else: _log("疑点编号无效；输入 issues 查看编号。")
+			else:
+				var found: bool = false
+				for region in obs.config.get("regions", []):
+					if region.get("id", "") == args[0]:
+						perform_action("region:" + args[0])
+						found = true
+						_log("已选择：" + str(region.get("name", args[0])))
+				if not found: _log("未知设施；输入 select 查看设施ID。")
+		"map":
+			if args.is_empty() or args[0] == "nearshore": perform_action("nearshore")
+			elif args[0] == "sea": perform_action("sea")
+			else: _log("用法：map nearshore / map sea")
+		"details":
+			var sections: Array[String] = ["overview", "atmosphere", "ocean", "geophysics", "composition", "events", "evidence"]
+			var section: String = args[0] if not args.is_empty() else "overview"
+			if section in sections:
+				current_page = 9 if section == "evidence" else 2 + sections.find(section)
+				_reset_scroll()
+			else: _log("未知详情分类，输入 help 查看。")
+		"history":
+			if args.is_empty(): perform_action("history")
+			elif args[0] == "older": perform_action("history_older")
+			elif args[0] == "newer": perform_action("history_newer")
+			else: _log("用法：history [older/newer]")
+			current_page = 8
+		"clear":
+			_feedback_lines.clear()
+			command_log.clear()
+		"exit", "quit", "close": close()
+		_:
+			if command_extensions.has(verb):
+				_log(str(command_extensions[verb].call(args)))
+			elif verb == "drone": _log("无人机模块尚未接入。当前使用固定观测设备。")
+			else: _log("未知命令：" + verb + "。输入 help 查看指令。")
+	if verb in ["scan", "collect", "retest", "mark", "calibrate", "report", "submit"]:
+		_log(obs.message)
+	_last_observation_message = obs.message
+	_refresh_page()
+	if is_active: command_input.grab_focus()
+
+func perform_action(action: String) -> void:
+	var obs: EnvObservation = main.env_observation
+	if action.begins_with("region:"):
+		selected_region = action.trim_prefix("region:")
+		for i in range(obs.issues().size()):
+			if obs.issues()[i].get("region", "") == selected_region:
+				obs.selected_issue = i
+				break
+	else:
+		if action in ["retest", "mark", "calibrate"] and not obs.current_issue().is_empty() and obs.current_issue().get("region", "") != selected_region:
+			obs.message = "当前设施未选中该疑点。输入 issues 查看清单，再用 select <编号> 选择。"
+			return
+		match action:
+			"capture": obs.begin_capture()
+			"retest": obs.retest()
+			"mark": obs.mark_issue()
+			"calibrate": obs.calibrate_issue()
+			"submit": obs.submit()
+			"next_issue":
+				obs.selected_issue = (obs.selected_issue + 1) % maxi(1, obs.issues().size())
+				selected_region = str(obs.current_issue().get("region", selected_region))
+			"nearshore": current_page = 0
+			"sea": current_page = 1
+			"history":
+				current_page = 8
+				history_index = 0
+			"details": current_page = 2
+			"history_older": history_index = mini(history_index + 1, maxi(0, main.env_task_mgr.observation_history.size() - 1))
+			"history_newer": history_index = maxi(0, history_index - 1)
+			"close": close()
+	_refresh_page()
+
+func _refresh_page() -> void:
+	if map_canvas:
+		map_canvas.visible = current_page in [0, 1, 8, 10]
+		_scroll.visible = not map_canvas.visible
+		map_canvas.queue_redraw()
+	if canvas:
+		canvas.queue_redraw()
 
 ## 重置滚动位置到顶部
 func _reset_scroll() -> void:
@@ -141,6 +322,14 @@ func process(delta: float) -> void:
 	if not is_active or canvas == null:
 		return
 	_blink_timer += delta
+	_sweep_angle = fmod(_sweep_angle + delta * 0.35, TAU)
+	_align_overlay()
+	var feedback: String = main.env_observation.message
+	if feedback != _last_observation_message:
+		_log(feedback)
+		_last_observation_message = feedback
+	if map_canvas and map_canvas.visible:
+		map_canvas.queue_redraw()
 	if _blink_timer >= 0.5:
 		_blink_timer -= 0.5
 		_blink_on = not _blink_on
@@ -161,12 +350,11 @@ func _ensure_overlay() -> void:
 	bg_style.bg_color = Color(0, 0, 0, 0.88)
 	overlay_panel.add_theme_stylebox_override("panel", bg_style)
 
-	var root_control: Control = main as Control
-	root_control.add_child(overlay_panel)
-	# 放在 CRTEffect 之前，确保 CRT 着色器仍覆盖在上面
-	var crt_node: Node = root_control.get_node_or_null("CRTEffect")
-	if crt_node:
-		root_control.move_child(overlay_panel, crt_node.get_index())
+	_layer = CanvasLayer.new()
+	var crt_node: CanvasLayer = main.get_node_or_null("CRTEffect") as CanvasLayer
+	_layer.layer = crt_node.layer - 1 if crt_node else 0
+	main.add_child(_layer)
+	_layer.add_child(overlay_panel)
 	overlay_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay_panel.offset_left = 0
 	overlay_panel.offset_top = 0
@@ -188,6 +376,25 @@ func _ensure_overlay() -> void:
 	canvas.viewer = self
 	canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(canvas)
+	map_canvas = EnvMapCanvas.new()
+	map_canvas.viewer = self
+	map_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay_panel.add_child(map_canvas)
+	map_canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	command_panel = Panel.new()
+	command_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	command_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay_panel.add_child(command_panel)
+	command_log = RichTextLabel.new()
+	command_log.bbcode_enabled = false
+	command_log.scroll_active = false
+	command_log.autowrap_mode = TextServer.AUTOWRAP_OFF
+	command_log.add_theme_constant_override("line_separation", 4)
+	command_log.add_theme_font_override("normal_font", main.output_text.get_theme_font("normal_font"))
+	command_log.add_theme_color_override("default_color", Color(T.primary))
+	command_panel.add_child(command_log)
+	# 复用桌面底部输入框，提交由 main 分流，不重复连接信号。
+	command_input = main.input_field
 
 ## 将覆盖层对齐到 OutputArea 的位置和大小（与 DocumentViewer 相同模式）
 func _align_overlay() -> void:
@@ -198,12 +405,46 @@ func _align_overlay() -> void:
 	overlay_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	overlay_panel.position = rect.position
 	overlay_panel.size = rect.size
+	var scale_factor: float = minf(rect.size.x / 1920.0, rect.size.y / 950.0)
+	var origin: Vector2 = (rect.size - Vector2(1920, 950) * scale_factor) * 0.5
+	command_panel.position = origin + Vector2(20, 70) * scale_factor
+	command_panel.size = Vector2(390, 805) * scale_factor
+	command_log.position = Vector2(12, 10) * scale_factor
+	var feedback_size: Vector2 = Vector2(366, 785) * scale_factor
+	var feedback_font_size: int = maxi(12, int(18 * scale_factor))
+	var changed: bool = command_log.size != feedback_size or command_log.get_theme_font_size("normal_font_size") != feedback_font_size
+	command_log.size = feedback_size
+	command_log.add_theme_font_size_override("normal_font_size", feedback_font_size)
+	if changed:
+		_render_feedback()
+	_scroll.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_scroll.position = origin + Vector2(435, 70) * scale_factor
+	_scroll.size = Vector2(1465, 805) * scale_factor
 
 # ══════════════════════════════════════════
 #  内部画布类
 # ══════════════════════════════════════════
 class _EnvCanvas extends Control:
 	var viewer: EnvViewer = null
+
+	func _draw_evidence(font: Font, fs: int, lh: float, margin: float, y: float, w: float, col: Color, warn: Color) -> float:
+		var obs: EnvObservation = viewer.main.env_observation
+		var lines: Array[String] = ["采集快照 / " + str(obs.state().get("hour", "未采集"))]
+		for sid in obs.state().get("readings", {}):
+			var cfg: Dictionary = viewer.env_monitor.get_sensor_config(str(sid))
+			lines.append("%s  %s %s" % [cfg.get("name", sid), EnvObservation.format_value(obs.state()["readings"][sid]), cfg.get("unit", "")])
+		for region in obs.config.get("regions", []):
+			if region.get("id", "") == viewer.selected_region:
+				lines.append("当前来源：" + str(region.get("source", "")))
+		for text in lines:
+			draw_string(font, Vector2(margin, y + fs), text, HORIZONTAL_ALIGNMENT_LEFT, w - 2 * margin, fs, col)
+			y += lh
+		for i in range(obs.issues().size()):
+			var issue: Dictionary = obs.issues()[i]
+			for text in ["%d. %s [%s]" % [i + 1, issue.get("name", ""), issue.get("region", "")], str(issue.get("note", "")), str(issue.get("retest_note", "尚未复测")), "关注：%s / 校准：%s" % [issue.get("marked", false), issue.get("calibrated", false)]]:
+				draw_string(font, Vector2(margin, y + fs), text, HORIZONTAL_ALIGNMENT_LEFT, w - 2 * margin, fs, warn)
+				y += lh
+		return y
 
 	func _draw() -> void:
 		if viewer == null or viewer.env_monitor == null:
@@ -224,7 +465,7 @@ class _EnvCanvas extends Control:
 		var col_err: Color = Color(viewer.T.error) if viewer.T else Color(1.0, 0.2, 0.2)
 		col_err.a = 1.0
 
-		var font: Font = ThemeDB.fallback_font
+		var font: Font = viewer.main.output_text.get_theme_font("normal_font")
 		var font_size: int = 13
 		var font_small: int = 11
 		var line_h: float = 18.0
@@ -233,7 +474,7 @@ class _EnvCanvas extends Control:
 		var y: float = margin
 
 		# ── 标题栏 ──
-		var title: String = "ENVIRONMENTAL MONITORING SYSTEM — OB-7K"
+		var title: String = "ENVIRONMENTAL MONITORING SYSTEM / " + ("采集证据" if viewer.current_page == 9 else "实时详细数据")
 		draw_string(font, Vector2(margin, y + font_size), title, HORIZONTAL_ALIGNMENT_LEFT, w - margin * 2, font_size, col_bright)
 		y += line_h
 
@@ -248,7 +489,7 @@ class _EnvCanvas extends Control:
 
 		# ── 页面标签 ──
 		var tab_x: float = margin
-		for i in range(viewer.page_names.size()):
+		for i in range(2, 8):
 			var label: String = viewer.page_names[i]
 			var tab_col: Color = col_bright if i == viewer.current_page else col_dim
 			if i == viewer.current_page:
@@ -262,7 +503,7 @@ class _EnvCanvas extends Control:
 		y += 8
 
 		# ── 页面内容 ──
-		match viewer.current_page:
+		match viewer.current_page - 2:
 			0:
 				y = _draw_overview(em, font, font_size, font_small, line_h, margin, y, w, visible_h, col_primary, col_dim, col_bright, col_warn, col_err)
 			1:
@@ -273,12 +514,14 @@ class _EnvCanvas extends Control:
 				y = _draw_category(em, "geophysics", font, font_size, font_small, line_h, margin, y, w, col_primary, col_dim, col_warn, col_err)
 			4:
 				y = _draw_category(em, "composition", font, font_size, font_small, line_h, margin, y, w, col_primary, col_dim, col_warn, col_err)
+			7:
+				y = _draw_evidence(font, font_small, line_h, margin, y, w, col_primary, col_warn)
 			5:
 				y = _draw_events(em, font, font_size, font_small, line_h, margin, y, w, col_primary, col_dim, col_warn, col_err)
 
 		# ── 底部操作提示 ──
 		y += 8
-		var help_text: String = "←/→ 切换页面  |  TAB 下一页  |  滚轮滚动  |  Q/ESC 关闭"
+		var help_text: String = "左侧输入 details <分类> 查看数据；map 返回地图；history 查看档案。"
 		draw_string(font, Vector2(margin, y + font_small), help_text, HORIZONTAL_ALIGNMENT_LEFT, w - margin * 2, font_small, col_dim)
 		y += line_h + margin
 

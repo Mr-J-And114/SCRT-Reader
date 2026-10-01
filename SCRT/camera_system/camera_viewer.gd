@@ -167,6 +167,9 @@ func handle_input(event: InputEvent) -> bool:
 			KEY_F:
 				_cycle_light_mode()
 				return true
+			KEY_R:
+				_toggle_region_depth()
+				return true
 			KEY_BRACKETLEFT:   # [ 拉远（扩大视野）
 				_adjust_zoom(0.05)
 				return true
@@ -327,6 +330,17 @@ func _cycle_light_mode() -> void:
 	if main:
 		main.append_output("[color=" + main.T.error_hex + "]所有照明模式都不可用[/color]\n", false)
 
+func _toggle_region_depth() -> void:
+	var cam: SecurityCameraFeed = _get_current_camera()
+	if cam == null or cam.region_config.is_empty():
+		return
+	cam.use_region_depth = not cam.use_region_depth
+	var status: String = "REGION DEPTH" if cam.use_region_depth else "PER-PIXEL DEPTH"
+	if main:
+		main.append_output("[color=" + main.T.info_hex + "]深度模式切换: " + status + "[/color]\n", false)
+	if main.path_label:
+		main.path_label.text = "深度模式: " + status
+
 func _get_current_camera() -> SecurityCameraFeed:
 	var unlocked: Array[SecurityCameraFeed] = camera_mgr.get_unlocked_cameras()
 	if unlocked.is_empty() or current_camera_index >= unlocked.size():
@@ -434,6 +448,15 @@ func _update_shader_params() -> void:
 		mat.set_shader_parameter("anomaly_depth", cam._anomaly_depth_tex)
 	if cam._anomaly_light_tex:
 		mat.set_shader_parameter("anomaly_light", cam._anomaly_light_tex)
+
+	# ★ Region Depth
+	mat.set_shader_parameter("use_region_depth", cam.use_region_depth)
+	if cam.use_region_depth and cam.region_depth_texture:
+		mat.set_shader_parameter("region_depth_texture", cam.region_depth_texture)
+
+	# 合成底图（含 layers）优先于原始 base_texture
+	if cam.composite_base_texture:
+		mat.set_shader_parameter("base_texture", cam.composite_base_texture)
 
 	# 离线时全雪花
 	if not cam.online:
@@ -617,6 +640,13 @@ func _draw_ui(canvas_node: Control) -> void:
 	var mode_label: String = "LIGHT: " + LIGHT_MODE_LABELS[mode_idx]
 	canvas_node.draw_string(font, Vector2(margin, bottom_y), mode_label, HORIZONTAL_ALIGNMENT_LEFT, -1, small_size, col_dim)
 
+	# ── 深度模式指示（照明模式右侧）──
+	if not cam.region_config.is_empty():
+		var depth_mode: String = "DEPTH: " + ("REGION" if cam.use_region_depth else "PER-PIXEL")
+		var mode_w: float = font.get_string_size(mode_label, HORIZONTAL_ALIGNMENT_LEFT, -1, small_size).x
+		canvas_node.draw_string(font, Vector2(margin + mode_w + 20, bottom_y), depth_mode,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, small_size, Color(0.3, 0.8, 1.0, 0.8))
+
 	# ── 右下角：时间戳 ──
 	if cam.timestamp_visible:
 		var time_dict: Dictionary = Time.get_datetime_dict_from_system()
@@ -649,7 +679,10 @@ func _draw_ui(canvas_node: Control) -> void:
 
 	# ── 操作提示（最底部）──
 	var help_y: float = bottom_y
-	var help_text: String = "←→↑↓ 平移  [/] 缩放  TAB 切换  F 照明  Q 退出"
+	var help_text: String = "←→↑↓ 平移  [/] 缩放  TAB 切换  F 照明"
+	if not cam.region_config.is_empty():
+		help_text += "  R 深度"
+	help_text += "  Q 退出"
 	var help_w: float = font.get_string_size(help_text, HORIZONTAL_ALIGNMENT_LEFT, -1, small_size).x
 	# 背景条
 	canvas_node.draw_rect(Rect2(0, help_y - small_size - 4, w, small_size + 8), col_bg)

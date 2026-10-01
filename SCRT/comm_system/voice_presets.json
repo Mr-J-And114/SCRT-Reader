@@ -1,0 +1,38 @@
+{
+	"ava": {
+		"attack_ms": 9.0,
+		"base_frequency_hz": 392.0,
+		"brightness": 0.25,
+		"char_sound_duration": 53.0,
+		"pitch_variance": 0.005,
+		"punctuation_pause": 250.0,
+		"release_ms": 43.0,
+		"tone": "warm",
+		"voice_every_n": 1.0,
+		"volume_db": -10.0
+	},
+	"kanda": {
+		"attack_ms": 24.0,
+		"base_frequency_hz": 530.0,
+		"brightness": 0.46,
+		"char_sound_duration": 40,
+		"pitch_variance": 0.1,
+		"punctuation_pause": 170.0,
+		"release_ms": 50.0,
+		"tone": "sharp",
+		"voice_every_n": 1.0,
+		"volume_db": -9.0
+	},
+	"nanami": {
+		"attack_ms": 6.0,
+		"base_frequency_hz": 502.0,
+		"brightness": 0.32,
+		"char_sound_duration": 69.0,
+		"pitch_variance": 0.045,
+		"punctuation_pause": 220.0,
+		"release_ms": 40.0,
+		"tone": "clear",
+		"voice_every_n": 1.0,
+		"volume_db": -13.0
+	}
+}

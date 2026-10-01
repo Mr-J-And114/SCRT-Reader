@@ -223,7 +223,7 @@ func close() -> void:
 	main.input_field.visible = _cached_input_visible
 	main.prompt_label.visible = _cached_prompt_visible
 	main._update_status_bar()
-	main.input_field.grab_focus()
+	main._refocus_input.call_deferred()
 
 	if _on_exit_callback.is_valid():
 		_on_exit_callback.call()

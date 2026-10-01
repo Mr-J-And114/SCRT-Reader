@@ -27,6 +27,16 @@ enum SpriteMode { LAYERED, STATIC, MINIMAL }
 var sprite_mode: SpriteMode = SpriteMode.MINIMAL
 
 # ══════════════════════════════════════════
+#  显示调整参数（从 AssetProfile 加载）
+# ══════════════════════════════════════════
+var display_scale: float = 1.0
+var display_offset: Vector2 = Vector2.ZERO
+var meeting_offset: Vector2 = Vector2.ZERO
+var clip_rect: Rect2 = Rect2()
+var anchor_point: Vector2 = Vector2(0.5, 1.0)
+var canvas_size: Vector2 = Vector2(1216, 1803)
+
+# ══════════════════════════════════════════
 #  语音参数
 # ══════════════════════════════════════════
 var voice_config: Dictionary = {
@@ -200,6 +210,14 @@ func init_from_asset_library(asset_library: CharacterAssetLibrary) -> void:
 		_:
 			sprite_mode = SpriteMode.MINIMAL
 
+	# 加载显示调整参数
+	display_scale = profile.display_scale
+	display_offset = profile.display_offset
+	meeting_offset = profile.meeting_offset
+	clip_rect = profile.clip_rect
+	anchor_point = profile.anchor_point
+	canvas_size = profile.canvas_size
+
 	# 同步纹理到向后兼容字段
 	static_portrait = textures.static_portrait
 	layer_textures = textures.layer_textures
@@ -211,6 +229,8 @@ func init_from_asset_library(asset_library: CharacterAssetLibrary) -> void:
 	layer_config = {
 		"order": profile.layer_order.duplicate(),
 		"files": profile.layer_files.duplicate(),
+		"idle_eye_state": profile.idle_eye_state,
+		"idle_mouth_key": profile.idle_mouth_key,
 	}
 
 	# 绑定 animator

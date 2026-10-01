@@ -42,6 +42,10 @@ var _blink_timer: float = 0.0
 # ── 防止重入 ──
 var _mail_busy: bool = false
 
+# ── 邮件阅读后待触发的剧情对话（延迟到邮件界面关闭后，避免与查看器重叠） ──
+var _pending_mail_read: Array = []
+var _suppress_flush: bool = false
+
 # ── 已投递过的邮件ID集合（防止重复触发） ──
 var _delivered_ids: Dictionary = {}
 
@@ -453,6 +457,25 @@ func handle_mail_command(args: Array) -> void:
 
 	var p: String = T.primary_hex if T else "#A0FFA0"
 	var m: String = T.muted_hex if T else "#888888"
+	if not args.is_empty() and str(args[0]).to_lower() == "download":
+		if args.size() < 2 or main.vdisc_task_mgr == null:
+			main.append_output("[color=" + m + "]用法: mail download <邮件编号或ID>[/color]\n", false)
+		else:
+			var mail_id: String = str(args[1])
+			_rebuild_merged()
+			if mail_id.is_valid_int() and int(mail_id) > 0 and int(mail_id) <= _merged_inbox.size():
+				mail_id = str(_merged_inbox[int(mail_id) - 1].get("id", ""))
+			var delivered: bool = false
+			for item in _merged_inbox:
+				if str(item.get("id", "")) == mail_id:
+					delivered = true
+					break
+			var result: Dictionary = {"ok": false, "message": "邮件不存在。"}
+			if delivered:
+				result = await main.vdisc_task_mgr.download_mail_attachment(mail_id)
+			main.append_output("[color=" + (T.success_hex if bool(result.get("ok", false)) else T.error_hex) + "]" + str(result.get("message", "下载失败。")) + "[/color]\n", false)
+		_mail_busy = false
+		return
 
 	# ★ 打开邮箱时播放 beep
 	if main.audio_manager != null:
@@ -501,6 +524,9 @@ func handle_mail_command(args: Array) -> void:
 # 打开收件箱列表（全屏 DocumentViewer）
 # ============================================================
 func _open_inbox_viewer() -> void:
+	# ★ 收件箱已打开时不重复呼出（防止快速连点/重复点击重建覆盖层）
+	if main.doc_viewer != null and main.doc_viewer.is_active:
+		return
 	_rebuild_merged()
 	var content: String = _build_inbox_page()
 	if main.doc_viewer != null:
@@ -509,7 +535,7 @@ func _open_inbox_viewer() -> void:
 		if unread > 0:
 			title_str += " (" + str(unread) + " unread)"
 		var pages: Array[Dictionary] = [{"content": content}]
-		main.doc_viewer.open("mail_inbox", pages, title_str)
+		main.doc_viewer.open("mail_inbox", pages, title_str, Callable(self, "_on_inbox_closed"))
 	else:
 		main.append_output("\n" + content + "\n", false)
 
@@ -635,11 +661,15 @@ func _read_mail(idx: int) -> void:
 	# 变量替换
 	if main.user_mgr != null and main.user_mgr.is_logged_in:
 		body = body.replace("{username}", main.user_mgr.get_username())
+	if main.vdisc_task_mgr and main.vdisc_task_mgr.has_mail_attachment(str(mail.get("id", ""))):
+		body += "\n\n[下载 Vdisc 附件](vdisc://mail/" + str(mail.get("id", "")).uri_encode() + ")\n也可输入 mail download " + str(idx) + " 下载。"
 
 	var template_name: String = str(mail.get("template", str(header.get("template", "email")))).to_lower()
 	var display_title: String = str(mail.get("title", "邮件"))
 
 	# 关闭当前的收件箱列表（如果还开着）
+	# ★ 抑制 flush：随后即将打开邮件查看器，若此时触发来电会与查看器重叠
+	_suppress_flush = true
 	if main.doc_viewer != null and main.doc_viewer.is_active:
 		main.doc_viewer.close()
 
@@ -684,8 +714,45 @@ func _read_mail(idx: int) -> void:
 	_request_auto_save()
 
 	# ★ 通知每日剧情系统邮件已阅读（触发 on_mail_read 类型对话）
+	# 延迟到邮件查看器全部关闭、回到主界面后再触发，避免通话 UI 与查看器重叠
+	_suppress_flush = false
 	if main.daily_dialogue_mgr and main.env_monitor:
-		main.daily_dialogue_mgr.trigger_mail_read(main.env_monitor.current_day, str(mail.get("id", "")))
+		_pending_mail_read.append({"day": main.env_monitor.current_day, "mail_id": str(mail.get("id", ""))})
+		_flush_pending_mail_read()
+
+## 若所有邮件相关查看器都已关闭，触发挂起的邮件阅读对话
+func _flush_pending_mail_read() -> void:
+	if _pending_mail_read.is_empty():
+		return
+	if _any_mail_viewer_active():
+		return
+	var pending: Array = _pending_mail_read.duplicate()
+	_pending_mail_read.clear()
+	for entry in pending:
+		var day: int = int(entry.get("day", 0))
+		var mail_id: String = str(entry.get("mail_id", ""))
+		if main.daily_dialogue_mgr:
+			main.daily_dialogue_mgr.trigger_mail_read(day, mail_id)
+
+## 检查任一邮件相关查看器是否打开
+func _any_mail_viewer_active() -> bool:
+	if main.doc_viewer != null and main.doc_viewer.is_active:
+		return true
+	if main.email_viewer != null and main.email_viewer.is_active:
+		return true
+	if main.chat_viewer != null and main.chat_viewer.is_active:
+		return true
+	if main.article_viewer != null and main.article_viewer.is_active:
+		return true
+	if main.two_page_viewer != null and main.two_page_viewer.is_active:
+		return true
+	return false
+
+## 收件箱关闭（回到主界面）时，触发挂起的邮件阅读对话
+func _on_inbox_closed() -> void:
+	if _suppress_flush:
+		return
+	_flush_pending_mail_read()
 
 func _display_mail_in_terminal(title: String, body: String) -> void:
 	var p: String = T.primary_hex if T else "#A0FFA0"

@@ -1,4 +1,4 @@
-# Skill: Bug Fix (Godot 4.6 / SCRT-Reader)
+# Skill: Bug Fix (Godot 4.7.1 / SCRT-Reader)
 
 You are diagnosing and fixing a bug in the SCRT-Reader terminal.
 Follow this systematic workflow.

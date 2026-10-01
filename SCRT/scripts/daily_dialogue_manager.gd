@@ -24,12 +24,19 @@ var _daily_config: Dictionary = {}  # day_number(str) -> {on_start, on_scan_comp
 var _dialogues: Dictionary = {}     # dialogue_id -> dialogue_data
 var _characters: Dictionary = {}    # character_id -> character_config
 var _triggered_today: Dictionary = {} # 记录今天已触发的事件类型，防止重复
+var _pending_dialogues: Array = []
 
 # ★ 主线剧情进度（独立存档，不绑定磁盘）
 var _story_day: int = 1             # 当前主线天数
 var _completed_dialogues: Array[String] = []  # 已完成的对话 ID 列表
 var _story_choices: Dictionary = {} # 关键剧情选项记录 {choice_id: selected_option}
 var _story_flags: Dictionary = {}   # 剧情标记 {flag_name: value}
+
+# ★ 剧情变量初始值（manifest 的 initial_flags 段，新存档时自动补齐）
+var _initial_flags: Dictionary = {}
+
+# ★ 主线剧情版本（manifest 的 story.version，存档版本门控用）
+var _story_version: String = ""
 
 # ══════════════════════════════════════════
 #  初始化
@@ -54,8 +61,15 @@ func load_main_storyline() -> void:
 		push_warning("[DailyDialogue] 主线剧情 JSON 解析失败")
 		return
 	var data: Dictionary = json.data
+	# ★ 主线剧情版本（存档门控）
+	_story_version = str((data.get("story", {}) as Dictionary).get("version", ""))
 	# 加载每日对话配置
 	_daily_config = data.get("daily_dialogues", {})
+	# ★ 剧情变量初始值（新存档时自动补齐）
+	_initial_flags = data.get("initial_flags", {}) as Dictionary
+	if not _initial_flags.is_empty() and _initial_flags.has("_comment"):
+		_initial_flags = _initial_flags.duplicate()
+		_initial_flags.erase("_comment")
 	# 加载对话定义
 	var dlgs: Dictionary = data.get("comm_dialogues", {})
 	for dlg_id in dlgs.keys():
@@ -140,6 +154,8 @@ func trigger_day_start(day: int) -> void:
 	## 每天登录时调用（与磁盘加载无关）
 	_story_day = day
 	_triggered_today.clear()
+	# ★ 补齐剧情变量初始值（新玩家/新存档）
+	_ensure_default_flags()
 	register_dialogues_to_comm()
 	# ★ 应用当日绩效配置
 	_apply_day_performance_config(day)
@@ -149,8 +165,28 @@ func trigger_day_start(day: int) -> void:
 	_execute_day_actions(day)
 	var dlg_ids: Array = _get_trigger_list(day, "on_start")
 	if dlg_ids.size() > 0 and not _triggered_today.has("on_start"):
-		_triggered_today["on_start"] = true
-		_trigger_dialogues(dlg_ids)
+		var valid_ids: Array = _filter_playable(dlg_ids)
+		if valid_ids.size() > 0:
+			_triggered_today["on_start"] = true
+			_trigger_dialogues(valid_ids)
+
+## ★ 查询某天是否有剧情配置（供 comm_manager 判断 Day0 教程是否由本系统驱动）
+func has_day_config(day: int) -> bool:
+	return _daily_config.has(str(day))
+
+## ★ 获取主线剧情版本（供 main 传播到各进度存档做版本门控）
+func get_story_version() -> String:
+	return _story_version
+
+## ★ 补齐剧情变量初始值（新存档时把 manifest initial_flags 写入 _story_flags）
+func _ensure_default_flags() -> void:
+	var added: bool = false
+	for fk in _initial_flags.keys():
+		if not _story_flags.has(fk):
+			_story_flags[fk] = _initial_flags[fk]
+			added = true
+	if added:
+		save_story_save()
 
 ## ★ 应用当日绩效配置（覆盖 PerformanceManager 的 daily_quota）
 func _apply_day_performance_config(day: int) -> void:
@@ -186,15 +222,19 @@ func trigger_scan_complete(day: int) -> void:
 	## env scan 完成后调用
 	var dlg_ids: Array = _get_trigger_list(day, "on_scan_complete")
 	if dlg_ids.size() > 0 and not _triggered_today.has("on_scan_complete"):
-		_triggered_today["on_scan_complete"] = true
-		_trigger_dialogues(dlg_ids)
+		var valid_ids: Array = _filter_playable(dlg_ids)
+		if valid_ids.size() > 0:
+			_triggered_today["on_scan_complete"] = true
+			_trigger_dialogues(valid_ids)
 
 func trigger_anomaly(day: int) -> void:
 	## 检测到异常时调用
 	var dlg_ids: Array = _get_trigger_list(day, "on_anomaly")
 	if dlg_ids.size() > 0 and not _triggered_today.has("on_anomaly"):
-		_triggered_today["on_anomaly"] = true
-		_trigger_dialogues(dlg_ids)
+		var valid_ids: Array = _filter_playable(dlg_ids)
+		if valid_ids.size() > 0:
+			_triggered_today["on_anomaly"] = true
+			_trigger_dialogues(valid_ids)
 
 func trigger_mail_read(day: int, mail_id: String) -> void:
 	## 阅读特定邮件后调用
@@ -208,8 +248,10 @@ func trigger_mail_read(day: int, mail_id: String) -> void:
 			matched.append(dlg_id)
 	var trigger_key: String = "on_mail_read:" + mail_id
 	if matched.size() > 0 and not _triggered_today.has(trigger_key):
-		_triggered_today[trigger_key] = true
-		_trigger_dialogues(matched)
+		var valid_ids: Array = _filter_playable(matched)
+		if valid_ids.size() > 0:
+			_triggered_today[trigger_key] = true
+			_trigger_dialogues(valid_ids)
 
 func trigger_command(day: int, cmd_name: String) -> void:
 	## 执行特定命令后调用
@@ -222,8 +264,10 @@ func trigger_command(day: int, cmd_name: String) -> void:
 			matched.append(dlg_id)
 	var trigger_key: String = "on_command:" + cmd_name
 	if matched.size() > 0 and not _triggered_today.has(trigger_key):
-		_triggered_today[trigger_key] = true
-		_trigger_dialogues(matched)
+		var valid_ids: Array = _filter_playable(matched)
+		if valid_ids.size() > 0:
+			_triggered_today[trigger_key] = true
+			_trigger_dialogues(valid_ids)
 
 # ══════════════════════════════════════════
 #  剧情选项记录
@@ -274,11 +318,13 @@ func save_story_save() -> void:
 	if not DirAccess.dir_exists_absolute(dir_path):
 		DirAccess.make_dir_recursive_absolute(dir_path)
 	var save_data: Dictionary = {
+		"pending_dialogues": _pending_dialogues.duplicate(true),
 		"story_day": _story_day,
 		"triggered_today": _triggered_today.duplicate(),
 		"completed_dialogues": _completed_dialogues.duplicate(),
 		"story_choices": _story_choices.duplicate(),
 		"story_flags": _story_flags.duplicate(),
+		"story_version": _story_version,
 		"saved_at": Time.get_datetime_string_from_system(),
 	}
 	var file := FileAccess.open(path, FileAccess.WRITE)
@@ -288,6 +334,7 @@ func save_story_save() -> void:
 
 func load_story_save() -> void:
 	## 从独立文件加载主线剧情进度
+	_pending_dialogues.clear()
 	var path: String = _get_save_path()
 	if path.is_empty() or not FileAccess.file_exists(path):
 		return
@@ -300,7 +347,17 @@ func load_story_save() -> void:
 		return
 	file.close()
 	var data: Dictionary = json.data
+	# ★ 剧情版本门控：主线剧情版本变化时重置剧情进度（新剧情从头开始）
+	if not _story_version.is_empty() and str(data.get("story_version", "")) != _story_version:
+		print("[DailyDialogue] 剧情版本不匹配（%s → %s），重置主线剧情进度" % [
+			str(data.get("story_version", "")), _story_version])
+		_triggered_today.clear()
+		_completed_dialogues.clear()
+		_story_choices.clear()
+		_story_flags.clear()
+		return
 	_story_day = int(data.get("story_day", 1))
+	_pending_dialogues = data.get("pending_dialogues", []).duplicate(true)
 	if data.has("triggered_today"):
 		_triggered_today = data["triggered_today"]
 	if data.has("completed_dialogues"):
@@ -318,6 +375,7 @@ func load_story_save() -> void:
 # ══════════════════════════════════════════
 func get_save_data() -> Dictionary:
 	return {
+		"pending_dialogues": _pending_dialogues.duplicate(true),
 		"triggered_today": _triggered_today.duplicate(),
 		"story_day": _story_day,
 		"completed_dialogues": _completed_dialogues.duplicate(),
@@ -326,6 +384,7 @@ func get_save_data() -> Dictionary:
 	}
 
 func load_save_data(data: Dictionary) -> void:
+	_pending_dialogues = data.get("pending_dialogues", []).duplicate(true)
 	if data.has("triggered_today"):
 		_triggered_today = data["triggered_today"]
 	if data.has("story_day"):
@@ -343,7 +402,7 @@ func load_save_data(data: Dictionary) -> void:
 #  内部
 # ══════════════════════════════════════════
 func _deliver_day_mails(day: int) -> void:
-	## 投递当日配置中的邮件（mail_deliveries 字段）
+	## 投递当日配置中的邮件（mail_deliveries 字段；deliver_on="scene" 的由场景内触发）
 	if main.mail_sys == null:
 		return
 	var day_key: String = str(day)
@@ -356,14 +415,39 @@ func _deliver_day_mails(day: int) -> void:
 	for mail_def in mails:
 		if not (mail_def is Dictionary):
 			continue
-		var mail_id: String = str(mail_def.get("id", ""))
-		if mail_id.is_empty():
+		# ★ 场景内投递的邮件跳过（由对话的 deliver_mail 字段触发）
+		if str(mail_def.get("deliver_on", "")) == "scene":
 			continue
-		var title: String = str(mail_def.get("title", mail_id))
-		var from: String = str(mail_def.get("from", "SYSTEM"))
-		var body: String = str(mail_def.get("body", ""))
-		var persistent: bool = bool(mail_def.get("persistent", true))
-		main.mail_sys.deliver_inline_mail(mail_id, title, from, body, persistent)
+		_deliver_mail_def(mail_def)
+
+## ★ 投递场景内邮件（对话的 deliver_mail 字段调用，按 id 从当日配置查找）
+func deliver_scene_mail(mail_id: String) -> void:
+	if main == null or main.mail_sys == null:
+		return
+	var day_key: String = str(_story_day)
+	var config: Dictionary = {}
+	if _daily_config.has(day_key):
+		config = _daily_config[day_key]
+	elif _daily_config.has("default"):
+		config = _daily_config["default"]
+	var mails: Array = config.get("mail_deliveries", [])
+	for mail_def in mails:
+		if not (mail_def is Dictionary):
+			continue
+		if str(mail_def.get("id", "")) != mail_id:
+			continue
+		_deliver_mail_def(mail_def)
+		return
+
+func _deliver_mail_def(mail_def: Dictionary) -> void:
+	var mail_id: String = str(mail_def.get("id", ""))
+	if mail_id.is_empty():
+		return
+	var title: String = str(mail_def.get("title", mail_id))
+	var from: String = str(mail_def.get("from", "SYSTEM"))
+	var body: String = str(mail_def.get("body", ""))
+	var persistent: bool = bool(mail_def.get("persistent", true))
+	main.mail_sys.deliver_inline_mail(mail_id, title, from, body, persistent)
 
 func _get_trigger_list(day: int, event_type: String) -> Array:
 	var day_key: String = str(day)
@@ -380,9 +464,42 @@ func _trigger_dialogues(dlg_ids: Array) -> void:
 	if dlg_ids.size() == 0:
 		return
 	# 过滤掉已完成且不可重复的对话，以及条件不满足的对话
+	var valid_ids: Array = _filter_playable(dlg_ids)
+	if valid_ids.size() == 0:
+		return
+	_pending_dialogues.append({"ids": valid_ids, "day": _story_day, "delay": 1.5})
+	save_story_save()
+
+func process_pending(delta: float) -> void:
+	# 延迟期间重新检查覆盖界面，防止重新打开 mail/env 后被来电穿透。
+	if _pending_dialogues.is_empty() or main == null or main.comm_mgr == null:
+		return
+	if main.is_terminal_covered() or main._command_running or main.comm_mgr.is_active or main.comm_mgr.is_call_ringing():
+		return
+	if main.dial_mgr and main.dial_mgr.is_active():
+		return
+	var pending: Dictionary = _pending_dialogues[0]
+	if int(pending.get("day", -1)) != _story_day:
+		_pending_dialogues.pop_front()
+		return
+	pending["delay"] = float(pending.get("delay", 1.5)) - delta
+	if float(pending["delay"]) > 0:
+		return
+	_pending_dialogues.pop_front()
+	save_story_save()
+	var ids: Array = _filter_playable(pending.get("ids", []))
+	if ids.size() == 1:
+		main.comm_mgr.trigger_dialogue(str(ids[0]))
+	elif ids.size() > 1:
+		main.comm_mgr.trigger_dialogue_sequence(ids)
+
+## ★ 过滤出可播放的对话（未完成或可重复，且条件满足）
+func _filter_playable(dlg_ids: Array) -> Array:
 	var valid_ids: Array = []
 	for dlg_id in dlg_ids:
 		var sid: String = str(dlg_id)
+		if main == null or main.comm_mgr == null:
+			continue
 		if main.comm_mgr.has_dialogue(sid):
 			var dlg_data: Dictionary = main.comm_mgr.get_dialogue_data(sid)
 			var repeatable: bool = dlg_data.get("repeatable", false)
@@ -394,17 +511,11 @@ func _trigger_dialogues(dlg_ids: Array) -> void:
 			if not _check_conditions(dlg_data):
 				continue
 			valid_ids.append(sid)
-	if valid_ids.size() == 0:
-		return
-	if valid_ids.size() == 1:
-		# 延迟触发，确保 UI 已就绪
-		main.get_tree().create_timer(1.5).timeout.connect(func():
-			main.comm_mgr.trigger_dialogue(valid_ids[0])
-		)
-	else:
-		main.get_tree().create_timer(1.5).timeout.connect(func():
-			main.comm_mgr.trigger_dialogue_sequence(valid_ids)
-		)
+	return valid_ids
+
+## ★ 公开条件检查（供 comm_manager 拨号选择对话时调用）
+func check_dialogue_conditions(dlg_data: Dictionary) -> bool:
+	return _check_conditions(dlg_data)
 
 func _check_conditions(dlg_data: Dictionary) -> bool:
 	## 检查对话的前置条件是否满足
@@ -418,10 +529,24 @@ func _check_conditions(dlg_data: Dictionary) -> bool:
 	for flag_name in req_flag.keys():
 		if not has_flag(flag_name):
 			return false
-		# 简单值比较
+		# 简单值比较（JSON 解析的数字为 float，flag 可能存为 int，需数值兼容）
 		var expected = req_flag[flag_name]
 		var actual = get_flag(flag_name)
-		if str(actual) != str(expected):
+		if (expected is float or expected is int) and (actual is float or actual is int):
+			if float(actual) != float(expected):
+				return false
+		elif str(actual) != str(expected):
+			return false
+	# ★ requires_tasks: "all"（当日 env 任务全部完成）/ "incomplete"（未全部完成）
+	var req_tasks: String = str(dlg_data.get("requires_tasks", ""))
+	if not req_tasks.is_empty():
+		if main == null or main.env_task_mgr == null:
+			return false
+		var all_done: bool = main.env_task_mgr.is_all_required_completed() \
+				and main.env_task_mgr.report_submitted
+		if req_tasks == "all" and not all_done:
+			return false
+		if req_tasks == "incomplete" and all_done:
 			return false
 	return true
 

@@ -1,12 +1,12 @@
 {
 	"location": {
-		"name": "Site-██ 前哨观测站",
-		"code": "OB-7K",
+		"name": "SCRTs 海域通信与雷达遥测站",
+		"code": "SCRTs",
 		"latitude": 50.5,
 		"longitude": 143.0,
 		"altitude_m": 15,
 		"timezone_offset": 11,
-		"description": "萨哈林岛东南海岸监测哨所"
+		"description": "Site-514 海岛观测站（Sea-region Communications & Radar Telemetry station）"
 	},
 
 	"time": {
@@ -676,6 +676,129 @@
 		"║  操作员: {operator}                           ║",
 		"╚══════════════════════════════════════════════╝"
 	],
+
+	"scan_sectors": {
+		"atmosphere": {
+			"name": "大气层监测",
+			"sensors": ["air_temp", "humidity", "pressure", "wind_speed", "wind_dir", "cloud_cover", "visibility", "precipitation", "light_level", "uv_index"],
+			"base_duration": 15,
+			"deep_duration": 30
+		},
+		"ocean": {
+			"name": "海洋层监测",
+			"sensors": ["sea_temp", "tide_level", "wave_height", "salinity"],
+			"base_duration": 12,
+			"deep_duration": 25
+		},
+		"geophysics": {
+			"name": "地球物理监测",
+			"sensors": ["mag_field", "mag_declination", "radiation", "seismic", "soil_temp"],
+			"base_duration": 18,
+			"deep_duration": 35
+		},
+		"composition": {
+			"name": "大气成分分析",
+			"sensors": ["o2_concentration", "co2_concentration"],
+			"base_duration": 10,
+			"deep_duration": 20
+		},
+		"synthesis": {
+			"name": "综合参数",
+			"sensors": [],
+			"base_duration": 5,
+			"deep_duration": 10
+		}
+	},
+
+	"scan_modes": {
+		"quick": {
+			"name": "快速扫描",
+			 "description": "覆盖全部分区，精度一般",
+			"precision_modifier": -1,
+			"time_multiplier": 0.6
+		},
+		"standard": {
+			"name": "标准扫描",
+			"description": "覆盖全部分区，标准精度",
+			"precision_modifier": 0,
+			"time_multiplier": 1.0
+		},
+		"focused": {
+			"name": "重点扫描",
+			"description": "指定1-2个分区深度扫描，其他分区精度降低",
+			"precision_modifier_focused": 2,
+			"precision_modifier_other": -1,
+			"time_multiplier": 1.5
+		},
+		"deep": {
+			"name": "全深度扫描",
+			"description": "所有分区深度扫描，精度最高但耗时翻倍",
+			"precision_modifier": 2,
+			"time_multiplier": 2.0
+		}
+	},
+
+	"anomaly_evolution": {
+		"escalate_chance_per_level": 0.10,
+		"suppress_chance_calibrate": 0.7,
+		"resolve_chance_investigate": 0.5,
+		"story_link_types": {
+			"unlock_file": "解锁隐藏文件",
+			"trigger_comm": "触发通讯对话",
+			"send_mail": "发送特殊邮件",
+			"set_flag": "设置故事标记"
+		}
+	},
+
+	"anomaly_story_links": {
+		"magnetic_spike": {
+			"trigger_level": 2,
+			"consecutive_days": 3,
+			"story_unlock": "env_magnetic_research_log",
+			"action_type": "unlock_file",
+			"action_target": "/research/magnetic_anomaly_log.txt"
+		},
+		"radiation_elevation": {
+			"trigger_level": 2,
+			"time_window": [2, 4],
+			"story_unlock": "env_radiation_project_link",
+			"action_type": "trigger_comm",
+			"action_target": "ava_radiation_alert"
+		},
+		"composition_shift": {
+			"trigger_level": 1,
+			"condition": "so2_high",
+			"story_unlock": "env_underground_heat_source",
+			"action_type": "send_mail",
+			"action_target": "env_composition_anomaly_report"
+		},
+		"seismic_event": {
+			"trigger_level": 1,
+			"condition": "shallow_depth",
+			"story_unlock": "env_unnatural_seismic",
+			"action_type": "trigger_comm",
+			"action_target": "ava_seismic_concern"
+		},
+		"tide_anomaly": {
+			"trigger_level": 2,
+			"condition": "moon_phase_mismatch",
+			"story_unlock": "env_anomalous_tide_report",
+			"action_type": "send_mail",
+			"action_target": "env_tide_anomaly_hq"
+		}
+	},
+
+	"sensor_states": {
+		"optimal_threshold_hours": 12,
+		"degradation_threshold_hours": 48,
+		"calibration_precision_bonus": 1,
+		"quick_scan_precision_penalty": -1,
+		"deep_scan_precision_bonus": 2,
+		"calibration_tolerance_simple": 0.02,
+		"calibration_tolerance_complex": 0.05,
+		"calibration_max_adjustment": 0.5,
+		"repair_cooldown_hours": 4
+	},
 
 	"wind_direction_names": {
 		"0": "北", "45": "东北", "90": "东", "135": "东南",

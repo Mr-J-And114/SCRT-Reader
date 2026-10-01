@@ -52,6 +52,9 @@ var warnings_issued: int = 0       # 累计警告次数
 var overtime_gap: int = 0          # 当前未补的绩效缺口
 var consecutive_low_days: int = 0  # 连续缺口天数
 
+## ★ 剧情版本（由 main 从主线 manifest 同步；存档版本不匹配时自动重置）
+var save_story_version: String = ""
+
 # ══════════════════════════════════════════
 #  配置
 # ══════════════════════════════════════════
@@ -345,6 +348,7 @@ func get_save_data() -> Dictionary:
 		"consecutive_low_days": consecutive_low_days,
 		"daily_quota": daily_quota,
 		"version": 1,
+		"story_version": save_story_version,
 	}
 
 func load_save_data(data: Dictionary) -> void:
@@ -399,6 +403,11 @@ func load_progress() -> bool:
 		file.close()
 		return false
 	file.close()
+	# ★ 剧情版本门控：主线剧情版本变化时视为无有效数据
+	if save_story_version != "" and \
+			str((json.data as Dictionary).get("story_version", "")) != save_story_version:
+		print("[PerformanceManager] 剧情版本不匹配，重置绩效数据")
+		return false
 	load_save_data(json.data)
 	print("[PerformanceManager] 绩效数据已加载: 总分 %d, 缺口 %d, 警告 %d" % [career_total, overtime_gap, warnings_issued])
 	return true

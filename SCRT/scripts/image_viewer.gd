@@ -295,7 +295,7 @@ func close() -> void:
 	main.prompt_label.visible = _cached_prompt_visible
 	main._update_status_bar()
 
-	main.input_field.grab_focus()
+	main._refocus_input.call_deferred()
 
 	# 通知 main
 	if main.has_method("_on_image_viewer_closed"):

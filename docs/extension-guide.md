@@ -1,6 +1,6 @@
 # 扩展开发指南 / Extension Guide
 
-> 最后更新：2026-04-01
+> 最后更新：2026-07-15
 <!-- Extracted from SCRT/AI_HANDOFF.md §6, §8, §9 -->
 
 ## 添加新功能的 7 步流程 / Adding a New Feature
@@ -92,4 +92,23 @@
 - Mod 脚本运行在受限沙盒中，无法直接访问宿主节点
 - 文件系统操作限制在虚拟文件系统内
 - 所有 API 调用经过权限检查
+
+## LaTeX 公式扩展
+
+故事包中的 CRTML 文本支持 LaTeX 公式标记，由 `latex_renderer.gd` 渲染为图片：
+
+- **标记语法**：`[math]LaTeX[/math]`（行内，18px）、`[math block]LaTeX[/math]`（块级，22px）
+- **渲染流程**：Tokenizer → Parser(AST) → Layout → SubViewport 绘制 → ImageTexture → 内联图片占位符
+- **支持命令**：`\frac` `\sqrt[n]` `^_` `\sum\int\prod\oint` `\left(\right)` `matrix/pmatrix/bmatrix/cases/aligned` 希腊字母 运算符 箭头 `\hat\vec\overline\dot\tilde` `\mathbf\mathit\mathbb` `\color` `\quad`
+- **缓存**：静态字典，key = `latex|font_size|color_hex`
+- **注意**：`render_to_texture()` 是 async，故事加载时自动预渲染；运行时用 `get_cached_texture()` 同步查询
+- **示例**：`[math]e^{i\pi} + 1 = 0[/math]` 渲染为欧拉公式图片
 - 详见 `SCRT/modder/CLAUDE.md`
+
+
+全屏界面扩展：新增覆盖层必须登记 main.is_terminal_covered()；普通命令结果使用 main.append_output()，不直接写 output_text。关闭通过 main._refocus_input.call_deferred() 恢复焦点。普通输出退出所有全屏界面后回放；音视频自身状态沿用各自查看器输出接口。联调命令 debug 114514 vdisc notice 在 5 秒后发送普通提示，可用于验证覆盖层隔离。
+
+## 2026-10-01 ENV 命令更新
+
+env 默认进入观测台；env scan/collect 短采集不自动提交，env report 手动提交；env history、env details、env retest、env mark、env calibrate。旧 read/anomaly/status/check/weather/events 进入观测台；repair/sensor 保留。debug 114514 env normal/device/mystery/sea/clear 是隔离预览。快捷键及人工验收见 upgrade-plans/environment-manual-test-plan.md。
+

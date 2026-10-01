@@ -1,0 +1,23 @@
+# Godot generated caches (regenerated when the project opens)
+**/.godot/
+
+# Local player progress and editor / assistant configuration
+SCRT/saves/
+.claude/settings.local.json
+
+# Local credentials and environment files
+**/export_credentials.cfg
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Temporary office and operating system files
+~$*
+Thumbs.db
+.DS_Store
+
+# Local exported builds
+export/
+exports/

@@ -444,6 +444,13 @@
   · requires_mail:    要求玩家已阅读某封邮件
   · requires_command: 要求玩家已执行某个命令
 
+  提示：requires_flag 的值写数字时（如 1），引擎会按数值比较，
+  与脚本中整数标记 1 能正常匹配（JSON 解析的 1.0 与 int 1 视为相等）。
+
+  提示：若对话声明了 "call_mode": "answerable"，并且它是某个
+  对话 next 链的下一个，则上一个对话结束后会真实响铃，
+  玩家可用 comm answer / comm reject 接听或拒接（无需触发器）。
+
 
   6.6 来电对话与呼叫模式
   ──────────────────────────────────────────
@@ -604,15 +611,20 @@
   在 manifest.json 的 "daily_dialogues" 段中配置：
 
   "daily_dialogues": {
+      "0": {
+          "on_start": ["d0_01"],
+          "on_scan_complete": ["d0_06"],
+          "on_mail_read": ["d0_02"],
+          "mails": {
+              "M00-01": { "deliver_on": "scene", "subject": "…", "from": "…", "body": "…" },
+              "M00-02": { "deliver_on": "scene", "subject": "…", "from": "…", "body": "…" }
+          },
+          "performance": { "min_quota": 3 }
+      },
       "1": {
           "on_start": ["day1_briefing"],
           "on_scan_complete": ["day1_scan_done"],
           "on_anomaly": []
-      },
-      "2": {
-          "on_start": ["day2_morning"],
-          "on_scan_complete": [],
-          "on_anomaly": ["day2_anomaly_reaction"]
       },
       "default": {
           "on_start": ["daily_routine_greeting"],
@@ -621,9 +633,15 @@
       }
   }
 
-  · 键名 = 天数编号的字符串（"1"、"2"、"3"...）
+  · 键名 = 天数编号的字符串（"0" = 教程日、"1"、"2"、"3"...）
   · "default" = 没有特定配置的天数使用此默认
   · 每个时机的值 = 对话 ID 数组（按顺序触发）
+  · "mails" = 当日场景邮件：deliver_on 为 "scene" 时由对话
+    的 deliver_mail 字段在剧情中投递（不会在登录时自动到达）
+  · 完整参考实现见 data/main/manifest.json 的 Day 0 配置
+
+  ※ 提示：当前唯一剧情（Day 0 教程日）已全部写入
+    data/main/manifest.json，新写剧情请模仿其结构与字段。
 
 
   7.2 五种触发时机
@@ -704,6 +722,10 @@
   · 不设置则使用系统默认配额（3 分）
   · 配额越高，当日要求越严格
 
+  教程日（Day 0）计分特殊：env 日常任务自动计分已屏蔽，
+  当日所有分数由对话行中的 story_action 提供，例如：
+  { "story_action": "score:1:daily" }  → 当日 +1 日常分
+  { "story_action": "score:1:main" }   → 当日 +1 主线分
 
   7.5 绩效系统说明
   ──────────────────────────────────────────
@@ -744,13 +766,49 @@
   · perf_warning:serious:数据异常未上报
                     → 触发严重级别绩效警告
 
-  绩效报告：
+绩效报告：
   · 每 4 天自动生成一份绩效报告邮件
   · 包含每日得分明细、配额达标情况、总分统计
   · 游戏总长度 28 天（4 周），共 7 份报告
 
 
-================================================================
+  7.6 剧情变量与版本控制
+  ──────────────────────────────────────────
+
+  剧情标记（story_flags）用于记录玩家选择与剧情走向：
+
+  · manifest 的 "story" 节可设置 initial_flags（初始标记值）
+  · 对话级字段 flags_add 在对话开始时累加标记值，例如：
+    { "flags_add": { "anger_ava": 1 } }
+  · 对话条件（requires_flag 等）按标记值判断是否触发
+  · 对话级 requires_tasks 字段：
+    "all"        → 当日 env 任务全部完成才可触发（拨号）
+    "incomplete" → 当日任务未全部完成才可触发
+
+  剧情版本（story.version）：
+  · 玩家存档记录来源剧情的版本号
+  · 版本不匹配时自动重置剧情进度，防止新旧剧情错乱
+  · 每次剧情内容大改后，记得递增版本号
+
+
+  7.7 对话级扩展字段（2026-08-19 新增）
+  ──────────────────────────────────────────
+
+  对话对象（comm_dialogues）支持以下新字段：
+
+  · skippable: false   → 禁止 ESC 跳过（主线对话）
+  · next: [id1, id2]   → 自然结束后按顺序自动续播
+  · deliver_mail: "M00-01" → 结束时投递当日 mails 中
+      标记 deliver_on: "scene" 的邮件
+  · flags_add: {...}   → 开始时累加剧情标记
+  · requires_tasks: "all"/"incomplete" → 拨号触发条件
+  · 行级 story_action: "score:1:daily" → 播放到该行时
+      执行触发器动作（加分/效果等）
+
+  完整示例见 data/main/manifest.json 的 Day 0 剧情。
+
+
+============================================================
 八、邮件系统
 ================================================================
 
@@ -1687,6 +1745,18 @@
 
 
 ================================================================
+  Vdisc 任务（7 天试玩版系统接口）
+  ──────────────────────────────────────────
+  在主线 manifest 顶层添加 vdisc_tasks；完整字段示例见 docs/data-formats.md。
+  任务用 story_id 绑定 .scp 内的 story.id，用 download.filename 指定源包文件。
+  角色可在邮件中告知 modem 号码；邮件附件通过 download.mail_attachment
+  绑定邮件 ID，玩家阅读后输入 mail download <邮件ID> 下载。
+  download.url 为空时，从游戏 vdisc/ 中复制同名包；不为空时读取 HTTP 地址。
+  玩家领取后可用 cp/mv/rm/mkfile 整理个人副本，再以 submit <号码> 上交。
+  上交条件是已读比例、必需文件、文件数量和字节体积；可只填写需要的条件。
+  修改过工作副本且判定通过会留下 <任务ID>_fake_pass 标记。
+  联调样例：主线 manifest 中的 demo_site19，不参与 Day0 正式剧情。
+
   文档结束
   如有疑问，请查阅 DESIGN_DOC.txt 获取更详细的设计文档。
 ================================================================

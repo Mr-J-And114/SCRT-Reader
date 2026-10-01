@@ -264,6 +264,10 @@ func _render() -> void:
 	# 渲染根目录
 	content_rtl.append_text("[color=" + p + "]/[/color]\n")
 	_render_children("/", "", stats)
+	if main.vdisc_task_mgr and not main.story_id.is_empty() and not main.vdisc_task_mgr.get_task_for_story(main.story_id).is_empty():
+		var task_progress: Dictionary = main.vdisc_task_mgr.get_progress_detail(main.story_id)
+		stats["total_files"] = int(task_progress["total"])
+		stats["read_files"] = int(task_progress["read"])
 
 	# 统计信息
 	content_rtl.append_text("\n[color=" + p + "]" + "-".repeat(36) + "[/color]\n")

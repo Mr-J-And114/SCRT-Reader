@@ -654,7 +654,15 @@ func _enter_modem_complete() -> void:
 
 	# 保存文件
 	var saved_path: String = ""
-	if not _download_body.is_empty():
+	var task_result: Dictionary = {"handled": false}
+	if main.vdisc_task_mgr:
+		task_result = main.vdisc_task_mgr.on_modem_complete(_download_filename, _download_body)
+	if bool(task_result.get("handled", false)):
+		if bool(task_result.get("ok", false)):
+			_output("\n[color=" + T.success_hex + "]" + str(task_result.get("message", "磁盘已保存。")) + "[/color]\n")
+		else:
+			_output("\n[color=" + T.error_hex + "]" + str(task_result.get("message", "下载失败。")) + "[/color]\n")
+	elif not _download_body.is_empty():
 		saved_path = _save_downloaded_file(_download_body, _download_filename)
 		_output("\n[color=" + T.success_hex + "]── TRANSFER COMPLETE ──[/color]\n")
 		_output("[color=" + T.success_hex + "]FILE SAVED: " + saved_path + "[/color]\n")
@@ -663,7 +671,7 @@ func _enter_modem_complete() -> void:
 
 	_output("[color=" + T.muted_hex + "]── DISCONNECTED ──[/color]\n\n")
 
-	if not _download_filename.is_empty():
+	if not _download_filename.is_empty() and (not bool(task_result.get("handled", false)) or bool(task_result.get("ok", false))):
 		var story_name: String = _download_filename.get_basename()
 		_output("[color=" + T.muted_hex + "]输入 'load <NUM>' 加载 " + story_name + " 虚拟磁盘。[/color]\n\n")
 

@@ -49,6 +49,21 @@ var special_tasks: Dictionary = {}  # task_id -> {name, description, ...}
 
 ## 当日任务执行顺序记录
 var task_order_log: Array[String] = []
+## 观测台快照与日报随玩家任务进度保存；每日重置保留历史。
+var observation_data: Dictionary = {}
+var observation_history: Array = []
+
+## ★ 扫描仪式状态机
+enum ScanPhase { BOOT_UP, SECTOR_SCAN, ANOMALY_RESPONSE, DAILY_REPORT, COMPLETE }
+var scan_phase: int = ScanPhase.BOOT_UP
+var scan_mode: int = 1  # EnvMonitor.ScanMode.STANDARD，默认标准扫描
+var scan_focused_sectors: Array = []  # 重点扫描的分区
+var scan_anomalies_pending: Array[Dictionary] = []  # 待响应的异常列表
+var scan_daily_focus_items: Array = []  # 日报关注项
+var scan_results: Dictionary = {}  # 扫描仪式结果汇总
+
+## ★ 剧情版本（由 main 从主线 manifest 同步；存档版本不匹配时自动重置进度）
+var save_story_version: String = ""
 
 # ══════════════════════════════════════════
 #  初始化
@@ -65,15 +80,24 @@ func setup(p_main, p_env_monitor: EnvMonitor, p_theme) -> void:
 # ══════════════════════════════════════════
 func get_save_data() -> Dictionary:
 	return {
+		"observation_data": observation_data.duplicate(true),
+		"observation_history": observation_history.duplicate(true),
 		"task_status": task_status.duplicate(),
 		"task_results": task_results.duplicate(true),
 		"day_complete": day_complete,
 		"report_submitted": report_submitted,
 		"special_tasks": special_tasks.duplicate(true),
 		"task_order_log": task_order_log.duplicate(),
+		"scan_phase": scan_phase,
+		"scan_mode": scan_mode,
+		"scan_focused_sectors": scan_focused_sectors.duplicate(),
+		"scan_daily_focus_items": scan_daily_focus_items.duplicate(),
+		"story_version": save_story_version,
 	}
 
 func load_save_data(data: Dictionary) -> void:
+	observation_data = data.get("observation_data", {}).duplicate(true)
+	observation_history = data.get("observation_history", []).duplicate(true)
 	if data.has("task_status"):
 		task_status = data["task_status"]
 	if data.has("task_results"):
@@ -86,17 +110,36 @@ func load_save_data(data: Dictionary) -> void:
 		task_order_log.clear()
 		for t in data["task_order_log"]:
 			task_order_log.append(str(t))
+	# ★ 扫描仪式状态
+	if data.has("scan_phase"):
+		scan_phase = int(data["scan_phase"])
+	if data.has("scan_mode"):
+		scan_mode = int(data["scan_mode"])
+	if data.has("scan_focused_sectors"):
+		scan_focused_sectors = data["scan_focused_sectors"]
+	if data.has("scan_daily_focus_items"):
+		scan_daily_focus_items = data["scan_daily_focus_items"]
 
 # ══════════════════════════════════════════
 #  每日重置
 # ══════════════════════════════════════════
-func reset_for_new_day() -> void:
+func reset_for_new_day(preserve_history: bool = true) -> void:
+	if not preserve_history:
+		observation_history.clear()
+	observation_data.clear()
 	task_status.clear()
 	task_results.clear()
 	task_order_log.clear()
 	special_tasks.clear()
 	day_complete = false
 	report_submitted = false
+	# ★ 重置扫描仪式状态
+	scan_phase = 0  # BOOT_UP
+	scan_mode = 1  # STANDARD
+	scan_focused_sectors.clear()
+	scan_anomalies_pending.clear()
+	scan_daily_focus_items.clear()
+	scan_results.clear()
 	# 刷新任务定义（env_monitor 可能被故事包覆盖了）
 	task_definitions = env_monitor.task_defs.duplicate(true)
 	# 初始化所有任务为 pending
@@ -108,6 +151,8 @@ func reset_for_new_day() -> void:
 # ══════════════════════════════════════════
 
 func begin_task(task_id: String) -> Dictionary:
+	if is_task_completed(task_id):
+		return {"success": true, "message": "已完成，不重复计分", "data": task_results.get(task_id, {})}
 	## 开始执行一项任务，返回任务相关的数据
 	## 返回 {"success": bool, "message": String, "data": Dictionary}
 	var tdef: Dictionary = _get_task_def(task_id)
@@ -145,12 +190,15 @@ func begin_task(task_id: String) -> Dictionary:
 
 func complete_task(task_id: String, data: Dictionary = {}) -> void:
 	## 标记任务完成
+	if is_task_completed(task_id):
+		return
 	task_status[task_id] = "completed"
 	task_results[task_id] = data
 	task_order_log.append(task_id)
 	task_completed.emit(task_id)
-	# ★ 绩效加分
-	if main.get("perf_mgr"):
+	# ★ 绩效加分（Day0 教程日由剧情口径统一计分，不自动加分）
+	# 保留既有单次 +1 口径，但基础采集不逐项发分；特殊任务仍单独计分。
+	if main.get("perf_mgr") and env_monitor.current_day > 0 and (task_id == "daily_report" or special_tasks.has(task_id)):
 		main.perf_mgr.add_score(1, "daily")
 	_check_all_completed()
 
@@ -180,9 +228,9 @@ func _execute_inspection(task_id: String, tdef: Dictionary) -> Dictionary:
 		var name: String = str(cfg.get("name", sid))
 		var status_text: String
 		match status:
-			"online":
+			"online", "optimal", "nominal":
 				status_text = "[在线]"
-			"degraded":
+			"degraded", "malfunction":
 				status_text = "[退化]"
 				issues_found += 1
 			"offline":
@@ -216,7 +264,7 @@ func _execute_recording(task_id: String, tdef: Dictionary) -> Dictionary:
 		var cfg: Dictionary = env_monitor.get_sensor_config(sid)
 		var trend: String = env_monitor.get_sensor_trend(sid)
 		readings[sid] = {
-			"value": val,
+			"value": val if is_finite(val) else null,
 			"unit": str(cfg.get("unit", "")),
 			"name": str(cfg.get("name", sid)),
 			"status": env_monitor.sensor_status.get(sid, "unknown"),
@@ -285,14 +333,14 @@ func _execute_anomaly_check(_task_id: String, _tdef: Dictionary) -> Dictionary:
 
 func _execute_report(task_id: String, _tdef: Dictionary) -> Dictionary:
 	## 日报提交 —— 编译所有数据生成报告
-	var readings: Dictionary = env_monitor.get_all_readings()
+	var readings: Dictionary = observation_data.get("readings", env_monitor.get_all_readings()).duplicate(true)
 	var anomalies: Array[Dictionary] = env_monitor.get_detected_anomalies()
 	var events: Dictionary = env_monitor.get_active_events()
 
 	var report_data: Dictionary = {
 		"day": env_monitor.current_day,
-		"hour": env_monitor.get_current_hour_display(),
-		"weather": env_monitor.get_weather_name(),
+		"hour": observation_data.get("hour", env_monitor.get_current_hour_display()),
+		"weather": observation_data.get("weather", env_monitor.get_weather_name()),
 		"readings": readings,
 		"anomaly_count": anomalies.size(),
 		"anomalies": anomalies,
@@ -409,13 +457,98 @@ func _get_task_def(task_id: String) -> Dictionary:
 	return {}
 
 func _check_all_completed() -> void:
-	if is_all_required_completed():
+	if is_all_required_completed() and not day_complete:
+		day_complete = true
 		all_tasks_completed.emit()
-		# ★ 全部任务完成的全勤奖励
-		if main.get("perf_mgr"):
-			main.perf_mgr.add_score(1, "bonus")
 		if can_advance_day():
 			day_can_advance.emit()
+
+# ══════════════════════════════════════════
+#  ★ 扫描仪式方法
+# ══════════════════════════════════════════
+
+func start_scan_ritual(mode: int = 1, focused_sectors: Array = []) -> Dictionary:
+	## 初始化扫描仪式，设置扫描模式
+	## mode: ScanMode 枚举值（0=QUICK, 1=STANDARD, 2=FOCUSED, 3=DEEP）
+	## focused_sectors: 重点扫描的分区 ID 列表（用于 FOCUSED 模式）
+	scan_mode = mode
+	scan_focused_sectors = focused_sectors
+	scan_phase = ScanPhase.BOOT_UP
+	scan_anomalies_pending.clear()
+	scan_daily_focus_items.clear()
+	scan_results.clear()
+	# 将模式传递给 env_monitor
+	env_monitor.set_scan_mode(mode, focused_sectors)
+	env_monitor.begin_new_scan_cycle()
+	return {"phase": ScanPhase.keys()[scan_phase], "mode": EnvMonitor.ScanMode.keys()[mode] if mode < EnvMonitor.ScanMode.size() else "STANDARD"}
+
+func advance_scan_phase() -> Dictionary:
+	## 推进到下个扫描阶段，返回阶段信息
+	if scan_phase >= ScanPhase.COMPLETE:
+		return {"phase": "complete", "done": true}
+	scan_phase += 1
+	var phase_name: String = ScanPhase.keys()[scan_phase]
+	return {"phase": phase_name, "done": scan_phase >= ScanPhase.COMPLETE}
+
+func get_scan_phases() -> Array[Dictionary]:
+	## 返回扫描仪式的所有阶段及完成状态
+	var phases: Array[Dictionary] = []
+	for i in range(ScanPhase.size()):
+		phases.append({
+			"id": i,
+			"name": ScanPhase.keys()[i],
+			"completed": i < scan_phase,
+			"current": i == scan_phase,
+		})
+	return phases
+
+func respond_to_anomaly_phase(anomaly_id: String, response: String) -> Dictionary:
+	## 在异常响应阶段记录玩家选择
+	if scan_phase != ScanPhase.ANOMALY_RESPONSE:
+		return {"success": false, "message": "当前不在异常响应阶段"}
+	var result: Dictionary = env_monitor.respond_to_anomaly(anomaly_id, response)
+	# 从待响应列表中移除已处理的异常
+	for i in range(scan_anomalies_pending.size() - 1, -1, -1):
+		if scan_anomalies_pending[i].get("anomaly_id", "") == anomaly_id:
+			scan_anomalies_pending.remove_at(i)
+	return result
+
+func submit_report(focus_items: Array = []) -> Dictionary:
+	## 提交日报，带关注项
+	scan_daily_focus_items = focus_items
+	scan_phase = ScanPhase.COMPLETE
+	# 检查叙事触发
+	var story_triggers: Array[Dictionary] = env_monitor.check_anomaly_story_triggers()
+	# 触发每日对话
+	if main.daily_dialogue_mgr:
+		main.daily_dialogue_mgr.trigger_scan_complete(env_monitor.current_day)
+		var anomaly_count: int = env_monitor.get_detected_anomalies().size()
+		if anomaly_count > 0:
+			main.daily_dialogue_mgr.trigger_anomaly(env_monitor.current_day)
+	return {"submitted": true, "focus_items": focus_items, "story_triggers": story_triggers}
+
+func set_scan_anomalies_pending(anomalies: Array[Dictionary]) -> void:
+	## 由 command_handler 在扫描中发现异常后设置待响应列表
+	scan_anomalies_pending = anomalies
+	if anomalies.size() > 0:
+		scan_phase = ScanPhase.ANOMALY_RESPONSE
+
+func get_sector_info() -> Array[Dictionary]:
+	## 返回扫描分区信息列表（供终端 UI 使用）
+	var result: Array[Dictionary] = []
+	var sectors: Dictionary = env_monitor.scan_sectors_cfg
+	for sector_id in sectors.keys():
+		if sector_id.begins_with("_"):
+			continue
+		var sector: Dictionary = sectors[sector_id]
+		result.append({
+			"id": sector_id,
+			"name": str(sector.get("name", sector_id)),
+			"sensors": sector.get("sensors", []),
+			"base_duration": int(sector.get("base_duration", 15)),
+			"deep_duration": int(sector.get("deep_duration", 30)),
+		})
+	return result
 
 # ══════════════════════════════════════════
 #  格式化输出辅助
@@ -699,5 +832,10 @@ func load_task_progress() -> bool:
 		file.close()
 		return false
 	file.close()
+	# ★ 剧情版本门控：主线剧情版本变化时视为无有效进度
+	if save_story_version != "" and \
+			str((json.data as Dictionary).get("story_version", "")) != save_story_version:
+		print("[EnvTaskManager] 剧情版本不匹配，重置任务进度")
+		return false
 	load_save_data(json.data)
 	return true

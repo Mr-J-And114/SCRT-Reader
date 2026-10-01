@@ -70,6 +70,7 @@ var _current_character: CommCharacter = null
 # ── Meeting Mode ──
 var _display_mode: String = "card"                 # "card" | "meeting" | "presentation"
 var _meeting_chars: Dictionary = {}                # { char_id: { "container", "layer_rects", "slot" } }
+var _meeting_clip: Control = null                   # 会议立绘只显示在对话栏上方
 var _meeting_slot_front: Dictionary = {}           # { slot_name: char_id } 每个位置最近发言的角色
 var _meeting_tween: Tween = null
 var _presentation: PresentationOverlay = null
@@ -183,7 +184,7 @@ func _build_ui() -> void:
 
 	# 继续提示
 	_continue_label = Label.new()
-	_continue_label.text = ">> CONTINUE"
+	_continue_label.text = "> 继续对话"
 	_continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_continue_label.add_theme_font_size_override("font_size", 10)
 	if _T:
@@ -540,28 +541,57 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 	card.custom_minimum_size = CARD_SIZE
 	card.size = CARD_SIZE
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 
 	var card_style := StyleBoxFlat.new()
 	card_style.bg_color = Color(0.02, 0.02, 0.02, 0.95)
 	var name_col: Color = character.name_color if character.name_color != Color.WHITE else (_T.primary if _T else Color.GREEN)
 	card_style.border_color = name_col.darkened(0.3)
 	card_style.set_border_width_all(1)
+	# StyleBoxFlat 的边框默认占用卡片内部空间；扩展 StyleBox 绘制范围，让描边落在卡片外侧。
+	card_style.set_expand_margin_all(1.0)
 	card_style.corner_radius_top_left = 4
 	card_style.corner_radius_top_right = 4
 	card_style.corner_radius_bottom_left = 0
 	card_style.corner_radius_bottom_right = 0
 	card.add_theme_stylebox_override("panel", card_style)
 
-	# 根据角色素材模式创建图层栈（直接挂在 PanelContainer 下，由其自动填充）
+	# 根据角色素材模式创建图层栈
 	var layer_rects: Dictionary = {}
 	if character.sprite_mode == CommCharacter.SpriteMode.LAYERED:
+		# 插入容器以隔离 PanelContainer 的边框影响
+		var container := Control.new()
+		container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(container)
+
+		# 计算渲染尺寸（底部居中对齐）
+		var canvas := character.canvas_size
+		var cover_scale := maxf(CARD_SIZE.x / canvas.x, CARD_SIZE.y / canvas.y)
+		var render_scale := cover_scale * character.display_scale
+		var rendered_w := canvas.x * render_scale
+		var rendered_h := canvas.y * render_scale
+		var anchor := character.anchor_point
+		var holder_x := CARD_SIZE.x * anchor.x - rendered_w * anchor.x + character.display_offset.x
+		var holder_y := CARD_SIZE.y * anchor.y - rendered_h * anchor.y + character.display_offset.y
+
+		var holder := Control.new()
+		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		holder.position = Vector2(holder_x, holder_y)
+		holder.size = Vector2(rendered_w, rendered_h)
+		container.add_child(holder)
+
 		var layer_order: Array = character.layer_config.get("order", [])
 		for layer_name in layer_order:
 			var rect := TextureRect.new()
+			rect.position = Vector2.ZERO
+			rect.size = Vector2(rendered_w, rendered_h)
 			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			rect.stretch_mode = TextureRect.STRETCH_SCALE
 			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			card.add_child(rect)
+			holder.add_child(rect)
+			layer_rects[layer_name] = rect
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			holder.add_child(rect)
 			layer_rects[layer_name] = rect
 	else:
 		# STATIC/MINIMAL 模式：单张纹理
@@ -656,7 +686,7 @@ func _update_layered_portrait(layer_rects: Dictionary, character: CommCharacter)
 			rect.visible = true
 
 	# 更新眼睛（支持图层覆盖，如 wink）
-	var eye_state: String = "open"
+	var eye_state: String = str(character.layer_config.get("idle_eye_state", "open")) if not speaking and character.animator.current_action.is_empty() else "open"
 	match bp:
 		0: eye_state = "open"
 		1, 3: eye_state = "half"
@@ -690,7 +720,7 @@ func _update_layered_portrait(layer_rects: Dictionary, character: CommCharacter)
 		if speaking and mtex.has(cur_mouth):
 			mouth_rect.texture = mtex[cur_mouth]
 		else:
-			mouth_rect.texture = mtex.get("MBP")  # 默认闭嘴
+			mouth_rect.texture = mtex.get(str(character.layer_config.get("idle_mouth_key", "MBP")), mtex.get("MBP"))
 
 ## 将指定角色的卡片提到其位置组的最前面（z_index最高）
 func _bring_card_to_front(active_cid: String) -> void:
@@ -866,6 +896,16 @@ func _update_positions() -> void:
 	if not _collapsed and (_slide_tween == null or not _slide_tween.is_running()):
 		_dialog_bar.position = Vector2(0, bar_y)
 	_dialog_bar.size = Vector2(bar_width, _current_bar_height)   # ★ 用动态高度
+	_update_meeting_clip_rect()
+
+func _update_meeting_clip_rect() -> void:
+	if _meeting_clip == null or _root == null:
+		return
+	var bottom: float = _root.size.y
+	if _dialog_bar and _dialog_bar.visible:
+		bottom = _dialog_bar.position.y
+	_meeting_clip.position = Vector2.ZERO
+	_meeting_clip.size = Vector2(_root.size.x, clampf(bottom, 0.0, _root.size.y))
 
 
 # ══════════════════════════════════════════
@@ -878,6 +918,9 @@ func process(delta: float) -> void:
 	# 动画中：每帧同步立绘跟随对话栏
 	if _slide_tween and _slide_tween.is_running():
 		_update_card_layout()
+		_update_meeting_clip_rect()
+		if _display_mode == "meeting" or _display_mode == "presentation":
+			_update_meeting_layout()
 		return
 
 	if not is_visible:
@@ -951,6 +994,15 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 	if character == null or _root == null:
 		return
 	_build_ui()
+	if _meeting_clip == null:
+		_meeting_clip = Control.new()
+		_meeting_clip.name = "MeetingPortraitClip"
+		_meeting_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_meeting_clip.clip_contents = true
+		# 立绘裁剪层放在对话栏下方，避免子节点顺序让角色盖住对话文字。
+		_meeting_clip.z_index = _dialog_bar.z_index - 1 if _dialog_bar else -1
+		_root.add_child(_meeting_clip)
+	_update_meeting_clip_rect()
 	register_character_ref(character)
 	var cid: String = character.id
 
@@ -984,7 +1036,7 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 	var container := Control.new()
 	container.name = "MeetingChar_" + cid
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(container)
+	_meeting_clip.add_child(container)
 
 	# 创建分层 TextureRect（每个 rect 根据纹理实际比例单独设置大小和位置）
 	var layer_rects: Dictionary = {}
@@ -1016,6 +1068,10 @@ func ensure_meeting_char(character: CommCharacter, slot: String) -> void:
 		"slot": slot,
 		"character_id": cid,
 		"base_pos": Vector2.ZERO,  # 用于动画恢复
+		"display_scale": character.display_scale,  # ★ 存储角色缩放
+		"display_offset": character.display_offset,
+		"meeting_offset": character.meeting_offset,
+		"canvas_aspect": character.canvas_size.x / character.canvas_size.y if character.canvas_size.y > 0.0 else _MEETING_BASE_ASPECT,
 	}
 	_meeting_chars[cid] = mdata
 	_layout_meeting_char(mdata)
@@ -1043,9 +1099,11 @@ func _layout_meeting_char(mdata: Dictionary) -> void:
 	var screen_w: float = _root.size.x if _root.size.x > 0 else 800.0
 	var screen_h: float = _root.size.y if _root.size.y > 0 else 600.0
 
-	# ★ 计算角色尺寸
-	var char_h: float = screen_h * MEETING_CHAR_HEIGHT_RATIO
-	var char_w: float = char_h * _MEETING_BASE_ASPECT
+	# ★ 计算角色尺寸（应用角色专属缩放）
+	var char_scale: float = float(mdata.get("display_scale", 1.0))
+
+	var char_h: float = screen_h * MEETING_CHAR_HEIGHT_RATIO * char_scale
+	var char_w: float = char_h * float(mdata.get("canvas_aspect", _MEETING_BASE_ASPECT))
 
 	# ★ 计算 X 位置（居中到 slot 位置）
 	var slot: String = str(mdata.get("slot", "center"))
@@ -1057,13 +1115,19 @@ func _layout_meeting_char(mdata: Dictionary) -> void:
 
 	# ★ 计算同 slot 重叠偏移
 	var overlap_offset: float = _compute_meeting_overlap_offset(str(mdata.get("character_id", "")), slot)
-	center_x += overlap_offset
+	var display_offset: Vector2 = mdata.get("display_offset", Vector2.ZERO)
+	var meeting_offset: Vector2 = mdata.get("meeting_offset", Vector2.ZERO)
+	center_x += overlap_offset + display_offset.x + meeting_offset.x
+	if char_w <= screen_w:
+		center_x = clampf(center_x, char_w * 0.5, screen_w - char_w * 0.5)
+	else:
+		center_x = screen_w * 0.5
 
 	var x: float = center_x - char_w / 2.0
 
 	# ★ Y 位置：底部对齐对话栏顶部
-	var bar_top: float = _target_y_expanded if not _collapsed else screen_h
-	var y: float = bar_top - char_h - MEETING_CHAR_BOTTOM_GAP
+	var bar_top: float = _meeting_clip.size.y if _meeting_clip else screen_h
+	var y: float = bar_top - char_h - MEETING_CHAR_BOTTOM_GAP + display_offset.y + meeting_offset.y
 
 	container.position = Vector2(x, y)
 	container.custom_minimum_size = Vector2(char_w, char_h)

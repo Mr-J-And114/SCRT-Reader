@@ -241,6 +241,7 @@ func delete_user(username: String) -> Dictionary:
 
 	var user_dir: String = _get_user_dir(username)
 	_remove_dir_recursive(user_dir)
+	return { "success": true, "message": "用户已删除。" }
 
 ## 递归删除目录及其所有子目录和文件
 func _remove_dir_recursive(path: String) -> void:
@@ -257,8 +258,6 @@ func _remove_dir_recursive(path: String) -> void:
 		entry = dir.get_next()
 	dir.list_dir_end()
 	DirAccess.remove_absolute(path)
-
-	return { "success": true, "message": "用户 \"" + username + "\" 及其所有数据已永久删除。" }
 
 # ============================================================
 # 设置生日

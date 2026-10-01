@@ -38,6 +38,13 @@ var event_defs: Dictionary = {}        # event_id -> config
 var task_defs: Dictionary = {}         # task_id -> config
 
 # ══════════════════════════════════════════
+#  枚举
+# ══════════════════════════════════════════
+enum SensorState { OPTIMAL, NOMINAL, DEGRADED, MALFUNCTION, OFFLINE }
+enum AnomalyLevel { LEVEL_0, LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_4 }
+enum ScanMode { QUICK, STANDARD, FOCUSED, DEEP }
+
+# ══════════════════════════════════════════
 #  模拟状态
 # ══════════════════════════════════════════
 var master_seed: int = 0               # 全局主种子（每个存档唯一）
@@ -46,10 +53,13 @@ var current_hour: float = 6.0          # 当前小时 (0.0~24.0)，由系统时�
 var _update_accumulator: float = 0.0   # 传感器刷新间隔累积器
 var _weather_timer: float = 0.0        # 天气切换计时器（真实秒数）
 
+## ★ 剧情版本（由 main 从主线 manifest 同步；存档版本不匹配时自动重置进度）
+var save_story_version: String = ""
+
 ## 当前传感器读数
 var current_readings: Dictionary = {}  # sensor_id -> float
-## 传感器状态 (online/offline/degraded)
-var sensor_status: Dictionary = {}     # sensor_id -> "online"/"offline"/"degraded"
+## 传感器状态 (SensorState 枚举值)
+var sensor_status: Dictionary = {}     # sensor_id -> "online"/"offline"/"degraded"/"optimal"/"malfunction"
 ## 传感器校准偏移（漂移模拟）
 var calibration_offsets: Dictionary = {} # sensor_id -> float
 ## 最近 24 小时的读数历史（用于趋势分析）
@@ -63,10 +73,32 @@ var daily_weather_base: String = ""    # 当日基础天气（由种子决定）
 
 ## 活跃事件
 var active_events: Dictionary = {}     # event_id -> {start_day, end_day, effects}
-## 已检测的异常
+## 已检测的异常（包含等级信息）
 var detected_anomalies: Array[Dictionary] = []
 ## 当天已发现但未记录的异常
 var pending_anomalies: Array[Dictionary] = []
+
+## ★ 异常等级系统
+var anomaly_levels: Dictionary = {}    # anomaly_id -> int (0-4)
+var anomaly_consecutive_days: Dictionary = {}  # anomaly_id -> int
+var anomaly_suppressed: Dictionary = {}  # anomaly_id -> bool (被校准压制的异常)
+
+## ★ 传感器状态追踪
+var sensor_state_hours: Dictionary = {}  # sensor_id -> float (上次校准/修复后的小时数)
+var sensor_calibrated_this_scan: Dictionary = {}  # sensor_id -> bool (本次扫描是否校准过)
+
+## ★ 扫描模式与精度
+var current_scan_mode: int = ScanMode.STANDARD  # 当前扫描模式
+var scan_focused_sectors: Array = []    # 重点扫描的分区 ID 列表
+var sector_precision_modifiers: Dictionary = {}  # sector_id -> float (精度偏移量)
+
+## ★ 玩家选择记录（存档用）
+var env_choices: Dictionary = {
+	"daily_scan_mode": "",
+	"anomaly_responses": {},
+	"report_focus_items": [],
+	"investigation_leads": [],
+}
 
 ## 风向（需要特殊处理的循环角度）
 var current_wind_dir: float = 0.0
@@ -81,6 +113,13 @@ var derived_readings: Dictionary = {}  # "dew_point", "wind_chill", "heat_index"
 ## RNG
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _day_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+
+## 配置缓存（从 env_config.json 加载的新增字段）
+var scan_sectors_cfg: Dictionary = {}     # sector_id -> {name, sensors, base_duration, deep_duration}
+var scan_modes_cfg: Dictionary = {}    # mode_id -> {name, description, precision_modifier, ...}
+var anomaly_evolution_cfg: Dictionary = {}  # 异常演化配置
+var anomaly_story_links: Dictionary = {}   # anomaly_id -> story link config
+var sensor_states_cfg: Dictionary = {}  # 传感器状态配置
 
 # ══════════════════════════════════════════
 #  常量
@@ -120,8 +159,14 @@ func _load_config() -> void:
 	anomaly_types = config.get("anomaly_types", {})
 	event_defs = config.get("events", {})
 	task_defs = config.get("tasks", {})
-	print("[EnvMonitor] 配置加载完成: %d 传感器, %d 天气模式, %d 事件类型" % [
-		sensors.size(), weather_patterns.size(), event_defs.size()])
+	# ★ 新增配置字段
+	scan_sectors_cfg = config.get("scan_sectors", {})
+	scan_modes_cfg = config.get("scan_modes", {})
+	anomaly_evolution_cfg = config.get("anomaly_evolution", {})
+	anomaly_story_links = config.get("anomaly_story_links", {})
+	sensor_states_cfg = config.get("sensor_states", {})
+	print("[EnvMonitor] 配置加载完成: %d 传感器, %d 天气模式, %d 事件类型, %d 扫描分区" % [
+		sensors.size(), weather_patterns.size(), event_defs.size(), scan_sectors_cfg.size()])
 
 func _init_sensors() -> void:
 	for sid in sensors.keys():
@@ -145,11 +190,19 @@ func get_save_data() -> Dictionary:
 		"detected_anomalies": detected_anomalies.duplicate(true),
 		"current_wind_dir": current_wind_dir,
 		"tide_phase": tide_phase,
+		"anomaly_levels": anomaly_levels.duplicate(),
+		"anomaly_consecutive_days": anomaly_consecutive_days.duplicate(),
+		"anomaly_suppressed": anomaly_suppressed.duplicate(),
+		"sensor_state_hours": sensor_state_hours.duplicate(),
+		"current_scan_mode": current_scan_mode,
+		"scan_focused_sectors": scan_focused_sectors.duplicate(),
+		"env_choices": env_choices.duplicate(true),
+		"story_version": save_story_version,
 	}
 
 func load_save_data(data: Dictionary) -> void:
 	master_seed = int(data.get("master_seed", 0))
-	current_day = int(data.get("current_day", 1))
+	current_day = int(data.get("current_day", 0))
 	if data.has("sensor_status"):
 		for k in data["sensor_status"]:
 			sensor_status[k] = data["sensor_status"][k]
@@ -166,6 +219,21 @@ func load_save_data(data: Dictionary) -> void:
 			detected_anomalies.append(a)
 	current_wind_dir = float(data.get("current_wind_dir", 0.0))
 	tide_phase = float(data.get("tide_phase", 0.0))
+	# ★ 新增存档字段
+	if data.has("anomaly_levels"):
+		anomaly_levels = data["anomaly_levels"]
+	if data.has("anomaly_consecutive_days"):
+		anomaly_consecutive_days = data["anomaly_consecutive_days"]
+	if data.has("anomaly_suppressed"):
+		anomaly_suppressed = data["anomaly_suppressed"]
+	if data.has("sensor_state_hours"):
+		sensor_state_hours = data["sensor_state_hours"]
+	if data.has("current_scan_mode"):
+		current_scan_mode = int(data["current_scan_mode"])
+	if data.has("scan_focused_sectors"):
+		scan_focused_sectors = data["scan_focused_sectors"]
+	if data.has("env_choices"):
+		env_choices = data["env_choices"]
 	# 同步系统时钟 + 重新生成当前读数
 	_sync_system_clock()
 	_regenerate_readings()
@@ -179,7 +247,7 @@ func start_new_game(seed_value: int = 0) -> void:
 		master_seed = _rng.randi()
 	else:
 		master_seed = seed_value
-	current_day = 1
+	current_day = 0
 	_sync_system_clock()
 	_update_accumulator = 0.0
 	_weather_timer = 0.0
@@ -759,6 +827,279 @@ func confirm_anomalies() -> Array[Dictionary]:
 	return confirmed
 
 # ══════════════════════════════════════════
+#  ★ 异常等级系统
+# ══════════════════════════════════════════
+
+## 获取异常当前等级（0-4），未初始化返回 0
+func get_anomaly_level(anomaly_id: String) -> int:
+	return anomaly_levels.get(anomaly_id, 0)
+
+## 设置异常等级，并更新连续天数追踪
+func set_anomaly_level(anomaly_id: String, level: int) -> void:
+	level = clampi(level, 0, 4)
+	var old_level: int = anomaly_levels.get(anomaly_id, 0)
+	anomaly_levels[anomaly_id] = level
+	if level > old_level:
+		# 等级提升时重置连续计数（新的严重程度需要重新累积）
+		if not anomaly_consecutive_days.has(anomaly_id):
+			anomaly_consecutive_days[anomaly_id] = 0
+	elif level == 0:
+		# 异常消失，清除追踪
+		anomaly_consecutive_days.erase(anomaly_id)
+		anomaly_suppressed.erase(anomaly_id)
+
+## 每小时 tick 调用：未处理的异常有概率升级
+func evolve_anomalies() -> void:
+	var evolve_chance: float = anomaly_evolution_cfg.get("escalate_chance_per_level", 0.10)
+	var suppress_chance: float = anomaly_evolution_cfg.get("suppress_chance_calibrate", 0.7)
+	for anomaly_id in anomaly_levels.keys():
+		var level: int = anomaly_levels[anomaly_id]
+		if level <= 0 or level >= 4:
+			continue
+		var was_suppressed: bool = anomaly_suppressed.get(anomaly_id, false)
+		if was_suppressed:
+			# 被校准压制的异常有概率重新浮现
+			if randf() < (1.0 - suppress_chance):
+				anomaly_suppressed[anomaly_id] = false
+				set_anomaly_level(anomaly_id, level)  # 恢复可见
+				continue
+		# 未压制异常有概率升级
+		var escalate_prob: float = evolve_chance * level
+		if randf() < escalate_prob:
+			set_anomaly_level(anomaly_id, level + 1)
+			anomaly_consecutive_days[anomaly_id] = anomaly_consecutive_days.get(anomaly_id, 0) + 1
+
+## 玩家对异常做出响应，返回结果字典
+func respond_to_anomaly(anomaly_id: String, response: String) -> Dictionary:
+	var level: int = get_anomaly_level(anomaly_id)
+	var result: Dictionary = {"anomaly_id": anomaly_id, "response": response, "level_before": level}
+	var resolve_chance: float = anomaly_evolution_cfg.get("resolve_chance_investigate", 0.5)
+	match response:
+		"log":
+			# 记录并上报——异常仍在，但 HQ 介入
+			result["outcome"] = "reported"
+			result["message"] = "已记录异常 [%s] 并上报 HQ。" % [anomaly_id]
+		"investigate":
+			# 深入调查——有机会定性（不再升级）
+			if randf() < resolve_chance:
+				result["outcome"] = "resolved"
+				result["message"] = "深入调查后，异常 [%s] 已被定性，不再演化。" % [anomaly_id]
+				set_anomaly_level(anomaly_id, 0)
+			else:
+				result["outcome"] = "inconclusive"
+				result["message"] = "调查未得出明确结论，但获取了额外数据。"
+				anomaly_consecutive_days[anomaly_id] = anomaly_consecutive_days.get(anomaly_id, 0) + 1
+		"flag":
+			# 标记待查——不消耗时间，但异常可能升级
+			result["outcome"] = "flagged"
+			result["message"] = "异常 [%s] 已标记待查，下次扫描时优先关注。" % [anomaly_id]
+		"calibrate":
+			# 自行校准——压制异常（若真实 SCP 事件会再浮现）
+			anomaly_suppressed[anomaly_id] = true
+			result["outcome"] = "suppressed"
+			result["message"] = "已执行校准，异常 [%s] 被压制。若是设备故障则已解决；若非自然异常则会再浮现。" % [anomaly_id]
+			# 检查是否是 SCP 关联异常——如果不是，校准即修复
+			var story_links: Array = anomaly_story_links.get(anomaly_id, [])
+			if story_links.is_empty():
+				# 非叙事关联异常，校准即修复
+				set_anomaly_level(anomaly_id, 0)
+				result["outcome"] = "fixed"
+				result["message"] = "校准成功，传感器已恢复正常读数。"
+		_:
+			result["outcome"] = "unknown"
+			result["message"] = "未知响应类型。"
+	# 记录到玩家选择
+	if not env_choices.has("anomaly_responses"):
+		env_choices["anomaly_responses"] = {}
+	var key: String = "%s_day%d" % [anomaly_id, current_day]
+	env_choices["anomaly_responses"][key] = response
+	return result
+
+## 检查异常是否触发叙事关联
+func check_anomaly_story_triggers() -> Array[Dictionary]:
+	var triggers: Array[Dictionary] = []
+	for anomaly_id in anomaly_story_links.keys():
+		var link_config: Dictionary = anomaly_story_links[anomaly_id]
+		var trigger_level: int = link_config.get("trigger_level", 2)
+		var current_level: int = get_anomaly_level(anomaly_id)
+		if current_level < trigger_level:
+			continue
+		# 检查连续天数条件
+		var required_days: int = link_config.get("consecutive_days", 0)
+		if required_days > 0:
+			var consecutive: int = anomaly_consecutive_days.get(anomaly_id, 0)
+			if consecutive < required_days:
+				continue
+		# 检查时间窗口条件
+		if link_config.has("time_window"):
+			var window: Array = link_config["time_window"]
+			if current_hour < window[0] or current_hour > window[1]:
+				continue
+		# 条件满足——触发叙事关联
+		var trigger: Dictionary = {
+			"anomaly_id": anomaly_id,
+			"story_unlock": link_config.get("story_unlock", ""),
+			"level": current_level,
+			"type": "anomaly_story"
+		}
+		if trigger["story_unlock"] != "":
+			triggers.append(trigger)
+	return triggers
+
+# ══════════════════════════════════════════
+#  ★ 传感器状态机
+# ══════════════════════════════════════════
+
+## 获取传感器状态枚举值
+func get_sensor_state_enum(sensor_id: String) -> int:
+	var status_str: String = sensor_status.get(sensor_id, "nominal")
+	match status_str:
+		"optimal":
+			return SensorState.OPTIMAL
+		"nominal":
+			return SensorState.NOMINAL
+		"degraded":
+			return SensorState.DEGRADED
+		"malfunction":
+			return SensorState.MALFUNCTION
+		"offline":
+			return SensorState.OFFLINE
+		_:
+			return SensorState.NOMINAL
+
+## 设置传感器状态
+func set_sensor_state(sensor_id: String, state: int) -> void:
+	var state_names: Array = ["optimal", "nominal", "degraded", "malfunction", "offline"]
+	if state >= 0 and state < state_names.size():
+		sensor_status[sensor_id] = state_names[state]
+		if state == SensorState.MALFUNCTION:
+			sensor_failure.emit(sensor_id)
+
+## 获取传感器精度修正值（基于状态 + 扫描模式）
+func get_sensor_precision(sensor_id: String) -> int:
+	var precision: int = 0
+	# 传感器状态修正
+	var state: int = get_sensor_state_enum(sensor_id)
+	match state:
+		SensorState.OPTIMAL:
+			precision += 1
+		SensorState.DEGRADED:
+			precision -= 1
+		SensorState.MALFUNCTION:
+			precision -= 2
+		SensorState.OFFLINE:
+			precision -= 3
+	# 扫描模式修正
+	var mode_cfg: Dictionary = _get_scan_mode_config()
+	precision += int(mode_cfg.get("precision_modifier", 0))
+	# 分区重点修正
+	var sector: String = _get_sector_for_sensor(sensor_id)
+	if sector != "" and scan_focused_sectors.has(sector):
+		precision += 2
+	return precision
+
+## 获取传感器所属扫描分区
+func _get_sector_for_sensor(sensor_id: String) -> String:
+	if not scan_sectors_cfg.has("_sector_map"):
+		# 构建一次查找表
+		var sector_map: Dictionary = {}
+		for sector_id in scan_sectors_cfg.keys():
+			var sensors_arr: Array = scan_sectors_cfg[sector_id].get("sensors", [])
+			for s in sensors_arr:
+				sector_map[s] = sector_id
+		scan_sectors_cfg["_sector_map"] = sector_map
+	var sector_map: Dictionary = scan_sectors_cfg.get("_sector_map", {})
+	return sector_map.get(sensor_id, "")
+
+## 每小时 tick 调用：根据运行时长更新传感器状态
+func update_sensor_states(hours_elapsed: float) -> void:
+	var degrade_hours: float = sensor_states_cfg.get("degradation_threshold_hours", 48.0)
+	for sid in sensors.keys():
+		if not sensor_state_hours.has(sid):
+			sensor_state_hours[sid] = 0.0
+		sensor_state_hours[sid] += hours_elapsed
+		var state: int = get_sensor_state_enum(sid)
+		var hours: float = sensor_state_hours[sid]
+		# 自动降级（仅在 NOMINAL/DEGRADED 状态）
+		if state == SensorState.NOMINAL and hours > degrade_hours:
+			set_sensor_state(sid, SensorState.DEGRADED)
+		elif state == SensorState.DEGRADED and hours > degrade_hours * 2:
+			set_sensor_state(sid, SensorState.MALFUNCTION)
+		# 事件影响降级
+		if active_events.size() > 0:
+			for _eid in active_events:
+				var ev: Dictionary = active_events[_eid]
+				var effects: Dictionary = ev.get("effects", {})
+				if effects.has("sensor_damage"):
+					var damaged: Array = effects["sensor_damage"]
+					if damaged.has(sid) and state < SensorState.MALFUNCTION:
+						set_sensor_state(sid, state + 1)
+
+## 校准传感器交互步骤——返回当前偏差和是否完成
+func calibrate_sensor_interactive(sensor_id: String, adjustment: float) -> Dictionary:
+	var state: int = get_sensor_state_enum(sensor_id)
+	if state == SensorState.OFFLINE:
+		return {"success": false, "message": "传感器 %s 离线，需要重启而非校准。" % sensor_id}
+	# 获取当前偏差
+	if not calibration_offsets.has(sensor_id):
+		return {"success": false, "message": "传感器 %s 无校准数据。" % sensor_id}
+	var current_offset: float = calibration_offsets[sensor_id]
+	var new_offset: float = current_offset - adjustment
+	# 检查偏差阈值
+	var threshold: float = 0.02  # 2% 即完成校准
+	var sensor_cfg: Dictionary = sensors.get(sensor_id, {})
+	threshold = float(sensor_cfg.get("calibration_threshold", 0.02))
+	calibration_offsets[sensor_id] = new_offset
+	var is_done: bool = absf(new_offset) < threshold
+	if is_done:
+		# 校准成功
+		calibration_offsets[sensor_id] = 0.0
+		sensor_state_hours[sensor_id] = 0.0  # 重置降级计时
+		if state >= SensorState.DEGRADED:
+			set_sensor_state(sensor_id, state - 1)  # 提升一级
+		sensor_calibrated_this_scan[sensor_id] = true
+	else:
+		# 调整过大可能反而更偏
+		if absf(new_offset) > absf(current_offset) + 0.01:
+			# 偏差增大——可能导致状态降级
+			if randf() < 0.15:
+				set_sensor_state(sensor_id, mini(state + 1, SensorState.OFFLINE))
+				return {"success": false, "message": "校准偏差增大！传感器 %s 状态降级至 %s。" % [sensor_id, sensor_status.get(sensor_id, "unknown")], "new_offset": new_offset, "done": false}
+	return {"success": true, "message": "偏差调整: %.3f → %.3f%s" % [current_offset, new_offset, " — 校准完成！" if is_done else ""], "new_offset": new_offset, "done": is_done}
+
+# ══════════════════════════════════════════
+#  ★ 扫描模式管理
+# ══════════════════════════════════════════
+
+## 设置当前扫描模式
+func set_scan_mode(mode: int, focused_sectors: Array = []) -> void:
+	current_scan_mode = mode
+	scan_focused_sectors = focused_sectors
+	# 计算分区精度修正
+	sector_precision_modifiers.clear()
+	var mode_cfg: Dictionary = _get_scan_mode_config()
+	var base_mod: int = int(mode_cfg.get("precision_modifier", 0))
+	for sector_id in scan_sectors_cfg.keys():
+		if sector_id.begins_with("_"):
+			continue
+		if focused_sectors.has(sector_id):
+			sector_precision_modifiers[sector_id] = base_mod + 2
+		else:
+			sector_precision_modifiers[sector_id] = base_mod - 1 if mode == ScanMode.FOCUSED else base_mod
+	env_choices["daily_scan_mode"] = ScanMode.keys()[mode] if mode < ScanMode.size() else "STANDARD"
+
+## 获取当前扫描模式配置
+func _get_scan_mode_config() -> Dictionary:
+	var mode_names: Array = ["quick", "standard", "focused", "deep"]
+	var mode_key: String = mode_names[current_scan_mode] if current_scan_mode < mode_names.size() else "standard"
+	return scan_modes_cfg.get(mode_key, {})
+
+## 新扫描周期开始时调用——重置分区精度和校准追踪
+func begin_new_scan_cycle() -> void:
+	sector_precision_modifiers.clear()
+	sensor_calibrated_this_scan.clear()
+
+# ══════════════════════════════════════════
 #  历史记录
 # ══════════════════════════════════════════
 func _record_history() -> void:
@@ -886,6 +1227,8 @@ func get_current_hour_display() -> String:
 	return "%02d:%02d" % [h, m]
 
 func get_day_display() -> String:
+	if current_day == 0:
+		return "Day 0（教程日）"
 	return "第 %d 天" % current_day
 
 func get_display_date() -> String:
@@ -1168,6 +1511,12 @@ func load_env_progress() -> bool:
 		file.close()
 		return false
 	file.close()
+	# ★ 剧情版本门控：主线剧情版本变化时视为无有效进度（重新开始）
+	if save_story_version != "" and \
+			str((json.data as Dictionary).get("story_version", "")) != save_story_version:
+		print("[EnvMonitor] 剧情版本不匹配（%s → %s），重置环境进度" % [
+			str((json.data as Dictionary).get("story_version", "")), save_story_version])
+		return false
 	load_save_data(json.data)
 	print("[EnvMonitor] 玩家进度已加载: 第 %d 天" % current_day)
 	return true

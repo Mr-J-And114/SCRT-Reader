@@ -11,9 +11,11 @@ extends RefCounted
 class FSNode:
 	var type: String
 	var content: String
-	func _init(p_type: String, p_content: String = "") -> void:
+	var origin: String
+	func _init(p_type: String, p_content: String = "", p_origin: String = "original") -> void:
 		type = p_type
 		content = p_content
+		origin = p_origin
 
 # ============================================================
 # 数据引用（由 main.gd 设置）
@@ -93,8 +95,69 @@ func get_node_at_path(path: String) -> FSNode:
 		var entry: Dictionary = file_system[path]
 		var content: String = entry.get("content", "")
 		content = content.replace("\r\n", "\n").replace("\r", "\n")
-		return FSNode.new(entry.get("type", "file"), content)
+		return FSNode.new(entry.get("type", "file"), content, str(entry.get("origin", "original")))
 	return null
+
+func create_file(path: String, content: String) -> bool:
+	path = normalize_path(path)
+	if path == "/" or file_system.has(path) or not _writable_parent(path):
+		return false
+	file_system[path] = {"type": "file", "content": content, "origin": "created"}
+	return true
+
+func copy_node(source: String, target: String) -> bool:
+	source = normalize_path(source)
+	target = normalize_path(target)
+	if not file_system.has(source) or file_system.has(target) or not _writable_parent(target):
+		return false
+	var entry: Dictionary = file_system[source]
+	if str(entry.get("type", "")) != "file":
+		return false
+	var copy: Dictionary = entry.duplicate(true)
+	copy["origin"] = "copied"
+	file_system[target] = copy
+	return true
+
+func move_node(source: String, target: String) -> bool:
+	source = normalize_path(source)
+	target = normalize_path(target)
+	if not file_system.has(source) or file_system.has(target) or not _writable_parent(target):
+		return false
+	if str(file_system[source].get("type", "")) != "file":
+		return false
+	file_system[target] = file_system[source].duplicate(true)
+	file_system.erase(source)
+	return true
+
+func delete_node(path: String) -> bool:
+	path = normalize_path(path)
+	if not file_system.has(path) or str(file_system[path].get("type", "")) != "file":
+		return false
+	file_system.erase(path)
+	return true
+
+func _writable_parent(path: String) -> bool:
+	var parent: String = get_parent_path(path)
+	return parent == "/" or (file_system.has(parent) and str(file_system[parent].get("type", "")) == "folder")
+
+func count_files(exclude_hidden: bool = true) -> int:
+	var total: int = 0
+	for path in file_system.keys():
+		if str(file_system[path].get("type", "")) == "file" and (not exclude_hidden or not is_hidden_path(str(path))):
+			total += 1
+	return total
+
+func count_total_size(exclude_hidden: bool = true) -> int:
+	var total: int = 0
+	for path in file_system.keys():
+		if str(file_system[path].get("type", "")) != "file" or (exclude_hidden and is_hidden_path(str(path))):
+			continue
+		var entry: Dictionary = file_system[path]
+		if entry.has("binary"):
+			total += (entry["binary"] as PackedByteArray).size()
+		else:
+			total += str(entry.get("content", "")).to_utf8_buffer().size()
+	return total
 
 func get_children_at_path(path: String) -> Array[String]:
 	path = normalize_path(path)

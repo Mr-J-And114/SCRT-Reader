@@ -1,188 +1,106 @@
-# ============================================================
-# comm_voice.gd — Undertale 风格逐字符语音合成
-# 每个字符触发一个短促的合成音
-# ============================================================
 class_name CommVoice
 extends RefCounted
-
-var _audio_player: AudioStreamPlayer = null
-var _main_node: Node = null
-
-## 语音配置（由角色提供）
-var config: Dictionary = {
-	"tone": "sine",
-	"base_pitch": 1.0,
-	"pitch_variance": 0.15,
-	"speed": "normal",
-	"char_sound_duration": 50,
-	"vowel_pitch_boost": 0.1,
-	"punctuation_pause": 200,
+## 逐字符短音：基础音色 + 谐波明亮度 + 音量包络。
+const SAMPLE_RATE: int = 22050
+const PUNCTUATION: String = "，。！？；：、…—,.!?;:（）()「」『』“”\""
+const DEFAULT_CONFIG: Dictionary = {
+	"tone": "warm", "base_frequency_hz": 345.0, "pitch_variance": 0.04,
+	"char_sound_duration": 65, "brightness": 0.25, "volume_db": -13.0,
+	"attack_ms": 5.0, "release_ms": 30.0, "punctuation_pause": 200, "voice_every_n": 1,
 }
-
-## 元音集合
-const VOWELS: String = "aeiouAEIOUaeiouàáâãäåèéêëìíîïòóôõöùúûü"
-const PUNCTUATION: String = ".,!?;:—…"
-
-## 速度映射
-var _char_delay: float = 0.04  # 每字符间隔(秒)
-
-# 预生成的音频样本缓存
-var _sample_cache: Dictionary = {}
-
-# ══════════════════════════════════════════
-#  初始化
-# ══════════════════════════════════════════
+var config: Dictionary = DEFAULT_CONFIG.duplicate()
+var _audio_player: AudioStreamPlayer = null
+var _sample: AudioStreamWAV = null
+var _spoken_chars: int = 0
 
 func setup(main_node: Node) -> void:
-	_main_node = main_node
 	_audio_player = AudioStreamPlayer.new()
 	_audio_player.name = "CommVoicePlayer"
 	_audio_player.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
-	_audio_player.volume_db = -8.0
-	_main_node.add_child(_audio_player)
+	_audio_player.max_polyphony = 2
+	main_node.add_child(_audio_player)
+	_audio_player.volume_db = float(config["volume_db"])
 
-## 应用角色配置
 func apply_config(voice_cfg: Dictionary) -> void:
-	for key in voice_cfg.keys():
-		config[key] = voice_cfg[key]
-	# 更新字符延迟
-	match str(config.get("speed", "normal")):
-		"slow":
-			_char_delay = 0.06
-		"fast":
-			_char_delay = 0.025
-		_:
-			_char_delay = 0.04
-	# 清除缓存，因为配置变了
-	_sample_cache.clear()
+	config = DEFAULT_CONFIG.duplicate()
+	config.merge(voice_cfg, true)
+	if not voice_cfg.has("base_frequency_hz") and voice_cfg.has("base_pitch"):
+		config["base_frequency_hz"] = 220.0 * float(voice_cfg["base_pitch"])
+	_sample = null
+	_spoken_chars = 0
+	if _audio_player:
+		_audio_player.stop()
+		_audio_player.volume_db = clampf(float(config["volume_db"]), -40.0, 0.0)
 
-# ══════════════════════════════════════════
-#  发声
-# ══════════════════════════════════════════
-
-## 为一个字符发声
 func speak_char(ch: String) -> void:
-	if ch.strip_edges().is_empty():
-		return  # 空格不发声
-	if _audio_player == null:
+	if _audio_player == null or ch.strip_edges().is_empty() or is_punctuation(ch):
 		return
+	_spoken_chars += 1
+	if (_spoken_chars - 1) % maxi(1, int(config.get("voice_every_n", 1))) != 0:
+		return
+	if _sample == null:
+		_sample = _generate_sample()
+		_audio_player.stream = _sample
+	var variance: float = clampf(float(config.get("pitch_variance", 0.04)), 0.0, 0.25)
+	_audio_player.pitch_scale = 1.0 + randf_range(-variance, variance)
+	_audio_player.play()
 
-	var pitch: float = float(config.get("base_pitch", 1.0))
-	var variance: float = float(config.get("pitch_variance", 0.15))
+func stop() -> void:
+	if _audio_player:
+		_audio_player.stop()
 
-	# 元音音高提升
-	if ch.length() == 1 and VOWELS.contains(ch):
-		pitch += float(config.get("vowel_pitch_boost", 0.1))
-
-	# 随机波动
-	pitch += randf_range(-variance, variance)
-	pitch = clampf(pitch, 0.3, 3.0)
-
-	var stream: AudioStream = _get_or_generate_sample(pitch)
-	if stream:
-		_audio_player.stream = stream
-		_audio_player.pitch_scale = pitch
-		_audio_player.play()
-
-## 获取字符延迟（秒）
 func get_char_delay() -> float:
-	return _char_delay
+	match str(config.get("speed", "normal")):
+		"slow": return 0.06
+		"fast": return 0.025
+		_: return 0.04
 
-## 获取标点停顿（秒）
 func get_punctuation_pause(ch: String) -> float:
-	if ch.length() == 1 and PUNCTUATION.contains(ch):
-		return float(config.get("punctuation_pause", 200)) / 1000.0
-	return 0.0
+	return maxf(0.0, float(config.get("punctuation_pause", 200))) / 1000.0 if is_punctuation(ch) else 0.0
 
-## 是否为标点
 func is_punctuation(ch: String) -> bool:
 	return ch.length() == 1 and PUNCTUATION.contains(ch)
 
-# ══════════════════════════════════════════
-#  音频生成
-# ══════════════════════════════════════════
-
-## 生成或获取缓存的音频样本
-func _get_or_generate_sample(pitch: float) -> AudioStream:
-	# 简化的缓存key（量化到0.1精度避免过多缓存）
-	var quantized_pitch: float = snapped(pitch, 0.1)
-	var cache_key: String = str(config.get("tone", "sine")) + "_" + str(quantized_pitch)
-
-	if _sample_cache.has(cache_key):
-		return _sample_cache[cache_key]
-
-	var stream: AudioStream = _generate_tone_sample()
-	if stream:
-		_sample_cache[cache_key] = stream
-	return stream
-
-## 生成合成音样本
-func _generate_tone_sample() -> AudioStream:
-	var tone_type: String = str(config.get("tone", "sine"))
-	var duration_ms: int = int(config.get("char_sound_duration", 50))
-	var sample_rate: int = 22050
-	var num_samples: int = int(sample_rate * duration_ms / 1000.0)
-	var frequency: float = 220.0  # 基础频率，实际通过 pitch_scale 调整
-
-	var data := PackedVector2Array()
-	data.resize(num_samples)
-
-	for i in range(num_samples):
-		var t: float = float(i) / float(sample_rate)
-		var phase: float = t * frequency * TAU
+func _generate_sample() -> AudioStreamWAV:
+	var tone: String = str(config.get("tone", "warm"))
+	var frequency: float = clampf(float(config.get("base_frequency_hz", 345.0)), 140.0, 700.0)
+	var duration: int = clampi(int(config.get("char_sound_duration", 65)), 25, 180)
+	var brightness: float = clampf(float(config.get("brightness", 0.25)), 0.0, 1.0)
+	var count: int = maxi(1, int(SAMPLE_RATE * duration / 1000.0))
+	var attack_count: int = maxi(1, int(SAMPLE_RATE * clampf(float(config.get("attack_ms", 5.0)), 1.0, 30.0) / 1000.0))
+	var release_count: int = maxi(1, int(SAMPLE_RATE * clampf(float(config.get("release_ms", 30.0)), 2.0, 100.0) / 1000.0))
+	var pcm := PackedByteArray()
+	pcm.resize(count * 2)
+	for i in range(count):
+		var phase: float = TAU * frequency * float(i) / float(SAMPLE_RATE)
+		var fundamental: float = sin(phase)
+		var triangle: float = 2.0 / PI * asin(sin(phase))
+		# 有限谐波避免直接锯齿/方波的高频混叠；尖锐度由 brightness 控制。
+		var harmonics: float = 0.0
+		for harmonic in range(2, 9):
+			harmonics += sin(phase * harmonic) / float(harmonic)
 		var sample: float = 0.0
-
-		match tone_type:
-			"sine":
-				sample = sin(phase)
-			"square":
-				sample = 1.0 if fmod(phase, TAU) < PI else -1.0
-				sample *= 0.5  # 降低音量
-			"saw":
-				sample = 2.0 * (fmod(phase, TAU) / TAU) - 1.0
-				sample *= 0.4
-			"noise":
-				sample = randf_range(-1.0, 1.0) * 0.3
-			_:
-				sample = sin(phase)
-
-		# 简单包络：快速 attack + decay
-		var env: float = 1.0
-		var attack_samples: int = int(num_samples * 0.05)
-		var decay_start: int = int(num_samples * 0.3)
-		if i < attack_samples:
-			env = float(i) / float(attack_samples)
-		elif i > decay_start:
-			env = 1.0 - (float(i - decay_start) / float(num_samples - decay_start))
-		sample *= env * 0.6  # 总音量控制
-
-		data[i] = Vector2(sample, sample)
-
-	# 创建 AudioStreamWAV 不太方便，用 AudioStreamGenerator 的替代方案
-	# Godot 4 中可以用 AudioStreamWAV
+		match tone:
+			"warm": sample = fundamental * (0.90 - brightness * 0.35) + triangle * (0.10 + brightness * 0.35)
+			"clear": sample = fundamental * (0.70 - brightness * 0.25) + triangle * 0.25 + sin(phase * 2.0) * (0.05 + brightness * 0.25)
+			"sharp", "saw": sample = fundamental * 0.55 + harmonics * (0.15 + brightness * 0.30)
+			"chime": sample = fundamental * 0.65 + sin(phase * 2.0) * (0.20 + brightness * 0.10) + sin(phase * 3.0) * 0.15
+			"square": sample = fundamental * 0.7 + sin(phase * 3.0) * 0.23 + sin(phase * 5.0) * 0.14
+			"noise": sample = randf_range(-0.5, 0.5)
+			_: sample = fundamental
+		var envelope: float = minf(1.0, float(i) / float(attack_count))
+		envelope *= minf(1.0, float(count - 1 - i) / float(release_count))
+		pcm.encode_s16(i * 2, clampi(int(sample * envelope * 0.40 * 32767.0), -32768, 32767))
 	var wav := AudioStreamWAV.new()
-	wav.mix_rate = sample_rate
-	wav.stereo = true
+	wav.mix_rate = SAMPLE_RATE
+	wav.stereo = false
 	wav.format = AudioStreamWAV.FORMAT_16_BITS
-
-	# 将 float 样本转为 16-bit PCM
-	var pcm_data := PackedByteArray()
-	pcm_data.resize(num_samples * 4)  # 16bit stereo = 4 bytes per sample
-	for i in range(num_samples):
-		var left: int = clampi(int(data[i].x * 32767.0), -32768, 32767)
-		var right: int = clampi(int(data[i].y * 32767.0), -32768, 32767)
-		pcm_data.encode_s16(i * 4, left)
-		pcm_data.encode_s16(i * 4 + 2, right)
-
-	wav.data = pcm_data
+	wav.data = pcm
 	return wav
 
-# ══════════════════════════════════════════
-#  清理
-# ══════════════════════════════════════════
-
 func cleanup() -> void:
-	_sample_cache.clear()
+	_sample = null
 	if _audio_player and is_instance_valid(_audio_player):
 		_audio_player.stop()
 		_audio_player.queue_free()
+	_audio_player = null

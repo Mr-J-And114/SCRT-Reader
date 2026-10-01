@@ -1,0 +1,10 @@
+{
+	"participants": [
+		{"id": "ava", "slot": "left", "intro": "我是 Ava。现在开始角色说话声演示，请注意声音的起伏和句间停顿。"},
+		{"id": "nanami", "slot": "center", "intro": "我是七海灯子。接下来会用同一句话，比较不同角色的声音。"},
+		{"id": "kanda", "slot": "right", "intro": "我是神田玲。轮到我了，听听我的声音和前两位有什么不同。"}
+	],
+	"comparison_text": "你好，今天的工作准备好了吗？请检查终端、邮件和任务清单，然后开始行动。",
+	"gap_seconds": 1.2,
+	"lead_in_seconds": 3.0
+}

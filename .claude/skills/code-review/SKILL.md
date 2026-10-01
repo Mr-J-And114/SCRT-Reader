@@ -1,11 +1,11 @@
-# Skill: GDScript Code Review (Godot 4.6)
+# Skill: GDScript Code Review (Godot 4.7.1)
 
-You are reviewing GDScript code for the SCRT-Reader project (Godot 4.6, GL Compatibility renderer).
+You are reviewing GDScript code for the SCRT-Reader project (Godot 4.7.1, GL Compatibility renderer).
 Check the following project-specific conventions:
 
 ## Checklist
 
-### GDScript Style (Godot 4.6)
+### GDScript Style (Godot 4.7.1)
 - [ ] **Fully typed** — all variables, parameters, and return types have annotations
   ```gdscript
   var count: int = 0
@@ -39,7 +39,7 @@ Check the following project-specific conventions:
 - [ ] Typed arrays where possible: `Array[String]`, `Array[Dictionary]`
 - [ ] Null checks before member access: `if f != null:`, `if obj and obj.is_active:`
 
-### Godot 4.6 API (one-line checks)
+### Godot 4.7.1 API (one-line checks)
 - [ ] JSON: `JSON.new()` + `.parse()` (NOT static `JSON.parse_string()`)
 - [ ] File I/O: `FileAccess` / `DirAccess` (NOT old `File` / `Directory`)
 - [ ] Tweens: `create_tween()` (NOT `Tween.new()`)

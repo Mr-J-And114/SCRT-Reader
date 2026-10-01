@@ -3,7 +3,7 @@
 > and local `CLAUDE.md` files in `SCRT/scripts/`, `SCRT/comm_system/`, `SCRT/camera_system/`, `SCRT/radio/`.
 
 # SCRT-Reader AI Handoff Document
-<!-- VERSION:1.3 | ENGINE:Godot4.6 | RENDERER:GL_Compatibility | LAST_UPDATE:2026-03-04 -->
+<!-- VERSION:1.4 | ENGINE:Godot4.7.1 | RENDERER:GL_Compatibility | LAST_UPDATE:2026-07-15 -->
 <!-- FORMAT: Compressed for AI consumption. Minimize whitespace. Section headers are anchors. -->
 
 ## §1 PROJECT OVERVIEW
@@ -555,6 +555,24 @@ Stored in `extra["camera_data"]` within story save files. Saves per-camera: `unl
 
 ### §15.7 Safety
 Anomaly visual effects blocked when `effect_settings.is_effect_allowed("jumpscare")` returns false (OFF mode). Trigger actions (mail delivery, file unlock, etc.) always execute regardless of effect level.
+
+## §16 LATEX FORMULA SYSTEM (2026-07-15)
+**Renderer:** `scripts/latex_renderer.gd` (1720 lines), `class_name LatexRenderer extends RefCounted`
+**Pipeline:** `_Tokenizer` → `_Parser`(recursive descent AST) → `_Layout`(measure+position) → `_LatexCanvas`(SubViewport draw) → `ImageTexture`
+**Init:** `main.gd._ready()` creates instance, injects 4 Sarasa fonts, calls `crtml.set_latex_renderer(latex_renderer)`
+**Integration:** `crtml_parser.gd._process_inline()` step 12 `_parse_math()`, reuses `_inline_image_cache` placeholder mechanism (`\u0001IMG:id\u0002`)
+**CRTML markup:** `[math]LaTeX[/math]` (inline, 18px) | `[math block]LaTeX[/math]` (block, 22px)
+**Supported:** `\frac` `\sqrt[n]` `^_` `\sum\int\prod\oint` `\left(\right)` `matrix/pmatrix/bmatrix/cases/aligned` Greek letters operators arrows `\hat\vec\overline\dot\tilde` `\mathbf\mathit\mathbb` `\color` `\quad`
+**Cache:** Static dict `_cache`, key=`latex|font_size|color_hex`, no limit
+**API:** `render_to_texture(latex, fs)` (async) | `get_cached_texture(latex, fs)` (sync, null if not pre-rendered)
+**Note:** Sqrt symbol is self-drawn (draw_line V-shape) not font glyph, to avoid clipping at large sizes
+**Note:** `render_to_texture` is async — must `await` and pre-render at story load time
+
+## §17 GODOT 4.7.1 MIGRATION (2026-07-15)
+Migrated from Godot 4.6 to 4.7.1. Changes:
+- `main.gd._insert_inline_image()`: `add_image()` signature changed — `width_in_percent: bool` → `width_unit: int`, `height_in_percent: bool` → `height_unit: int`. Fixed: `false` → `0` (IMAGE_UNIT_PIXELS)
+- `project.godot`: `config/features` updated from "4.6" to "4.7"
+- No other breaking changes affected the project (verified: tap_back_pos, UPDATE_WIDTH_IN_PERCENT, device IDs, font hinting, draw_line antialiasing, method override return types, packed array setters — all unused or compatible)
 
 <!-- END OF HANDOFF DOCUMENT -->
 
