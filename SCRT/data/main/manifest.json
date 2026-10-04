@@ -31,6 +31,33 @@
 				"default": {"action": "return", "message": "收件人不符，磁盘已退回。"},
 				"ava": {"action": "confiscate", "score": "main:1", "message": "磁盘已被 Ava 没收；可重新下载。"}
 			}
+		},
+		"demo_echo": {
+			"_comment": "解谜展示盘：探索/权限/文件密码/decode/radio/蒙混/上交全流程",
+			"title": "Vdisc 解谜展示：ECHO 回声档案",
+			"story_id": "echo_case",
+			"giver": "kanda",
+			"giver_number": "1001-0002",
+			"download": {
+				"number": "9900-0003",
+				"filename": "site514_echo_V1.0_1.scp",
+				"url": "",
+				"mail_attachment": "M-DEMO-ECHO"
+			},
+			"requirements": {
+				"min_read_percent": 60,
+				"required_files": ["/reports/culprit.txt", "/classified/project_echo.txt"],
+				"min_total_files": 12,
+				"min_size_kb": 2
+			},
+			"on_success": {"score": "side:1", "flags": {"demo_echo_done": 1}},
+			"on_fail": {"message": "证据链不完整：关键物证、机密档案或探索量不足。"},
+			"wrong_recipient": {
+				"default": {"action": "return", "message": "这不是交给这位接收方的物证，磁盘已退回。"},
+				"ava": {"action": "confiscate", "score": "main:1", "message": "Ava 以越权调查为由没收了磁盘。可重新下载。"}
+			},
+			"mail_subject": "任务 ECHO：回收数据盘取证",
+			"mail_body": "操作员：\n\n新任务。附件是从废弃中继站回收的数据盘镜像，代号 ECHO。\n数据层被前持有人部分加密，恢复与取证由你完成。\n\n要求：\n- 保全关键证据（物证摘要与机密档案）\n- 探索覆盖面不低于校验线\n- 完成后用 submit 1001-0002 上交\n\n盘内不需要的文件不要乱动。\n—— 神田玲"
 		}
 	},
 	"initial_flags": {

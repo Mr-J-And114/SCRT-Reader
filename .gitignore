@@ -21,3 +21,17 @@ Thumbs.db
 # Local exported builds
 export/
 exports/
+
+# Python caches and local diagnostics
+__pycache__/
+*.py[cod]
+/ErrorReports/
+/diagnostics/
+
+# Local CAD / worldbuilding workspace; delivered drawings live outside this repo
+/docs/upgrade-plans/maps/**
+!/docs/upgrade-plans/maps/README.md
+/cad-*.py
+/cad-*.js
+/cad-*.json
+/review-natural-settings.py

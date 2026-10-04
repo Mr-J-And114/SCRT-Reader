@@ -22,6 +22,20 @@ debug 114514 vdisc check
 
 邮件中的链接会直接弹出下载窗口，邮件保持打开。也可用 `mail download MTEST-VDISC` 领取同一附件。本地联调盘显示约 1.2 秒的模拟传输；联网盘显示实际接收进度，未知大小时显示等待提示。校验与保存成功后才显示完成；结束后可点“关闭”或按 Esc。重复领取时弹窗询问是否重新下载：选择保留或按 Esc 保留现有磁盘；选择重新下载则在新包校验成功后替换个人副本，重置该盘探索进度、文件修改和任务状态。已加载的同故事磁盘会自动弹出，需重新 load。下载失败保留旧数据。弹窗与终端一起经过 CRT shader，并跟随当前颜色主题。`vdisc` 会显示任务缺口和接收方的 `submit` 命令。
 
+### ECHO 解谜展示盘（2026-10-02 新增）
+
+完整的解谜体验盘，任务 ID `demo_echo`（故事盘 `vdisc/site514_echo_V1.0_1.scp`），覆盖权限、文件密码、凯撒/维吉尼亚/Base64/摩斯解码、无线电信标、蒙混与上交全流程。剧透答案与验收清单见 [ECHO 展示盘游玩指南](upgrade-plans/vdisc-echo-demo-guide.md)。
+
+```text
+debug 114514 vdisc mail M-DEMO-ECHO   # 投递任务邮件（mail 支持指定邮件 ID）
+mail                                  # 打开邮件点击附件下载，或 mail download M-DEMO-ECHO
+# 也可直接 download demo_echo 或 dial 9900-0003
+vdisc                                 # 盘内查看进度与上交命令
+debug 114514 vdisc reset demo_echo    # 重置任务状态（清除归档与 fake_pass，可重新体验）
+```
+
+`vdisc mail` 不跟邮件 ID 时仍投递原联调邮件；`vdisc reset <任务ID>` 清除该任务的领取/上交状态、归档记录与工作副本修改记录。
+
 > **激活方式**：在终端输入 `debug 114514` 进入调试模式。
 > **隐藏性**：`debug` 命令不在 `help` 列表中显示，输入 `debug` 而非 `debug 114514` 会提示"未知命令"。
 > **格式**：所有调试命令格式为 `debug 114514 <子命令> [参数...]`，下文为简洁省略 `debug 114514` 前缀。

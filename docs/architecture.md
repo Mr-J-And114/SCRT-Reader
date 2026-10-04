@@ -81,11 +81,11 @@ Main (Control, fullrect) [main.gd]
 |---|---|---|---|
 | main.gd | — | 2381 | 中央控制器：初始化、输入路由、模式管理、Vdisc 任务集成及其他子系统 |
 | file_system.gd | FileSystem | 535 | 虚拟文件系统树、权限、路径工具、任务副本文件操作 |
-| command_handler.gd | CommandHandler | 3365 | CLI 命令注册、Vdisc 下载/编辑/上交、隐藏调试系统 |
+| command_handler.gd | CommandHandler | 3397 | CLI 命令注册、Vdisc 下载/编辑/上交、隐藏调试系统 |
 | latex_renderer.gd | LatexRenderer | 1720 | LaTeX 公式渲染器：Tokenizer→Parser(AST)→Layout→Image，支持分数/根号(自绘)/矩阵/上下标/定界符/cases |
 | story_loader.gd | StoryLoader | 708 | 解析 .scp ZIP 文件、编码检测（UTF-8/GBK）、构建 manifest + 文件系统 |
 | disc_manager.gd | DiscManager | 751 | 扫描共用原盘和玩家任务副本、加载/弹出故事、工作副本恢复 |
-| vdisc_task_manager.gd | VdiscTaskManager | 624 | 任务定义、下载登记、工作副本、判定、玩家专属归档和存档 |
+| vdisc_task_manager.gd | VdiscTaskManager | 640 | 任务定义、下载登记、工作副本、判定、玩家专属归档和存档 |
 | crtml_parser.gd | CrtmlParser | 1325 | Markdown→BBCode：标题、粗体、斜体、剧透、表格、媒体标签、效果标签、分页、LaTeX [math] 公式 |
 | typewriter.gd | Typewriter | 540 | 排队式文本输出，逐字打字、内联效果触发、进度条 |
 | save_manager.gd | SaveManager | 228 | 每用户每故事 JSON 存档/读档、自动存档 |
@@ -130,7 +130,7 @@ Main (Control, fullrect) [main.gd]
 | image_viewer.gd | ImageViewer | 634 | 可缩放图像查看器，平移，扫描效果，_ImageCanvas 内部类 |
 | oscilloscope.gd | Oscilloscope | 820 | 频谱分析器 + 李萨如图形，_ScopeCanvas 内部类 |
 | radio_receiver.gd | RadioReceiver | 1735 | 完整无线电 UI：调谐/频段/摩斯解码/SSTV/音频电台/隐藏信号/瀑布图，_RadioCanvas 内部类 |
-| decode_viewer.gd | DecodeViewer | 1456 | 密码解码动画查看器，_DecodeCanvas 内部类 |
+| decode_viewer.gd | DecodeViewer | 1461 | 密码解码动画查看器，_DecodeCanvas 内部类 |
 | env_viewer.gd | EnvViewer | 821 | 环境命令观测台，地图简报、实时详情、采集证据与日报历史 |
 | camera_viewer.gd | CameraViewer | 656 | CCTV 全屏覆盖层，shader 渲染监控画面，平移/切换控制 |
 
@@ -309,8 +309,8 @@ api.env_get_anomalies()              # Pending anomalies
 ## 文件索引（按行数排序）
 
 ```
-scripts/command_handler.gd|3365  scripts/main.gd|2371  scripts/latex_renderer.gd|1734
-radio/radio_receiver.gd|1804  scripts/decode_viewer.gd|1456
+scripts/command_handler.gd|3397  scripts/main.gd|2371  scripts/latex_renderer.gd|1734
+radio/radio_receiver.gd|1804  scripts/decode_viewer.gd|1461
 env_system/env_monitor.gd|1522
 comm_system/comm_ui.gd|1353  scripts/crtml_parser.gd|1325  comm_system/comm_manager.gd|1466
 modder/mod_api.gd|1075  settings/settings_manager.gd|903
@@ -326,7 +326,7 @@ scripts/cipher_decoder.gd|584  templates/two_page_reader.gd|571
 env_system/env_viewer.gd|821  scripts/loading_screen.gd|543
 scripts/typewriter.gd|540  scripts/theme_manager.gd|517
 scripts/explore_viewer.gd|481  scripts/file_system.gd|535
-scripts/vdisc_task_manager.gd|624
+scripts/vdisc_task_manager.gd|640
 scripts/ui_manager.gd|466  templates/article_viewer.gd|466
 scripts/effect_system.gd|451  camera_system/camera_manager.gd|444
 comm_system/comm_character.gd|446  comm_system/character_asset_library.gd|560

@@ -211,10 +211,14 @@ Markdown 风格语法 → BBCode 转换：
     "wrong_recipient": {
       "default": {"action": "return"},
       "ava": {"action": "confiscate", "score": "main:1"}
-    }
+    },
+    "mail_subject": "任务 ECHO：回收数据盘取证",
+    "mail_body": "操作员：\n\n附件为任务磁盘……（支持 \n 换行）"
   }
 }
 ```
+
+`mail_subject` / `mail_body` 为可选字段：供 `debug 114514 vdisc mail <邮件ID>` 投递任务发布邮件（缺省时使用 `title` 与通用文案）。邮件正文到达后，阅读界面会自动追加该磁盘的附件下载链接。
 
 玩家用 `download <任务ID>`、`dial <download.number>` 或 `mail download <邮件ID/编号>` 获取磁盘；邮件附件须先投递对应邮件。空 `download.url` 从游戏 `vdisc/` 中复制同名源包，非空 URL 由 HTTP 请求获取。副本位于 `saves/<用户名>/vdisc/inbox/`；上交或没收后移动到该玩家的 `submitted/` 或 `confiscated/`，共用原包保留。任务状态、归档记录及文件修改记录写入玩家 `profile.json` 的 `vdisc_task_data`。
 

@@ -337,6 +337,11 @@ func _handle_select_input(event: InputEventKey) -> bool:
 
 
 func _handle_text_input(event: InputEventKey) -> bool:
+	if event.keycode == KEY_V and event.ctrl_pressed:
+		var clip: String = DisplayServer.clipboard_get()
+		if not clip.is_empty():
+			_text_buffer += clip.replace("\r", "").replace("\n", "")
+		return true
 	if event.keycode == KEY_BACKSPACE:
 		if not _text_buffer.is_empty():
 			_text_buffer = _text_buffer.left(-1)

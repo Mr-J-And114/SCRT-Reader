@@ -616,6 +616,22 @@ func _finish_task(task_id: String, result: String, effects: Dictionary) -> Dicti
 		main.comm_mgr.trigger_dialogue(str(effects["dialogue"]))
 	return {"ok": true, "message": "磁盘已上交并存入个人归档。" if result == "submitted" else str(effects.get("message", "磁盘已被没收；可重新下载。"))}
 
+func debug_reset_task(task_id: String) -> bool:
+	if not definitions.has(task_id):
+		return false
+	task_states.erase(task_id)
+	var kept: Array = []
+	for entry in archive:
+		if str((entry as Dictionary).get("task_id", "")) != task_id:
+			kept.append(entry)
+	archive = kept
+	var story_id: String = str(definitions[task_id].get("story_id", ""))
+	if not story_id.is_empty():
+		modifications.erase(story_id)
+	_save_state()
+	disc_mgr.scan_stories(true)
+	return true
+
 func get_task_list() -> Array[Dictionary]:
 	var items: Array[Dictionary] = []
 	for task_id in definitions.keys():

@@ -1052,9 +1052,19 @@ func _debug_vdisc(args: Array) -> void:
 			main.append_output("5 秒后发送一条后台提示。请现在打开 mail、explore 或其他全屏界面。\n", false)
 			_debug_vdisc_notice.call_deferred()
 		"mail":
-			if main.mail_sys:
+			if args.size() >= 2:
+				_debug_deliver_task_mail(str(args[1]))
+			elif main.mail_sys:
 				main.mail_sys.deliver_inline_mail("MTEST-VDISC", "Vdisc 联调附件", "SYSTEM", "这是一封系统联调邮件。点击下方附件链接获取调查盘；也可输入 mail download MTEST-VDISC。", true)
 				main.append_output("联调邮件已投递。\n", false)
+		"reset":
+			if args.size() < 2:
+				main.append_output("用法: debug 114514 vdisc reset <任务ID>\n", false)
+				return
+			if main.vdisc_task_mgr.debug_reset_task(str(args[1])):
+				main.append_output("任务状态已重置：" + str(args[1]) + "\n", false)
+			else:
+				main.append_output("未知任务：" + str(args[1]) + "\n", false)
 		"give":
 			if args.size() < 2:
 				main.append_output("用法: debug 114514 vdisc give <任务ID>\n", false)
@@ -1074,7 +1084,29 @@ func _debug_vdisc(args: Array) -> void:
 				reasons.append(str(item))
 			main.append_output("判定: %s  %s\n" % ["通过" if bool(result["passed"]) else "未达标", ", ".join(reasons)], false)
 		_:
-			main.append_output("用法: debug 114514 vdisc [list|mail|give <任务ID>|check|notice]\n", false)
+			main.append_output("用法: debug 114514 vdisc [list|mail [邮件ID]|give <任务ID>|check|reset <任务ID>|notice]\n", false)
+
+func _debug_deliver_task_mail(mail_id: String) -> void:
+	if main.mail_sys == null or main.vdisc_task_mgr == null:
+		return
+	var matched: Dictionary = {}
+	for task_id in main.vdisc_task_mgr.definitions.keys():
+		var task: Dictionary = main.vdisc_task_mgr.definitions[task_id]
+		var download: Dictionary = task.get("download", {}) as Dictionary
+		if str(download.get("mail_attachment", "")) == mail_id:
+			matched = task
+			break
+	if matched.is_empty():
+		main.append_output("没有任务的附件使用邮件 ID：" + mail_id + "\n", false)
+		return
+	main.mail_sys.deliver_inline_mail(
+		mail_id,
+		str(matched.get("mail_subject", matched.get("title", mail_id))),
+		"TASK DISPATCH",
+		str(matched.get("mail_body", "任务附件已就绪，点击下方链接领取。")),
+		true
+	)
+	main.append_output("任务邮件已投递：" + mail_id + "\n", false)
 
 func _debug_vdisc_notice() -> void:
 	await main.get_tree().create_timer(5.0).timeout

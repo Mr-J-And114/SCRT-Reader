@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="AgentConfig" load_steps=2 format=3 uid="uid://b4bcww0bmnxt0"]
+[gd_resource type="Resource" script_class="AgentConfig" format=3 uid="uid://b4bcww0bmnxt0"]
 
 [ext_resource type="Script" uid="uid://dtwv8jouiscev" path="res://addons/agent/scripts/config.gd" id="1_hnoeu"]
 

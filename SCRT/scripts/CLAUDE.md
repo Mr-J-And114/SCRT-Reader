@@ -10,10 +10,10 @@
 
 | 文件 | 行数 | 用途 |
 |---|---|---|
-| command_handler.gd | 3365 | CLI 命令注册中心，含 Vdisc 下载、文件操作、上交与调试入口 |
+| command_handler.gd | 3397 | CLI 命令注册中心，含 Vdisc 下载、文件操作、上交与调试入口 |
 | main.gd | 2381 | 初始化、输入路由、模式管理、Vdisc 任务管理器及各子系统集成 |
 | latex_renderer.gd | 1720 | LaTeX 公式渲染器：Tokenizer → Parser(AST) → Layout → Image，支持分数/根号(自绘)/矩阵/上下标/希腊字母/定界符/cases 环境 |
-| decode_viewer.gd | 1456 | 密码解码 UI 覆盖层，内含 _DecodeCanvas 内部类 |
+| decode_viewer.gd | 1461 | 密码解码 UI 覆盖层，内含 _DecodeCanvas 内部类（密文输入支持 Ctrl+V 粘贴） |
 | crtml_parser.gd | 1325 | Markdown 风格标记 → BBCode 转换（含内联效果标记解析 + LaTeX [math] 公式） |
 | mail_system.gd | 958 | 收件箱系统，含 `mail download` 附件领取入口 |
 | user_manager.gd | 853 | 多用户账户系统：登录/注册/改密、个人资料、统计信息 |
@@ -33,7 +33,7 @@
 | theme_manager.gd | 517 | 4 种配色方案（绿/琥珀/蓝/白），shader 参数刷新 |
 | explore_viewer.gd | 481 | 文件树浏览面板，任务磁盘进度与判定口径一致 |
 | file_system.gd | 535 | 虚拟文件系统：路径/权限/密码/环境音、工作副本文件操作 |
-| vdisc_task_manager.gd | 624 | Vdisc 任务定义、邮件链接下载/进度弹窗、玩家副本、判定、上交、归档和存档 |
+| vdisc_task_manager.gd | 640 | Vdisc 任务定义、邮件链接下载/进度弹窗、玩家副本、判定、上交、归档和存档 |
 | ui_manager.gd | 466 | UI 初始化：背景/字体/光标/滚动条主题化 |
 | effect_system.gd | 451 | 时间轴驱动的效果编排（glitch/shake/sound/text/reboot/brightness 等） |
 | crt_shader.gd | 416 | CRT 后处理效果控制器（glitch/shake/tear/noise/blackout） |

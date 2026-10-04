@@ -28,7 +28,7 @@ CLAUDE.md  ← 你在这里（项目总览 + AI 工作规范）
 │  ├─ loading-screen-guide.md     ← 自定义加载画面制作（关键帧时间轴）
 │  ├─ camera-asset-guide.txt      ← 摄像头/CCTV 素材制作（底图/深度图/照明图）
 │  ├─ debug-mode-guide.md         ← 调试模式操作指南（输入 `debug 114514` 激活，40+ 子命令覆盖全子系统）
-│  └─ vdisc-task-system-plan.md   ← Vdisc 解密任务系统实施计划（交接文档：需求/调研索引/设计/4 阶段实施步骤）
+│  └─ vdisc-decryption-architecture.md ← Vdisc 解密系统架构（As-Built：下载/工作副本/判定/上交/归档 + Radio/Decode 接口）
 │
 ├─ SCRT/scripts/CLAUDE.md         ← 核心脚本索引（行数、模式标志、架构模式）
 ├─ SCRT/comm_system/CLAUDE.md     ← 通讯系统（对话/角色/拨号/来电/演示模式）
