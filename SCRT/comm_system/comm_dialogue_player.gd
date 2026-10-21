@@ -32,10 +32,21 @@ var _click_to_continue: bool = false
 
 ## 文本显示
 var _full_text: String = ""
+## 选项仍逐字显示，但从第一个选项起不属于 NPC 台词。
+var _speech_text_end: int = 0
 var _displayed_chars: int = 0
 var _char_timer: float = 0.0
 var _typing_speed: float = 0.04
 var _pause_timer: float = 0.0
+## 无标点结尾的最后一个正文字符需保留嘴型，避免同帧开口又闭口。
+var _speech_end_remaining: float = 0.0
+const SPEECH_END_HOLD_SECONDS: float = 0.08
+var _narration: bool = false
+const MEETING_TRANSITION_SECONDS: float = 1.4
+var _meeting_transition_remaining: float = 0.0
+var _meeting_transition_line: int = -1
+## 省略号按点显示，独立于角色语速和普通标点停顿。
+const ELLIPSIS_DOT_DELAY: float = 0.2
 
 ## 变量替换
 var _variables: Dictionary = {}
@@ -60,6 +71,8 @@ func start_dialogue(dialogue_id: String, dialogue_data: Dictionary) -> void:
 	is_skippable = dialogue_data.get("skippable", true)
 	current_line_index = -1
 	is_active = true
+	_meeting_transition_remaining = 0.0
+	_meeting_transition_line = -1
 
 	_variables = {
 		"username": _main.user_mgr.get_username() if _main and _main.user_mgr and _main.user_mgr.is_logged_in else "Operator",
@@ -73,9 +86,15 @@ func start_dialogue(dialogue_id: String, dialogue_data: Dictionary) -> void:
 func stop_dialogue(silent: bool = false) -> void:
 	if not is_active:
 		return
+	_meeting_transition_remaining = 0.0
+	if _comm_mgr and _comm_mgr._ui:
+		_comm_mgr._ui.end_meeting_transition()
 	if _comm_mgr and _comm_mgr._voice:
 		_comm_mgr._voice.stop()
 	_typing_active = false
+	_speech_end_remaining = 0.0
+	if _comm_mgr:
+		_comm_mgr._stop_speaking()
 	_waiting = false
 	_click_to_continue = false
 	is_active = false
@@ -91,6 +110,9 @@ func advance() -> void:
 	if not is_active:
 		return
 	_typing_active = false
+	_speech_end_remaining = 0.0
+	if _comm_mgr:
+		_comm_mgr._stop_speaking()
 	_waiting = false
 	_click_to_continue = false
 	_auto_next_timer = -1.0
@@ -106,12 +128,15 @@ func skip_typing() -> void:
 		if _comm_mgr and _comm_mgr._voice:
 			_comm_mgr._voice.stop()
 		_typing_active = false
+		_speech_end_remaining = 0.0
 		_displayed_chars = _full_text.length()
 		line_finished.emit(current_line_index)
 		_check_line_end_behavior()
 
 ## 用户点击继续
 func on_click() -> void:
+	if _meeting_transition_remaining > 0.0:
+		return
 	if _typing_active:
 		skip_typing()
 		return
@@ -124,6 +149,15 @@ func on_click() -> void:
 # ══════════════════════════════════════════
 func _play_current_line() -> void:
 	var line: Dictionary = current_lines[current_line_index] as Dictionary
+	if str(line.get("display_mode", "")) == "meeting" and _comm_mgr and _comm_mgr._ui \
+			and _comm_mgr._ui._display_mode == "card" and _meeting_transition_line != current_line_index:
+		_meeting_transition_line = current_line_index
+		_meeting_transition_remaining = MEETING_TRANSITION_SECONDS
+		_full_text = ""
+		_displayed_chars = 0
+		_comm_mgr._stop_speaking()
+		_comm_mgr._ui.begin_meeting_transition()
+		return
 
 	var char_id: String = str(line.get("character", ""))
 	var expression: String = str(line.get("expression", ""))
@@ -169,11 +203,14 @@ func _play_current_line() -> void:
 
 		# Meeting 模式相关字段
 		var display_mode: String = str(line.get("display_mode", ""))
-		var meeting_slot: String = str(line.get("meeting_slot", "center"))
+		var meeting_slot: String = str(line.get("meeting_slot", ""))
 		var char_anim: String = str(line.get("char_anim", ""))
 
 		if not display_mode.is_empty():
 			_comm_mgr.set_display_mode(display_mode)
+		for participant in line.get("meeting_participants", []):
+			if participant is Dictionary:
+				_comm_mgr.set_meeting_char(str(participant.get("id", "")), str(participant.get("slot", "center")))
 
 		# meeting/presentation 模式下设置角色位置
 		# 行显式声明 meeting/presentation，或当前已在会议模式（后续行仅写 meeting_slot）都生效
@@ -208,6 +245,8 @@ func _play_current_line() -> void:
 				slide_config["fit"] = str(line.get("slide_fit"))
 			if line.has("slide_align"):
 				slide_config["align"] = str(line.get("slide_align"))
+			if line.has("slide_background_alpha"):
+				slide_config["background_alpha"] = float(line["slide_background_alpha"])
 			_comm_mgr.show_presentation_slide(slide_config)
 		elif line.get("slide_hide", false) != false:
 			# JSON: "slide_hide": true  或 "slide_hide": "slide_left"（false 时不触发）
@@ -233,22 +272,40 @@ func _play_current_line() -> void:
 	elif story_action is Array:
 		for act in story_action:
 			_execute_story_action(str(act))
+	var reward: Dictionary = line.get("score_once", {})
+	if not reward.is_empty() and _main and _main.daily_dialogue_mgr:
+		_main.daily_dialogue_mgr.award_score_once(str(reward.get("id", "")),
+			int(reward.get("amount", 1)), str(reward.get("category", "daily")))
 
 	# 开始逐字显示
-	_full_text = text
+	# 中文省略号也拆成单个点；仅处理显示文本，不改动剧情原文。
+	_full_text = text.replace("…", "...")
+	_speech_text_end = _full_text.length()
+	if str(line.get("wait_for", "")).begins_with("choice:") or not line.get("choice", []).is_empty():
+		var option_marker := RegEx.new()
+		option_marker.compile("(?m)^[ \\t]*\\[[0-9]+\\]")
+		var first_option := option_marker.search(_full_text)
+		if first_option:
+			_speech_text_end = first_option.get_start()
+	_narration = bool(line.get("narration", false))
 	_displayed_chars = 0
 	_typing_active = true
 	_char_timer = 0.0
 	_pause_timer = 0.0
+	_speech_end_remaining = 0.0
 
 	if _comm_mgr:
 		if _comm_mgr._voice:
 			_typing_speed = _comm_mgr._voice.get_char_delay()
-		_comm_mgr._start_speaking()
+		# 直到实际输出可发声字符才动嘴，行首省略号也保持静止。
+		_comm_mgr._stop_speaking()
 
 ## 检查行结束后的行为
 func _check_line_end_behavior() -> void:
 	var line: Dictionary = current_lines[current_line_index] as Dictionary
+	if _comm_mgr:
+		for char_id in line.get("hide_characters_after", []):
+			_comm_mgr.hide_meeting_char(str(char_id))
 
 	if _comm_mgr:
 		_comm_mgr._stop_speaking()
@@ -343,6 +400,13 @@ func _execute_story_action(action_str: String) -> void:
 func process(delta: float) -> void:
 	if not is_active:
 		return
+	if _meeting_transition_remaining > 0.0:
+		_meeting_transition_remaining = maxf(0.0, _meeting_transition_remaining - delta)
+		_comm_mgr._ui.update_meeting_transition(1.0 - _meeting_transition_remaining / MEETING_TRANSITION_SECONDS)
+		if _meeting_transition_remaining == 0.0:
+			_comm_mgr._ui.end_meeting_transition()
+			_play_current_line()
+		return
 	if _typing_active:
 		_process_typing(delta)
 	if _auto_next_timer > 0.0:
@@ -351,14 +415,32 @@ func process(delta: float) -> void:
 			advance()
 
 func _process_typing(delta: float) -> void:
+	if _speech_end_remaining > 0.0:
+		_speech_end_remaining = maxf(0.0, _speech_end_remaining - delta)
+		if _speech_end_remaining == 0.0:
+			_finish_typing()
+		return
+	# 前一个字先显示正常间隔，标点停顿及省略号等待期间保持闭嘴。
 	if _pause_timer > 0.0:
 		_pause_timer -= delta
 		return
 	_char_timer += delta
-	if _char_timer < _typing_speed:
+	# 省略号等待较长：保留前一个字的正常显示间隔，再闭嘴等待点出现。
+	if _comm_mgr and _displayed_chars < _full_text.length() and _char_timer >= _typing_speed:
+		var next_char: String = _full_text[_displayed_chars]
+		if next_char.strip_edges().is_empty() or CommVoice.PUNCTUATION.contains(next_char):
+			_comm_mgr._stop_speaking()
+	var ellipsis_dot: bool = _is_ellipsis_dot(_displayed_chars)
+	var char_delay: float = ELLIPSIS_DOT_DELAY if ellipsis_dot else _typing_speed
+	if _char_timer < char_delay:
 		return
-	_char_timer = 0.0
+	_char_timer -= char_delay
 	if _displayed_chars < _full_text.length():
+		var is_speech: bool = not _narration and _displayed_chars < _speech_text_end
+		if not is_speech and _comm_mgr:
+			_comm_mgr._stop_speaking()
+			if _comm_mgr._voice:
+				_comm_mgr._voice.stop()
 		var ch: String = _full_text[_displayed_chars]
 		_displayed_chars += 1
 		# 跳过 BBCode 标签
@@ -368,15 +450,34 @@ func _process_typing(delta: float) -> void:
 				_displayed_chars = close_pos + 1
 				return
 		# 语音
-		if _comm_mgr:
+		if is_speech and _comm_mgr:
 			_comm_mgr._speak_char(ch)
 		# 标点停顿
-		if _comm_mgr and _comm_mgr._voice:
+		if not ellipsis_dot and _comm_mgr and _comm_mgr._voice:
 			_pause_timer = _comm_mgr._voice.get_punctuation_pause(ch)
+		if _displayed_chars >= _full_text.length() and is_speech and _comm_mgr \
+				and not ch.strip_edges().is_empty() and not CommVoice.PUNCTUATION.contains(ch):
+			_speech_end_remaining = SPEECH_END_HOLD_SECONDS
+			return
 	if _displayed_chars >= _full_text.length():
-		_typing_active = false
-		line_finished.emit(current_line_index)
-		_check_line_end_behavior()
+		_finish_typing()
+
+func _finish_typing() -> void:
+	_typing_active = false
+	line_finished.emit(current_line_index)
+	_check_line_end_behavior()
+
+## 只对连续三个及以上的点应用省略号节奏，避免影响小数、网址。
+func _is_ellipsis_dot(index: int) -> bool:
+	if index >= _full_text.length() or _full_text[index] != ".":
+		return false
+	var run_start: int = index
+	var run_end: int = index + 1
+	while run_start > 0 and _full_text[run_start - 1] == ".":
+		run_start -= 1
+	while run_end < _full_text.length() and _full_text[run_end] == ".":
+		run_end += 1
+	return run_end - run_start >= 3
 
 # ══════════════════════════════════════════
 #  查询

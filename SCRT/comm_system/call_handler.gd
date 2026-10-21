@@ -169,16 +169,36 @@ func _show_forced_connect_message() -> void:
 func _show_answer_prompt() -> void:
 	if _main == null:
 		return
-	var w_hex: String = _T.warning_hex if _T else "#ffff00"
-	var m_hex: String = _T.muted_hex if _T else "#888888"
-	var p_hex: String = _T.primary_hex if _T else "#00ff00"
-	_main.append_output("\n[color=%s]╔══════════════════════════════════════╗[/color]\n" % w_hex, false)
-	_main.append_output("[color=%s]║  INCOMING COMM -- — %s[/color]\n" % [w_hex, _pending_caller_name], false)
-	_main.append_output("[color=%s]║  输入 [color=%s]comm answer[/color] 接听[/color]\n" % [m_hex, p_hex], false)
-	_main.append_output("[color=%s]║  输入 [color=%s]comm reject[/color] 拒绝[/color]\n" % [m_hex, p_hex], false)
-	if not _pending_reject_consequence.is_empty():
-		_main.append_output("[color=%s]║  [!] 拒绝可能影响后续剧情[/color]\n" % w_hex, false)
-	_main.append_output("[color=%s]╚══════════════════════════════════════╝[/color]\n\n" % w_hex, false)
+	_main.append_output(format_answer_prompt(_pending_caller_name, _T, not _pending_reject_consequence.is_empty()), false)
+
+## One complete BBCode block; every row includes its own closing border.
+static func format_answer_prompt(caller: String, theme, warn_reject: bool = false) -> String:
+	var p: String = theme.primary_hex if theme else "#99ff99"
+	var m: String = theme.muted_hex if theme else "#8cbf8c"
+	var w: String = theme.warning_hex if theme else "#ffd966"
+	var rows: Array[String] = ["来电：" + caller, "输入 comm answer 接听", "输入 comm reject 拒绝"]
+	if warn_reject:
+		rows.append("[!] 拒绝可能影响后续剧情")
+	var width: int = 30
+	for row in rows:
+		width = maxi(width, _prompt_columns(row))
+	var result: String = "\n[color=%s]┌%s┐[/color]\n" % [p, "─".repeat(width + 2)]
+	for index in rows.size():
+		var row: String = rows[index]
+		var text: String = row.replace("[", "[lb]")
+		if index == 1 or index == 2:
+			var command: String = "comm answer" if index == 1 else "comm reject"
+			text = text.replace(command, "[/color][color=%s]%s[/color][color=%s]" % [p, command, m])
+		var color: String = p if index == 0 else w if index == 3 else m
+		result += "[color=%s]│[/color] [color=%s]%s[/color]%s [color=%s]│[/color]\n" % [p, color, text, " ".repeat(width - _prompt_columns(row)), p]
+	result += "[color=%s]└%s┘[/color]\n\n" % [p, "─".repeat(width + 2)]
+	return result
+
+static func _prompt_columns(text: String) -> int:
+	var columns: int = 0
+	for index in text.length():
+		columns += 2 if text.unicode_at(index) >= 0x2E80 else 1
+	return columns
 
 # ══════════════════════════════════════════
 #  玩家操作

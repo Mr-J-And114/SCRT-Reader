@@ -54,6 +54,7 @@ func get_theme_colors() -> Dictionary:
 		return {}
 	return {
 		"primary": str(_T.primary_hex),
+		"bg": "#" + _T.bg.to_html(false) if "bg" in _T else "#031003",
 		"muted": str(_T.muted_hex),
 		"error": str(_T.error_hex),
 		"warning": str(_T.warning_hex),
@@ -322,6 +323,44 @@ func load_data(key: String, default_value: Variant = null) -> Variant:
 	if _pkg_mgr:
 		return _pkg_mgr._api_load_mod_data(_mod_id, key, default_value)
 	return default_value
+
+## 与 save_data 相同的账号作用域，额外返回落盘结果供关键流程确认。
+func save_data_checked(key: String, value: Variant) -> bool:
+	if _pkg_mgr == null or _user_mgr == null or not _user_mgr.is_logged_in:
+		return false
+	var previous: Dictionary = _pkg_mgr.mod_data_store.duplicate(true)
+	var old_profile: Dictionary = _user_mgr.current_user.duplicate(true)
+	if not _pkg_mgr.mod_data_store.has(_mod_id):
+		_pkg_mgr.mod_data_store[_mod_id] = {}
+	_pkg_mgr.mod_data_store[_mod_id][key] = value
+	_user_mgr.current_user["mod_data_store"] = _pkg_mgr.mod_data_store.duplicate(true)
+	var result: Dictionary = _user_mgr._save_current_profile()
+	if result.get("status", "") == "saved":
+		return true
+	_pkg_mgr.mod_data_store = previous
+	_user_mgr.current_user = old_profile
+	return false
+
+## 查询当前个人任务盘的通关回执，不以模组本地标记代替任务状态。
+func is_task_completed() -> bool:
+	if _main == null or _main.vdisc_task_mgr == null:
+		return false
+	return _main.vdisc_task_mgr.is_module_task_completed(_mod_id)
+
+func record_task_play() -> bool:
+	return _main != null and _main.vdisc_task_mgr != null and _main.vdisc_task_mgr.record_module_play(_mod_id)
+
+## 为当前已通关任务生成账号专属、不可提交的实体备份。
+func create_task_backup() -> Dictionary:
+	if _main == null or _main.vdisc_task_mgr == null:
+		return {"ok": false, "message": "任务系统不可用。"}
+	return _main.vdisc_task_mgr.create_module_backup(_mod_id)
+
+## 通关模块通过任务系统公开文件；文件与回执一并保存到当前账号。
+func publish_task_reward(files: Dictionary, receipt: Dictionary) -> bool:
+	if _main == null or _main.vdisc_task_mgr == null:
+		return false
+	return _main.vdisc_task_mgr.publish_module_reward(_mod_id, files, receipt)
 
 ## ★ NEW: 删除模组数据中的某个 key
 func delete_data(key: String) -> void:
@@ -625,6 +664,11 @@ func add_ui_node(node: Control) -> void:
 	var container: Control = get_mod_container()
 	if container:
 		container.add_child(node)
+
+## 全屏小游戏显式持有终端遮挡；卸载时宿主自动释放。
+func set_terminal_covered(covered: bool) -> void:
+	if _pkg_mgr and _pkg_mgr.has_method("_api_set_terminal_covered"):
+		_pkg_mgr._api_set_terminal_covered(_mod_id, covered)
 
 ## 移除模组容器中的子节点
 func remove_ui_node(node: Control) -> void:
@@ -1073,3 +1117,14 @@ func env_get_anomalies() -> Array:
 	if _main and _main.env_monitor:
 		return _main.env_monitor.get_pending_anomalies()
 	return []
+
+## 读取宿主既有音效与动态效果偏好，模块自行管理短音效生命周期。
+func get_feedback_options() -> Dictionary:
+	var options := {"sound_enabled":true,"volume_db":-12.0,"reduced_motion":false}
+	if _main==null: return options
+	if _main.ui_sound:
+		options.sound_enabled = _main.ui_sound.enabled
+		options.volume_db = _main.ui_sound.volume_db
+	if _main.settings_mgr:
+		options.reduced_motion = _main.settings_mgr.get_bool("effect.photosensitive") or _main.settings_mgr.get_string("effect.level")=="off"
+	return options

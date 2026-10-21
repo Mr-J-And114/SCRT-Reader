@@ -9,6 +9,7 @@ extends RefCounted
 #  模块引用
 # ══════════════════════════════════════════
 var main = null
+var _inline_images: Array[Dictionary] = []
 var fs: FileSystem = null
 var T = null
 
@@ -198,6 +199,7 @@ func _create_page_rtl(theme_colors) -> RichTextLabel:
 	rtl.scroll_active = true
 	rtl.scroll_following = false
 	rtl.selection_enabled = true
+	UIManager.setup_text_selection(rtl)
 	rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rtl.size_flags_stretch_ratio = 1.0
@@ -224,6 +226,7 @@ func _create_page_rtl(theme_colors) -> RichTextLabel:
 #  打开查看器
 # ══════════════════════════════════════════
 func open(p_type: String, p_pages: Array[Dictionary], p_title: String = "", p_on_exit: Callable = Callable()) -> void:
+	_inline_images = main.crtml.get_inline_images() if main.crtml != null else []
 	if p_pages.is_empty():
 		return
 
@@ -254,7 +257,7 @@ func open(p_type: String, p_pages: Array[Dictionary], p_title: String = "", p_on
 	main.output_text.text = ""
 
 	# 更新状态栏
-	main.path_label.text = "DOCUMENT VIEWER | " + p_title + " | Q/Esc 退出"
+	main.path_label.text = "DOCUMENT VIEWER | " + p_title + (" | Q/Esc 返回收件箱 · Alt+←→ 上一封/下一封" if main.mail_sys != null and main.mail_sys._reading_mail else " | Q/Esc 退出")
 
 	# ★ 确保 overlay 在最顶层接收鼠标事件
 	var root_control: Control = main as Control
@@ -292,9 +295,9 @@ func close() -> void:
 	main._update_status_bar()
 	main._refocus_input.call_deferred()
 
-	# 回调
-	if _on_exit_callback.is_valid():
-		_on_exit_callback.call()
+	# 先清理本次阅读，再回调；回调可能立即用同一查看器打开收件箱。
+	var exit_callback := _on_exit_callback
+	_on_exit_callback = Callable()
 
 	# 清理数据（不销毁节点，下次复用）
 	pages.clear()
@@ -302,6 +305,8 @@ func close() -> void:
 	total_pages = 0
 	viewer_type = ""
 	viewer_title = ""
+	if exit_callback.is_valid():
+		exit_callback.call()
 
 # ══════════════════════════════════════════
 #  ★ 获取当前活动的页面 RichTextLabel
@@ -625,7 +630,7 @@ func _append_line_with_images(rtl: RichTextLabel, line: String) -> void:
 		rtl.append_text(line)
 		return
 
-	var images: Array[Dictionary] = crtml_ref.get_inline_images()
+	var images: Array[Dictionary] = _inline_images
 
 	var remaining: String = line
 	while true:

@@ -6,6 +6,7 @@ extends RefCounted
 # ══════════════════════════════════════════
 #  引用
 # ══════════════════════════════════════════
+var _inline_images: Array[Dictionary] = []
 var main: Control = null
 var fs: FileSystem = null
 var T: Variant = null
@@ -106,6 +107,7 @@ func _ensure_overlay() -> void:
 	content_rtl.scroll_active = true
 	content_rtl.scroll_following = false
 	content_rtl.selection_enabled = true
+	UIManager.setup_text_selection(content_rtl)
 	content_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_rtl.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -192,7 +194,7 @@ func open(p_title: String, p_header: Dictionary, p_body: String, p_on_exit: Call
 	_cached_output_text = main.output_text.text
 	main.output_text.text = ""
 
-	main.path_label.text = "EMAIL VIEWER | " + viewer_title + " | Q/Esc 退出  ↑↓/PgUp/PgDn 滚动"
+	main.path_label.text = "EMAIL VIEWER | " + viewer_title + (" | Q/Esc 返回收件箱 | Alt+←→ 上一封/下一封" if main.mail_sys != null and main.mail_sys._reading_mail else " | Q/Esc 退出") + "  ↑↓/PgUp/PgDn 滚动"
 
 	# ★ 确保 overlay 在最顶层接收鼠标事件
 	var root_control: Control = main as Control
@@ -449,6 +451,7 @@ func _build_email_bbcode() -> String:
 		var parsed: String = _email_body
 		if main.crtml != null:
 			parsed = main.crtml.parse(_email_body)
+			_inline_images = main.crtml.get_inline_images()
 		if main.user_mgr != null and main.user_mgr.is_logged_in:
 			parsed = parsed.replace("{username}", main.user_mgr.get_username())
 		lines.append(parsed)
@@ -732,7 +735,7 @@ func _append_line_with_images(rtl: RichTextLabel, line: String) -> void:
 		rtl.append_text(line)
 		return
 
-	var images: Array[Dictionary] = crtml_ref.get_inline_images()
+	var images: Array[Dictionary] = _inline_images
 	var remaining: String = line
 	while true:
 		var start_pos: int = remaining.find("\u0001IMG:")
@@ -776,7 +779,7 @@ func _build_nav_text() -> String:
 	var m: String = T.muted_hex if T != null else "#888888"
 	var parts: Array[String] = []
 	parts.append("[color=" + p + "]↑↓/PgUp/PgDn 滚动[/color]")
-	parts.append("    [color=" + m + "][Q/Esc 退出][/color]")
+	parts.append("    [color=" + m + "]" + ("[Q/Esc 返回收件箱]  [Alt+←→ 上一封/下一封]" if main.mail_sys != null and main.mail_sys._reading_mail else "[Q/Esc 退出]") + "[/color]")
 	return "  ".join(parts)
 
 # ═════════════════════════════════════════════

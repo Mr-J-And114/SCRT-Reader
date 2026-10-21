@@ -1,0 +1,11 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://preview/cover_preview.tscn" id="1_cover"]
+[ext_resource type="Script" path="res://preview/startup.gd" id="2_startup"]
+
+[node name="Startup" unique_id=1511564918 instance=ExtResource("1_cover")]
+script = ExtResource("2_startup")
+preview_mode = false
+
+[node name="BackgroundLogo" parent="Background/CenterContainer" index="0"]
+visible = true

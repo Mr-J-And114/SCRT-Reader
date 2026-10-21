@@ -110,6 +110,31 @@ func _resolve_media_path(media_path: String) -> String:
 func set_latex_renderer(latex: LatexRenderer) -> void:
 	_latex = latex
 
+## 正文打开前逐条准备公式；parse 保持同步，缓存准备不改其图片列表。
+func prepare_math(raw: String, is_current: Callable = Callable()) -> bool:
+	if _latex == null or not raw.contains("[math"):
+		return true
+	var raw_blocks := RegEx.new()
+	raw_blocks.compile("(?s)@@.*?@@")
+	var source: String = raw_blocks.sub(raw, "", true)
+	var math := RegEx.new()
+	math.compile("(?s)\\[math( block)?\\](.*?)\\[/math\\]")
+	var formulas: Array[RegExMatch] = math.search_all(source)
+	while true:
+		var color: Color = T.primary if T != null else LatexRenderer.DEFAULT_COLOR
+		_latex.set_default_color(color)
+		for formula in formulas:
+			if is_current.is_valid() and not is_current.call():
+				return false
+			await _latex.render_to_texture_colored(formula.get_string(2), 22 if not formula.get_string(1).is_empty() else 18, color)
+		if is_current.is_valid() and not is_current.call():
+			return false
+		# 等待 GPU 期间主题可变；按最新颜色重建，不查询旧颜色的缓存。
+		if T == null or color.is_equal_approx(T.primary):
+			_latex.set_default_color(color)
+			return true
+	return false
+
 # ============================================================
 # 主解析函数：将 CRT-ML 转换为 BBCode
 # ============================================================
@@ -122,7 +147,7 @@ func parse(raw_text: String) -> String:
 
 	# 第0步：保护 @@...@@ 原始文本块
 	_raw_blocks.clear()
-	var protected_text: String = _protect_raw_blocks(raw_text)
+	var protected_text: String = _parse_math(_protect_raw_blocks(raw_text))
 
 	var lines: PackedStringArray = protected_text.split("\n")
 	var result_lines: Array[String] = []
@@ -290,7 +315,6 @@ func _process_inline(text: String) -> String:
 	result = _parse_inline_code(result)
 
 	# 12. ★ LaTeX 公式 [math]...[/math] 和 [math block]...[/math]
-	result = _parse_math(result)
 
 	return result
 
@@ -718,7 +742,7 @@ func _build_audio_inline(media_path: String, params: String) -> String:
 		return "[url=" + cmd_toggle + "][color=" + s + "]▶/⏸[/color][/url] [color=" + m + "]" + file_name + "[/color]  [url=" + cmd_stop + "][color=" + w + "]⏹[/color][/url]  [url=" + cmd_scope + "][color=" + info_c + "]⟫ 示波器[/color][/url]"
 
 	# 标准模式：带进度条样式的播放器条
-	var bar: String = "░".repeat(20)
+	var bar: String = Typewriter.progress_cells(0.0)
 	var lines: Array[String] = []
 
 	# 顶部：文件名
@@ -777,7 +801,7 @@ func _build_video_placeholder(media_path: String, params: String) -> String:
 	var ctrl_line: String = "[color=" + m + "]│ [/color]"
 	ctrl_line += "[url=" + cmd_play + "][color=" + s + "] ▶ 播放 [/color][/url]"
 	ctrl_line += "[url=" + cmd_stop + "][color=" + w + "] ⏹ 停止 [/color][/url]"
-	ctrl_line += " [color=" + m + "]░░░░░░░░░░░░░░░░░░░░[/color]"
+	ctrl_line += " [color=" + m + "]" + Typewriter.progress_cells(0.0) + "[/color]"
 	ctrl_line += " [color=" + m + "]--:--/--:--[/color]"
 	lines.append(ctrl_line)
 

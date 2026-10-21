@@ -1,37 +1,7 @@
-# Godot generated caches (regenerated when the project opens)
-**/.godot/
-
-# Local player progress and editor / assistant configuration
-SCRT/saves/
-.claude/settings.local.json
-
-# Local credentials and environment files
-**/export_credentials.cfg
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-
-# Temporary office and operating system files
-~$*
-Thumbs.db
-.DS_Store
-
-# Local exported builds
-export/
-exports/
-
-# Python caches and local diagnostics
+.godot/
+*.import
 __pycache__/
-*.py[cod]
-/ErrorReports/
-/diagnostics/
-
-# Local CAD / worldbuilding workspace; delivered drawings live outside this repo
-/docs/upgrade-plans/maps/**
-!/docs/upgrade-plans/maps/README.md
-/cad-*.py
-/cad-*.js
-/cad-*.json
-/review-natural-settings.py
+.sync-local/
+SCRT/saves/
+SCRT/vdisc/
+*.log

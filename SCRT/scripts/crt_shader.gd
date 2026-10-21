@@ -9,6 +9,17 @@ extends ColorRect
 #  缓存 ShaderMaterial 引用
 # ══════════════════════════════════════════
 var _mat: ShaderMaterial = null
+var _settings_base: Dictionary = {}
+
+func apply_effect_settings(settings: EffectSettings) -> void:
+	if _mat == null or settings == null:
+		return
+	for key in ["flicker_intensity", "noise_intensity", "scanline_speed"]:
+		if not _settings_base.has(key):
+			_settings_base[key] = _mat.get_shader_parameter(key)
+	_mat.set_shader_parameter("flicker_intensity", settings.apply_flicker_intensity(float(_settings_base["flicker_intensity"])))
+	_mat.set_shader_parameter("noise_intensity", settings.apply_intensity(float(_settings_base["noise_intensity"])))
+	_mat.set_shader_parameter("scanline_speed", 0.0 if settings.is_off() else _settings_base["scanline_speed"])
 
 # ══════════════════════════════════════════
 #  活跃 Tween 引用（用于取消/覆盖）
@@ -19,6 +30,15 @@ var _boot_tween: Tween = null
 var _brightness_tween: Tween = null
 var _noise_burst_tween: Tween = null
 var _tear_tween: Tween = null
+
+# 警告文字放在 CRT Shader 前绘制，覆盖各查看器并保留显像管处理。
+var _warning_root: Control = null
+var _warning_label: Label = null
+var _warning_dimmer: ColorRect = null
+var _warning_elapsed: float = 0.0
+var _warning_duration: float = 0.0
+var _warning_settings: EffectSettings = null
+const WARNING_BLINK_PERIOD: float = 1.0
 
 # ══════════════════════════════════════════
 #  震动状态
@@ -43,6 +63,8 @@ func _ready() -> void:
 	get_tree().root.size_changed.connect(_update_size)
 	# 缓存 ShaderMaterial
 	if material is ShaderMaterial:
+		# 封面与 Main 复用同一场景材质资源，设置必须只作用于当前实例。
+		material = material.duplicate()
 		_mat = material as ShaderMaterial
 	else:
 		push_warning("[CRTShader] ColorRect 没有 ShaderMaterial！")
@@ -51,8 +73,21 @@ func _update_size() -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	set_deferred("position", Vector2.ZERO)
 	set_deferred("size", viewport_size)
+	if _warning_root:
+		_warning_root.size = viewport_size
+		_warning_label.add_theme_font_size_override("font_size", int(clampf(viewport_size.x * 0.075, 40.0, 144.0) * 2.0))
 
 func _process(delta: float) -> void:
+	if _warning_root and _warning_root.visible:
+		_warning_elapsed += delta
+		if _warning_elapsed >= _warning_duration:
+			stop_warning()
+			effect_finished.emit("warning")
+		else:
+			var blink: bool = _warning_settings == null or (not _warning_settings.photosensitive_mode and not _warning_settings.is_off())
+			var period: float = WARNING_BLINK_PERIOD * (1.5 if _warning_settings and _warning_settings.is_mild() else 1.0)
+			_warning_label.visible = not blink or fmod(_warning_elapsed, period) < period * 0.5
+			_warning_dimmer.visible = _warning_label.visible
 	# 屏幕震动：每帧随机偏移
 	if _shake_active:
 		# ★ 持续模式（duration >= 90）不计时
@@ -88,6 +123,53 @@ func _get_param(param_name: String, default: Variant = 0.0) -> Variant:
 
 func get_shader_material() -> ShaderMaterial:
 	return _mat
+
+## 红色大写 WARNING，亮起时全屏叠加25%黑色，默认闪烁五秒。
+func play_warning(duration: float = 5.0, color: Color = Color.RED, settings: EffectSettings = null) -> void:
+	if duration <= 0.0:
+		stop_warning()
+		return
+	if _warning_root == null:
+		_warning_root = Control.new()
+		_warning_root.name = "WarningOverlay"
+		_warning_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_warning_root.focus_mode = Control.FOCUS_NONE
+		get_parent().add_child(_warning_root)
+		# 同属 CRTEffect CanvasLayer，必须先于屏幕采样着色器绘制。
+		get_parent().move_child(_warning_root, get_index())
+		_warning_dimmer = ColorRect.new()
+		_warning_dimmer.color = Color(0.0, 0.0, 0.0, 0.25)
+		_warning_dimmer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_warning_root.add_child(_warning_dimmer)
+		_warning_dimmer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_warning_label = Label.new()
+		_warning_label.text = "WARNING"
+		_warning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_warning_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_warning_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var host: Node = get_parent().get_parent()
+		var output: RichTextLabel = host.get("output_text") as RichTextLabel
+		if output:
+			_warning_label.add_theme_font_override("font", output.get_theme_font("bold_font"))
+		_warning_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.65))
+		_warning_label.add_theme_constant_override("shadow_offset_x", 2)
+		_warning_label.add_theme_constant_override("shadow_offset_y", 2)
+		_warning_root.add_child(_warning_label)
+		_warning_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_warning_settings = settings
+	_warning_elapsed = 0.0
+	_warning_duration = duration
+	_warning_label.add_theme_color_override("font_color", color)
+	_warning_label.visible = true
+	_warning_dimmer.visible = true
+	_warning_root.visible = true
+	_update_size()
+
+func stop_warning() -> void:
+	_warning_duration = 0.0
+	_warning_settings = null
+	if _warning_root:
+		_warning_root.visible = false
 
 # ══════════════════════════════════════════
 #  效果1：Glitch 故障效果
@@ -383,6 +465,7 @@ func play_reboot(shutdown_dur: float = 0.6, blackout_dur: float = 0.8, boot_dur:
 #  复位：将所有效果参数恢复默认
 # ══════════════════════════════════════════
 func reset_all_effects() -> void:
+	stop_warning()
 	_kill_tween("_glitch_tween")
 	_kill_tween("_shake_tween")
 	_kill_tween("_boot_tween")

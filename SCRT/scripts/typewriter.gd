@@ -5,16 +5,42 @@
 # ============================================================
 class_name Typewriter
 extends Node
-const PROGRESS_BAR_WIDTH: int = 30
+const PROGRESS_BAR_WIDTH: int = 40
 const PROGRESS_FILLED: String = "█"
+const PROGRESS_EMPTY: String = "░"
+
+## 默认进度条的唯一字符样式；媒体播放等无标题场景也使用此函数。
+static func progress_cells(progress: float, phase: float = 0.0) -> String:
+	if progress < 0.0:
+		var head: int = int((sin(phase) * 0.5 + 0.5) * (PROGRESS_BAR_WIDTH - 4))
+		return "[" + PROGRESS_EMPTY.repeat(head) + PROGRESS_FILLED.repeat(4) + PROGRESS_EMPTY.repeat(PROGRESS_BAR_WIDTH - head - 4) + "]"
+	var filled: int = int(clampf(progress, 0.0, 1.0) * PROGRESS_BAR_WIDTH)
+	return "[" + PROGRESS_FILLED.repeat(filled) + PROGRESS_EMPTY.repeat(PROGRESS_BAR_WIDTH - filled) + "]"
 
 ## 终端及弹窗共用的字符进度条；负值表示总长度未知。
-static func format_progress_bar(progress: float, caption: String = "加载中") -> String:
+static func format_progress_bar(progress: float, caption: String = "加载中", show_percent: bool = true) -> String:
 	if progress < 0.0:
 		return caption + " [等待数据长度]"
 	var ratio: float = clampf(progress, 0.0, 1.0)
-	var filled: int = int(ratio * PROGRESS_BAR_WIDTH)
-	return "%s [%s%s] %3d%%" % [caption, PROGRESS_FILLED.repeat(filled), " ".repeat(PROGRESS_BAR_WIDTH - filled), int(ratio * 100.0)]
+	var prefix: String = caption + " " if not caption.is_empty() else ""
+	var suffix: String = " %3d%%" % int(ratio * 100.0) if show_percent else (" 完成" if ratio >= 1.0 else "")
+	return prefix + progress_cells(ratio) + suffix
+
+## 复用磁盘载入画面的配色：条形用 muted，标题和百分比用 primary。
+static func progress_bbcode(progress: float, caption: String, primary: String, muted: String, show_percent: bool = true) -> String:
+	var text: String = format_progress_bar(progress, caption, show_percent)
+	if progress < 0.0:
+		return "[color=" + primary + "]" + text + "[/color]"
+	var cells: String = progress_cells(progress)
+	var offset: int = text.find(cells)
+	return "[color=" + primary + "]" + text.substr(0, offset) + "[/color][color=" + muted + "]" + cells + "[/color][color=" + primary + "]" + text.substr(offset + cells.length()) + "[/color]"
+
+## 原位替换进度行，保留其后异步追加的通知或关键帧文字。
+static func replace_progress_line(source: String, previous: String, current: String) -> String:
+	var index: int = source.rfind(previous) if not previous.is_empty() else -1
+	if index < 0:
+		return source + current
+	return source.substr(0, index) + current + source.substr(index + previous.length())
 
 # ============================================================
 # UI 节点引用（由 main.gd 初始化时传入）
@@ -348,28 +374,37 @@ func show_progress_bar(file_size: int, speed_override: float = -1.0) -> void:
 
 	var base_delay: float = clamp(float(file_size) / 5000.0, 0.01, 0.08)
 	base_delay /= speed
+	# 从原 30 格扫描条换为 40 格载入样式，保持同一文件原有的等待时长。
+	base_delay *= 30.0 / PROGRESS_BAR_WIDTH
 
 	var bar_color: String = T.primary_hex if T != null else "#33FF33"
+	var muted: String = T.muted_hex if T != null else "#888888"
 
 	if output_text.get_parsed_text().length() > 0:
 		output_text.append_text("\n")
 
-	output_text.append_text("[color=" + bar_color + "]加载中 [[/color]")
+	var line: String = progress_bbcode(0.0, "加载中", bar_color, muted, false) + "\n"
+	var paragraph: int = maxi(0, output_text.get_paragraph_count() - 1)
+	output_text.append_text(line)
 
 	for i in range(bar_width):
 		while main_ref and main_ref.is_terminal_covered():
 			await get_tree().process_frame
 		if instant:
-			var remaining: int = bar_width - i
-			output_text.append_text("[color=" + bar_color + "]" + PROGRESS_FILLED.repeat(remaining) + "[/color]")
 			break
-		output_text.append_text("[color=" + bar_color + "]" + PROGRESS_FILLED + "[/color]")
+		var next_line: String = progress_bbcode(float(i + 1) / bar_width, "加载中", bar_color, muted, false) + "\n"
+		# 不重写 text 属性：append_text 的内部内容可能含旧记录、图片或链接。
+		output_text.remove_paragraph(paragraph)
+		paragraph = maxi(0, output_text.get_paragraph_count() - 1)
+		output_text.append_text(next_line)
 		_do_scroll()
 
 		var jitter: float = randf_range(0.7, 1.5)
 		await get_tree().create_timer(base_delay * jitter).timeout
 
-	output_text.append_text("[color=" + bar_color + "]] 完成[/color]\n")
+	var completed_line: String = progress_bbcode(1.0, "加载中", bar_color, muted, false) + "\n"
+	output_text.remove_paragraph(paragraph)
+	output_text.append_text(completed_line)
 	_do_scroll()
 	progress_completed.emit()
 
@@ -387,6 +422,8 @@ func process_scroll() -> void:
 			_scroll_delay -= 1
 			return
 		_needs_scroll = false
+		if main_ref != null and not main_ref._follow_terminal:
+			return
 		var v_scroll: VScrollBar = scroll_container.get_v_scroll_bar()
 		if v_scroll:
 			scroll_container.scroll_vertical = int(v_scroll.max_value)

@@ -280,6 +280,9 @@ func _exec_single(raw: String, ctx: Dictionary) -> void:
 		"level_up":     _act_level_up(param)
 		"sound":        _act_sound(param)
 		"text":         _act_text(param)
+		"warning":
+			if main and main.has_method("trigger_warning"):
+				main.trigger_warning(param.to_float() if param.is_valid_float() else 5.0)
 		"redirect":     _act_redirect(param)
 		"glitch":       _act_glitch(param)
 		"shake":        _act_shake(param)

@@ -7,6 +7,134 @@ extends RefCounted
 
 # ★ Bold 字体路径常量（使用 SemiBold 替代伪粗体，防止发光过亮）
 const BOLD_FONT_PATH := "res://fonts/SarasaMonoSC-SemiBold.ttf"
+const TERMINAL_FONT := preload("res://fonts/SarasaMonoSC-Regular.ttf")
+const TERMINAL_BOLD := preload("res://fonts/SarasaMonoSC-SemiBold.ttf")
+
+## 自绘／Label 的纯文本终端标记；用于 BBCode 时须先转义方括号。
+static func terminal_status(tag: String, label: String) -> String:
+	return "[%s] %s" % [tag, label]
+
+static func terminal_section(title: String) -> String:
+	return "[ %s ]" % title
+
+## 玩家控件共同皮肤；独立覆盖层也使用，避免原生默认蓝选区。
+static func create_terminal_theme(colors = null, font_size: int = 20) -> Theme:
+	var t = colors if colors != null else ThemeManager.current
+	var skin := Theme.new()
+	skin.default_font = TERMINAL_FONT
+	skin.default_font_size = font_size
+	var primary: Color = t.primary
+	var palette := {}
+	for token in ["primary", "secondary", "muted", "dim", "success", "warning", "error", "info", "border"]:
+		palette[token] = t.get(token)
+	skin.set_meta("terminal_palette", palette)
+	for type in ["Label", "Button", "LineEdit", "TextEdit", "RichTextLabel", "PopupMenu"]:
+		skin.set_color("font_color", type, primary)
+		skin.set_color("font_disabled_color", type, t.dim)
+		skin.set_color("font_selected_color", type, primary)
+		skin.set_color("selection_color", type, Color(primary, 0.30))
+		skin.set_color("caret_color", type, primary)
+		skin.set_color("font_placeholder_color", type, Color(primary, 0.35))
+	for type in ["LineEdit", "TextEdit"]:
+		for state in ["normal", "read_only"]:
+			skin.set_stylebox(state, type, terminal_panel(t, true))
+		skin.set_stylebox("focus", type, terminal_focus(t))
+	for name in ["normal_font", "italics_font", "mono_font"]:
+		skin.set_font(name, "RichTextLabel", TERMINAL_FONT)
+	for name in ["bold_font", "bold_italics_font"]:
+		skin.set_font(name, "RichTextLabel", TERMINAL_BOLD)
+	skin.set_color("default_color", "RichTextLabel", primary)
+	skin.set_stylebox("normal", "RichTextLabel", terminal_panel(t))
+	skin.set_stylebox("focus", "RichTextLabel", terminal_focus(t))
+	for type in ["Panel", "PanelContainer"]:
+		skin.set_stylebox("panel", type, terminal_panel(t))
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		var style := terminal_panel(t, true)
+		var active: bool = state in ["hover", "pressed", "hover_pressed"]
+		style.bg_color = Color(primary, 0.20 if active else (0.0 if state == "disabled" else 0.08))
+		style.border_color = Color(primary, 0.8 if active else 0.35)
+		skin.set_stylebox(state, "Button", style)
+	for state in ["font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		skin.set_color(state, "Button", primary)
+	skin.set_stylebox("focus", "Button", terminal_focus(t))
+	var menu_style := terminal_panel(t, true)
+	menu_style.bg_color = Color(t.bg, 0.12)
+	skin.set_stylebox("panel", "PopupMenu", menu_style)
+	var menu_hover := terminal_panel(t)
+	menu_hover.bg_color = Color(primary, 0.20)
+	skin.set_stylebox("hover", "PopupMenu", menu_hover)
+	skin.set_color("font_hover_color", "PopupMenu", primary)
+	for type in ["VScrollBar", "HScrollBar"]:
+		skin.set_stylebox("scroll", type, terminal_panel(t))
+		for state in ["grabber", "grabber_highlight", "grabber_pressed"]:
+			var grab := terminal_panel(t)
+			grab.bg_color = Color(primary, 0.4 if state == "grabber" else 0.6)
+			grab.set_content_margin_all(3)
+			skin.set_stylebox(state, type, grab)
+	return skin
+
+static func terminal_panel(colors = null, border: bool = false) -> StyleBoxFlat:
+	var t = colors if colors != null else ThemeManager.current
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = t.border
+	style.set_border_width_all(1 if border else 0)
+	style.set_content_margin_all(8 if border else 0)
+	return style
+
+static func terminal_focus(colors = null) -> StyleBoxFlat:
+	var t = colors if colors != null else ThemeManager.current
+	var style := terminal_panel(t, true)
+	style.border_color = Color(t.primary, 0.8)
+	style.set_content_margin_all(0)
+	return style
+
+static func apply_terminal_theme(root: Control, font_size: int = 0) -> void:
+	var base_size := font_size if font_size > 0 else root.get_theme_font_size("font_size")
+	root.theme = create_terminal_theme(ThemeManager.current, base_size)
+
+static func style_terminal_button(button: Button, colors = null) -> void:
+	var t = colors if colors != null else ThemeManager.current
+	var skin := create_terminal_theme(t, button.get_theme_font_size("font_size"))
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		button.add_theme_stylebox_override(state, skin.get_stylebox(state, "Button"))
+	for name in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color", "font_disabled_color"]:
+		button.add_theme_color_override(name, skin.get_color(name, "Button"))
+
+static func setup_text_selection(control: Control, colors = null) -> void:
+	var t = colors if colors != null else ThemeManager.current
+	control.add_theme_color_override("selection_color", Color(t.primary, 0.30))
+	control.add_theme_color_override("font_selected_color", t.primary)
+	if control.has_method("get_menu"):
+		var menu: PopupMenu = control.call("get_menu")
+		menu.theme = create_terminal_theme(t, control.get_theme_font_size("font_size"))
+
+## 刷新已创建的覆盖层及本地覆盖值；不改语义色，也不触碰背景材质。
+static func refresh_terminal_tree(node: Node, previous_palette: Dictionary) -> void:
+	var t = ThemeManager.current
+	if node is Control:
+		if node.theme != null and node.theme.has_meta("terminal_palette"):
+			apply_terminal_theme(node, node.theme.default_font_size)
+		for name in ["font_color", "default_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color", "font_disabled_color", "font_placeholder_color", "caret_color"]:
+			if node.has_theme_color_override(name):
+				node.add_theme_color_override(name, _refresh_semantic_color(node.get_theme_color(name), previous_palette, t))
+		for name in ["panel", "normal", "hover", "pressed", "hover_pressed", "disabled", "focus", "read_only"]:
+			if node.has_theme_stylebox_override(name):
+				var style := node.get_theme_stylebox(name) as StyleBoxFlat
+				if style:
+					style.bg_color = _refresh_semantic_color(style.bg_color, previous_palette, t)
+					style.border_color = _refresh_semantic_color(style.border_color, previous_palette, t)
+		if node is RichTextLabel or node is LineEdit or node is TextEdit:
+			setup_text_selection(node, t)
+	for child in node.get_children():
+		refresh_terminal_tree(child, previous_palette)
+
+static func _refresh_semantic_color(color: Color, previous_palette: Dictionary, colors) -> Color:
+	for token in previous_palette:
+		var previous: Color = previous_palette[token]
+		if Vector3(color.r, color.g, color.b).is_equal_approx(Vector3(previous.r, previous.g, previous.b)):
+			return Color(colors.get(token), color.a)
+	return color
 
 # ============================================================
 # 背景初始化
@@ -72,6 +200,7 @@ static func setup_background(parent: Control, game_root_dir: String) -> TextureR
 # 主内容区透明化
 # ============================================================
 static func setup_main_content(parent: Control, main_content: Control) -> void:
+	apply_terminal_theme(parent)
 	if main_content == null:
 		return
 	parent.move_child(main_content, parent.get_child_count() - 1)
@@ -158,6 +287,8 @@ static func setup_input_frame(input_frame: PanelContainer) -> void:
 # 输入框样式
 # ============================================================
 static func setup_input_field(input_field: LineEdit) -> void:
+	setup_ime_guard(input_field)
+	setup_text_selection(input_field)
 	var t := ThemeManager.current
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0, 0, 0, 0)
@@ -176,11 +307,43 @@ static func setup_input_field(input_field: LineEdit) -> void:
 		var placeholder_color := Color(t.primary.r, t.primary.g, t.primary.b, 0.35)
 		input_field.add_theme_color_override("font_placeholder_color", placeholder_color)
 
+## Windows 中断组合输入时可能不发送最后一次 IME 更新；同步空组合状态。
+## 不用 apply_ime，避免把尚未确认的拼音写入正文。
+static func sync_ime(input: Control) -> void:
+	if input.call("has_ime_text") and DisplayServer.has_feature(DisplayServer.FEATURE_IME):
+		if DisplayServer.ime_get_text().is_empty():
+			input.call("cancel_ime")
+			input.queue_redraw()
+
+static func setup_ime_guard(input: Control) -> void:
+	if input.has_node("ImeGuard"):
+		return
+	var guard := _ImeGuard.new()
+	guard.name = "ImeGuard"
+	guard.field = input
+	input.add_child(guard)
+
+class _ImeGuard extends Node:
+	var field: Control
+	var empty_frames := 0
+	func _process(_delta: float) -> void:
+		if not field.call("has_ime_text") or not DisplayServer.has_feature(DisplayServer.FEATURE_IME):
+			empty_frames = 0
+			return
+		# 连续两帧为空才清理，避开正常中文上屏的同帧事件顺序。
+		if DisplayServer.ime_get_text().is_empty():
+			empty_frames += 1
+			if empty_frames >= 2:
+				UIManager.sync_ime(field)
+		else:
+			empty_frames = 0
+
 # ============================================================
 # 输出文本框初始化
 # ★ 关键：设置真正的 Bold 字体，避免 Godot 伪粗体导致的发光过亮
 # ============================================================
 static func setup_output_text(output_text: RichTextLabel) -> void:
+	setup_text_selection(output_text)
 	var t := ThemeManager.current
 	output_text.bbcode_enabled = true
 	output_text.selection_enabled = true

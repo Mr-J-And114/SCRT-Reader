@@ -96,7 +96,8 @@ var _progress_bar_active: bool = false
 var _progress_bar_start: float = 0.0
 var _progress_bar_duration: float = 4.0
 var _progress_bar_last_percent: int = -1
-var _progress_bar_snapshot: String = ""  # 进度条开始前的 buffer 快照
+var _progress_bar_label: String = "加载中"
+var _progress_bar_line: String = ""
 
 # ── 磁盘信息（由 disc_manager 在播放前注入） ──
 var _disc_title: String = ""
@@ -147,7 +148,6 @@ func play(config: Dictionary) -> void:
 	_audio_started = false
 	_progress_bar_active = false
 	_progress_bar_last_percent = -1
-	_progress_bar_snapshot = ""
 	_bbcode_buffer = ""
 
 	# 解析配置
@@ -435,17 +435,20 @@ func _action_audio_play(kf: Dictionary) -> void:
 
 # ── 流程 ──
 func _action_clear() -> void:
+	_progress_bar_active = false
+	_progress_bar_line = ""
 	_bbcode_buffer = ""
 	if main and main.output_text:
 		main.output_text.text = ""
 
-func _action_start_progress_bar(duration: float, _label: String) -> void:
+func _action_start_progress_bar(duration: float, label: String) -> void:
 	_progress_bar_active = true
 	_progress_bar_start = _elapsed
-	_progress_bar_duration = duration
+	_progress_bar_duration = maxf(0.001, duration)
 	_progress_bar_last_percent = -1
-	# 保存当前 buffer 快照，后续每帧基于此快照 + 进度行重绘
-	_progress_bar_snapshot = _bbcode_buffer
+	_progress_bar_label = label
+	_progress_bar_line = ""
+	_update_progress_bar()
 
 func _update_progress_bar() -> void:
 	if main == null or main.output_text == null:
@@ -456,15 +459,10 @@ func _update_progress_bar() -> void:
 	if percent == _progress_bar_last_percent:
 		return
 	_progress_bar_last_percent = percent
-	var bar_width: int = 40
-	var filled: int = int(progress * bar_width)
-	var empty_count: int = bar_width - filled
-	var bar: String = "█".repeat(filled) + "░".repeat(empty_count)
 	var p: String = _resolve_color("primary")
-	var m: String = _resolve_color("muted")
-	var bar_line: String = "[color=" + m + "][" + bar + "] [/color][color=" + p + "]" + str(percent) + "%[/color]\n"
-	# 原地更新：基于快照 + 当前进度行重绘，vdisc 信息保持可见
-	_bbcode_buffer = _progress_bar_snapshot + bar_line
+	var bar_line: String = Typewriter.progress_bbcode(progress, _progress_bar_label, p, _resolve_color("muted")) + "\n"
+	_bbcode_buffer = Typewriter.replace_progress_line(_bbcode_buffer, _progress_bar_line, bar_line)
+	_progress_bar_line = bar_line
 	main.output_text.text = _bbcode_buffer
 	main._request_scroll()
 	if progress >= 1.0:

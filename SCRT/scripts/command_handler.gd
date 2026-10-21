@@ -14,6 +14,7 @@ var tw = null
 var disc_mgr = null
 var user_mgr = null
 var crtml = null
+var _file_open_generation: int = 0
 
 # ══════════════════════════════════════════
 #  命令历史
@@ -97,6 +98,7 @@ func _register_commands() -> void:
 
 	# ── 桌面模式专用命令 ──
 	desktop_commands = {
+		"submit": _cmd_submit,
 		"scan": _cmd_scan,
 		"load": _cmd_load,
 		"download": _cmd_download,
@@ -123,18 +125,31 @@ func _register_commands() -> void:
 		"mv": _cmd_mv,
 		"rm": _cmd_rm,
 		"mkfile": _cmd_mkfile,
-		"submit": _cmd_submit,
 	}
 
 # ══════════════════════════════════════════
 #  命令执行入口
 # ══════════════════════════════════════════
-func execute(raw: String) -> void:
+## 只识别带正确调试入口的末尾静默标记，普通命令不受影响。
+static func parse_debug_input(raw: String, allow_env_prefix: bool = false) -> Dictionary:
 	var parts: PackedStringArray = raw.strip_edges().split(" ", false)
+	var offset: int = 1 if allow_env_prefix and not parts.is_empty() and parts[0].to_lower() == "env" else 0
+	var silent: bool = parts.size() >= offset + 3 and parts[offset].to_lower() == "debug" and parts[offset + 1] == "114514" and parts[-1].to_lower() in ["-silence", "--silence"]
+	if silent:
+		parts.remove_at(parts.size() - 1)
+	return {"line": " ".join(parts), "silent": silent}
+
+func execute(raw: String) -> void:
+	var parsed: Dictionary = parse_debug_input(raw)
+	var silent: bool = bool(parsed["silent"])
+	var parts: PackedStringArray = str(parsed["line"]).split(" ", false)
 	if parts.is_empty():
 		return
 
 	var cmd: String = parts[0].to_lower()
+	if user_mgr and user_mgr.is_logged_in and main.perf_mgr and main.perf_mgr.failed and cmd not in ["perf", "performance", "mail", "help", "logout", "exit", "quit"]:
+		main.append_output("游戏已失败。可用 perf、mail 查看记录，或 logout 后重新开始。\n", false)
+		return
 	var args: Array = []
 	for i in range(1, parts.size()):
 		args.append(parts[i])
@@ -145,8 +160,13 @@ func execute(raw: String) -> void:
 			var dbg_args: Array = []
 			for i in range(1, args.size()):
 				dbg_args.append(args[i])
-			_add_to_history(raw)
+			if not silent:
+				_add_to_history(raw)
+			else:
+				main._silent_debug_depth += 1
 			await _cmd_debug(dbg_args)
+			if silent:
+				main._silent_debug_depth -= 1
 		else:
 			_cmd_unknown("debug")
 		return
@@ -181,6 +201,9 @@ func _find_handler(cmd: String):
 	return null
 
 func _cmd_unknown(cmd: String) -> void:
+	if cmd == "submit" and not main._desktop_mode:
+		main.append_output("请先 eject 返回桌面，再输入 submit <接收方号码> <盘编号>；编号见 scan。\n", false)
+		return
 	main.append_output("[color=" + T.error_hex + "]未知命令: " + cmd + "[/color]\n", false)
 	main.append_output("[color=" + T.muted_hex + "]输入 help 查看可用命令列表。[/color]\n", false)
 
@@ -331,7 +354,7 @@ func get_completions(current_text: String) -> Array[String]:
 						results.append(cmd + " " + pkg_id)
 		elif cmd == "comm":
 			# comm 只补全子命令
-			var comm_options: Array[String] = ["answer", "phonebook", "pb"]
+			var comm_options: Array[String] = ["answer", "reject", "history", "log", "phonebook", "pb", "video", "meeting", "help"]
 			for opt in comm_options:
 				if opt.to_lower().begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + opt)
@@ -373,8 +396,13 @@ func get_completions(current_text: String) -> Array[String]:
 				for skey in all_keys:
 					if skey.to_lower().begins_with(arg_prefix.to_lower()):
 						results.append(cmd + " " + skey)
-			# 也补全 "list" 和 "reset" 子命令
-			for sub_cmd in ["list", "reset"]:
+			# 设置分类与实际支持的管理命令。
+			if main.settings_mgr:
+				for category in main.settings_mgr.list_categories():
+					var category_id: String = str(category.get("id", ""))
+					if category_id.begins_with(arg_prefix.to_lower()):
+						results.append(cmd + " " + category_id)
+			for sub_cmd in ["reset", "export", "import", "help"]:
 				if sub_cmd.begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + sub_cmd)
 
@@ -383,14 +411,24 @@ func get_completions(current_text: String) -> Array[String]:
 			for page in ["1", "2"]:
 				if page.begins_with(arg_prefix):
 					results.append(cmd + " " + page)
+		elif cmd == "help":
+			for topic in ["env", "radio", "mail", "comm", "settings", "camera", "vdisc", "perf", "decode", "suffix"]:
+				if topic.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + topic)
+		elif cmd in ["perf", "performance"]:
+			for sub_cmd in ["detail", "history", "help"]:
+				if sub_cmd.begins_with(arg_prefix.to_lower()):
+					results.append(cmd + " " + sub_cmd)
+		elif cmd in ["radio", "vdisc"]:
+			if "help".begins_with(arg_prefix.to_lower()):
+				results.append(cmd + " help")
 		elif cmd == "deluser":
 			var all_users: Array[String] = user_mgr.get_all_users()
 			for u in all_users:
 				if u.to_lower().begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + u)
 		elif cmd in ["env", "monitor"]:
-			var env_subs: Array[String] = ["status", "view", "tasks", "scan", "check", "read",
-				"calibrate", "anomaly", "report", "repair", "sensor", "weather", "events", "help", "history", "details", "retest", "mark"]
+			var env_subs: Array[String] = ["view", "scan", "report", "help", "history", "details", "manual", "guide", "map", "collect"]
 			for sub in env_subs:
 				if sub.begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + sub)
@@ -400,7 +438,7 @@ func get_completions(current_text: String) -> Array[String]:
 				if sub.begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + sub)
 		elif cmd == "mail":
-			var mail_subs: Array[String] = ["list", "read"]
+			var mail_subs: Array[String] = ["list", "read", "download", "help"]
 			for sub in mail_subs:
 				if sub.begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + sub)
@@ -413,13 +451,24 @@ func get_completions(current_text: String) -> Array[String]:
 		var cmd: String = parts[0].to_lower()
 		var sub: String = parts[1].to_lower()
 		var arg_prefix: String = "" if has_trailing_space else parts[2]
+		if cmd == "mail" and sub in ["read", "download"] and main.mail_sys != null:
+			var inbox: Array = main.mail_sys.get_inbox_items()
+			for index in range(inbox.size()):
+				var mail_id := str(inbox[index].get("id", ""))
+				if sub == "download" and main.mail_sys.get_attachment_label(mail_id).is_empty():
+					continue
+				for candidate in [str(index + 1), mail_id]:
+					if candidate.to_lower().begins_with(arg_prefix.to_lower()):
+						results.append(cmd + " " + sub + " " + candidate)
 
-		if cmd in ["env", "monitor"] and sub == "read":
-			var categories: Array[String] = ["atmosphere", "ocean", "geophysics", "composition"]
+		if cmd in ["env", "monitor"] and sub in ["details", "map", "history"]:
+			var categories: Array[String] = ["overview", "atmosphere", "ocean", "geophysics", "composition", "events", "evidence", "next", "prev"]
+			if sub == "map": categories = ["nearshore", "sea"]
+			elif sub == "history": categories = ["older", "newer", "next", "prev"]
 			for cat in categories:
 				if cat.begins_with(arg_prefix.to_lower()):
 					results.append(cmd + " " + sub + " " + cat)
-		elif cmd in ["env", "monitor"] and sub == "sensor":
+		elif cmd in ["env", "monitor"] and sub in ["sensor", "repair"]:
 			if main.env_monitor:
 				for sid in main.env_monitor.sensors.keys():
 					if str(sid).to_lower().begins_with(arg_prefix.to_lower()):
@@ -441,6 +490,17 @@ func get_completions(current_text: String) -> Array[String]:
 #  全局命令
 # ══════════════════════════════════════════════════════════════
 func _cmd_help(_args: Array = []) -> void:
+	if not _args.is_empty():
+		var topic: String = str(_args[0]).to_lower()
+		match topic:
+			"env", "monitor": _cmd_env_help()
+			"camera", "cam", "cctv": _cmd_camera_help()
+			"perf", "performance": _cmd_perf(["help"])
+			"decode": _cmd_decode(["help"])
+			_:
+				if not _show_topic_help(topic):
+					main.append_output("帮助分类：env radio mail comm settings camera vdisc perf decode suffix。\n", false)
+		return
 	var p: String = T.primary_hex
 	var m: String = T.muted_hex
 
@@ -456,7 +516,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]load <编号>[/color]   加载指定磁盘")
 		lines.append("  [color=" + p + "]vdisc[/color]         查看磁盘与任务箱")
 		lines.append("  [color=" + p + "]download <任务ID>[/color] 下载 Vdisc 任务盘")
-		lines.append("  [color=" + p + "]explore[/color]       查看探索进度")
+		lines.append("  [color=" + p + "]explore <编号>[/color] 查看指定磁盘探索进度")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 软件包管理 ──[/color]")
 		lines.append("  [color=" + p + "]install <编号>[/color] 安装内部软件包")
@@ -485,8 +545,8 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]settings[/color]      查看/修改终端设置")
 		lines.append("  [color=" + p + "]volume[/color]        查看/设置音量")
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
-		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
-		lines.append("  [color=" + p + "]exit[/color]          退出终端")
+		lines.append("  [color=" + p + "]reboot[/color]        热重启；完成当日任务后换日")
+		lines.append("  [color=" + p + "]exit[/color]          熄屏并返回封面")
 		lines.append("  [color=" + p + "]save[/color]          手动保存进度")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 环境监测 ──[/color]")
@@ -495,6 +555,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]radio[/color]         启动无线电接收器")
 		lines.append("  [color=" + p + "]perf[/color]          绩效查询 (perf / perf history / perf detail)")
 		lines.append("")
+		lines.append("  [color=" + p + "]submit <号码> <盘编号>[/color] 上交个人任务磁盘（编号见scan）")
 		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
 		lines.append("  [color=" + p + "]fx_safe[/color]	   光敏安全模式 (on/off)")
@@ -527,7 +588,7 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]back[/color]          返回上级目录")
 		lines.append("  [color=" + p + "]open <文件名>[/color] 打开文件")
 		lines.append("  [color=" + p + "]cp/mv/rm/mkfile[/color] 编辑任务磁盘副本")
-		lines.append("  [color=" + p + "]submit <号码>[/color] 上交任务磁盘")
+		lines.append("  [color=" + p + "]eject[/color] 返回桌面后 submit <号码> <盘编号> 上交任务磁盘")
 		lines.append("  [color=" + p + "]unlock[/color]        尝试密码认证提升权限")
 		lines.append("  [color=" + p + "]decode[/color]       [color=" + m + "]密码解码器[/color]")
 		lines.append("")
@@ -557,14 +618,15 @@ func _cmd_help(_args: Array = []) -> void:
 		lines.append("  [color=" + p + "]settings[/color]      查看/修改终端设置")
 		lines.append("  [color=" + p + "]volume[/color]        查看/设置音量")
 		lines.append("  [color=" + p + "]clear[/color]         清屏")
-		lines.append("  [color=" + p + "]reboot[/color]        重启终端")
-		lines.append("  [color=" + p + "]exit[/color]          退出终端")
+		lines.append("  [color=" + p + "]reboot[/color]        热重启；完成当日任务后换日")
+		lines.append("  [color=" + p + "]exit[/color]          熄屏并返回封面")
 		lines.append("")
 		lines.append("[color=" + p + "]  ── 环境监测 ──[/color]")
 		lines.append("  [color=" + p + "]env[/color]           环境监测系统 (env help 查看子命令)")
 		lines.append("  [color=" + p + "]camera[/color]        监控摄像头系统 (camera help 查看子命令)")
 		lines.append("  [color=" + p + "]perf[/color]          绩效查询 (perf / perf history / perf detail)")
 		lines.append("")
+		lines.append("  [color=" + p + "]submit <号码> <盘编号>[/color] 上交个人任务磁盘（编号见scan）")
 		lines.append("[color=" + p + "]  ── 效果设置 ──[/color]")
 		lines.append("  [color=" + p + "]fx_level[/color]	  设置效果强度 (full/mild/off)")
 		lines.append("  [color=" + p + "]fx_safe[/color]	   光敏安全模式 (on/off)")
@@ -587,6 +649,15 @@ func _cmd_help(_args: Array = []) -> void:
 				lines.append("  [color=" + p + "]" + dyn_cmd_name + "[/color]" + "  ".repeat(maxi(1, 12 - dyn_cmd_name.length())) + "[color=" + m + "]" + dyn_desc + "[/color]")
 		lines.append("[color=" + m + "]快捷键: ↑↓ 历史命令 | PageUp/Down 滚动 | Tab 补全[/color]")
 
+	lines.append("[color=" + p + "]  ── 帮助与补充 ──[/color]")
+	lines.append("  help <分类>  env / radio / mail / comm / settings / camera / vdisc / perf / decode / suffix")
+	lines.append("  sound on/off  操作音效开关；decode help  查看密码解码器方法")
+	if not main._desktop_mode:
+		lines.append("  users / birthday YYYY-MM-DD / nickname <名称> / gender M/F/X  用户管理")
+		lines.append("  explore  当前磁盘探索进度；mail download <编号或ID>  领取附件")
+	lines.append("  别名：cls=clear，vol=volume，quit=exit，pkg=packages，pb=phonebook")
+	lines.append("        set=settings，monitor=env，cam/cctv=camera，performance=perf")
+	if not main._desktop_mode: lines.append("        dir=ls，read/cat=open")
 	main.append_output("\n".join(lines) + "\n", false)
 
 func _cmd_clear(_args: Array = []) -> void:
@@ -627,6 +698,9 @@ func _cmd_status(_args: Array = []) -> void:
 
 
 func _cmd_settings(args: Array = []) -> void:
+	if not args.is_empty() and str(args[0]).to_lower() in ["help", "?"]:
+		_show_topic_help("settings")
+		return
 	if main.settings_mgr == null:
 		main.append_output("[color=" + T.error_hex + "]设置系统未初始化。[/color]\n", false)
 		return
@@ -669,12 +743,21 @@ func _cmd_dial(args: Array = []) -> void:
 	main.dial_mgr.dial(number)
 
 func _cmd_comm(args: Array = []) -> void:
+	if not args.is_empty() and str(args[0]).to_lower() in ["help", "?"]:
+		_show_topic_help("comm")
+		return
 	if main.comm_mgr == null:
 		main.append_output("[color=" + T.error_hex + "]通讯系统未初始化。[/color]\n", false)
 		return
 	main.comm_mgr.handle_comm_command(args)
 
 func _cmd_mail(args: Array = []) -> void:
+	if main.perf_mgr and main.perf_mgr.failed and not args.is_empty() and str(args[0]).to_lower() == "download":
+		main.append_output("游戏已失败，不能继续领取任务。\n", false)
+		return
+	if not args.is_empty() and str(args[0]).to_lower() in ["help", "?"]:
+		_show_topic_help("mail")
+		return
 	if not user_mgr.is_logged_in:
 		main.append_output("[color=" + T.error_hex + "]请先登录。[/color]\n", false)
 		return
@@ -726,16 +809,16 @@ func _cmd_volume(args: Array = []) -> void:
 
 	match channel:
 		"master", "main", "all":
-			am.set_master_volume(value)
+			main.settings_mgr.set_value("audio.master_volume", value)
 			main.append_output("[color=" + s + "]主音量已设置为 " + str(snapped(value * 100, 1)) + "%[/color]\n", false)
 		"ambient", "amb", "bg":
-			am.set_ambient_volume(value)
+			main.settings_mgr.set_value("audio.ambient_volume", value)
 			main.append_output("[color=" + s + "]环境音音量已设置为 " + str(snapped(value * 100, 1)) + "%[/color]\n", false)
 		"sfx", "sound", "fx":
-			am.set_sfx_volume(value)
+			main.settings_mgr.set_value("audio.sfx_volume", value)
 			main.append_output("[color=" + s + "]音效音量已设置为 " + str(snapped(value * 100, 1)) + "%[/color]\n", false)
 		"media", "music":
-			am.set_media_volume(value)
+			main.settings_mgr.set_value("audio.media_volume", value)
 			main.append_output("[color=" + s + "]媒体音量已设置为 " + str(snapped(value * 100, 1)) + "%[/color]\n", false)
 		_:
 			main.append_output("[color=" + e + "]未知通道: " + channel + "[/color]\n", false)
@@ -749,28 +832,7 @@ func _cmd_theme(args: Array = []) -> void:
 	ThemeManager.request_theme_change(theme_name, main)
 
 func _cmd_reboot(_args: Array = []) -> void:
-	main.append_output("[color=" + T.muted_hex + "]正在重启终端...[/color]\n", false)
-	if user_mgr.is_logged_in:
-		user_mgr._save_current_profile()
-	# ★ 使用 CRT shader 重启效果（如果可用）
-	if main.has_method("trigger_reboot"):
-		# trigger_reboot 会处理关机动画 → 清屏 → 开机动画 → 欢迎消息
-		# 但我们还需要重置命令历史和磁盘状态
-		command_history.clear()
-		history_index = -1
-		disc_mgr.reset_all()
-		tw.clear_queue()
-		main.trigger_reboot()
-	else:
-		# 回退：无 shader 效果的普通重启
-		await main.get_tree().create_timer(0.5).timeout
-		main.output_text.text = ""
-		tw.clear_queue()
-		command_history.clear()
-		history_index = -1
-		disc_mgr.reset_all()
-		await main.get_tree().create_timer(0.3).timeout
-		main._start_login_flow()
+	await main.trigger_reboot()
 
 
 func _cmd_exit(_args: Array = []) -> void:
@@ -808,11 +870,6 @@ func _cmd_logout(_args: Array = []) -> void:
 	if not user_mgr.is_logged_in:
 		main.append_output("[color=" + T.error_hex + "]当前未登录。[/color]\n", false)
 		return
-	if not main._desktop_mode:
-		disc_mgr._auto_save()
-		main._desktop_mode = true
-		main.current_path = "/"
-		main.story_id = ""
 	await main.perform_logout()
 
 func _cmd_passwd(_args: Array = []) -> void:
@@ -945,6 +1002,9 @@ func _cmd_load(args: Array = []) -> void:
 	await disc_mgr.load_story(args)
 
 func _cmd_vdisc(_args: Array = []) -> void:
+	if not _args.is_empty() and str(_args[0]).to_lower() in ["help", "?"]:
+		_show_topic_help("vdisc")
+		return
 	disc_mgr.show_story_info()
 
 func _cmd_download(args: Array = []) -> void:
@@ -956,6 +1016,10 @@ func _cmd_download(args: Array = []) -> void:
 
 func _print_vdisc_result(result: Dictionary) -> void:
 	var color: String = T.success_hex if bool(result.get("ok", false)) else T.error_hex
+	if bool(result.get("cancelled", false)):
+		color = T.muted_hex
+	elif bool(result.get("ok", false)) and result.has("passed") and not bool(result["passed"]):
+		color = T.warning_hex
 	main.append_output("[color=" + color + "]" + str(result.get("message", "操作失败。")) + "[/color]\n", false)
 
 func _vdisc_path(value: String) -> String:
@@ -1035,82 +1099,10 @@ func _cmd_mkfile(args: Array = []) -> void:
 	main.append_output("文件已创建。\n", false)
 
 func _cmd_submit(args: Array = []) -> void:
-	if args.is_empty() or main.vdisc_task_mgr == null:
-		main.append_output("用法: submit <接收方号码>\n", false)
+	if args.size() != 2 or main.vdisc_task_mgr == null:
+		main.append_output("用法: submit <接收方号码> <盘编号>（桌面操作；编号见 scan）\n", false)
 		return
-	_print_vdisc_result(main.vdisc_task_mgr.submit(str(args[0])))
-
-func _debug_vdisc(args: Array) -> void:
-	if main.vdisc_task_mgr == null:
-		return
-	if args.is_empty() or str(args[0]) == "list":
-		for task in main.vdisc_task_mgr.get_task_list():
-			main.append_output("%s  %s  [%s]\n" % [str(task["id"]), str(task["title"]), str(task["status"])], false)
-		return
-	match str(args[0]):
-		"notice":
-			main.append_output("5 秒后发送一条后台提示。请现在打开 mail、explore 或其他全屏界面。\n", false)
-			_debug_vdisc_notice.call_deferred()
-		"mail":
-			if args.size() >= 2:
-				_debug_deliver_task_mail(str(args[1]))
-			elif main.mail_sys:
-				main.mail_sys.deliver_inline_mail("MTEST-VDISC", "Vdisc 联调附件", "SYSTEM", "这是一封系统联调邮件。点击下方附件链接获取调查盘；也可输入 mail download MTEST-VDISC。", true)
-				main.append_output("联调邮件已投递。\n", false)
-		"reset":
-			if args.size() < 2:
-				main.append_output("用法: debug 114514 vdisc reset <任务ID>\n", false)
-				return
-			if main.vdisc_task_mgr.debug_reset_task(str(args[1])):
-				main.append_output("任务状态已重置：" + str(args[1]) + "\n", false)
-			else:
-				main.append_output("未知任务：" + str(args[1]) + "\n", false)
-		"give":
-			if args.size() < 2:
-				main.append_output("用法: debug 114514 vdisc give <任务ID>\n", false)
-				return
-			_print_vdisc_result(await main.vdisc_task_mgr.download_task(str(args[1])))
-		"check":
-			if main.story_id.is_empty():
-				main.append_output("请先加载任务磁盘。\n", false)
-				return
-			var task_id: String = main.vdisc_task_mgr.get_task_for_story(main.story_id)
-			if task_id.is_empty():
-				main.append_output("当前磁盘没有任务。\n", false)
-				return
-			var result: Dictionary = main.vdisc_task_mgr.check_requirements(task_id)
-			var reasons: PackedStringArray = PackedStringArray()
-			for item in result["missing"]:
-				reasons.append(str(item))
-			main.append_output("判定: %s  %s\n" % ["通过" if bool(result["passed"]) else "未达标", ", ".join(reasons)], false)
-		_:
-			main.append_output("用法: debug 114514 vdisc [list|mail [邮件ID]|give <任务ID>|check|reset <任务ID>|notice]\n", false)
-
-func _debug_deliver_task_mail(mail_id: String) -> void:
-	if main.mail_sys == null or main.vdisc_task_mgr == null:
-		return
-	var matched: Dictionary = {}
-	for task_id in main.vdisc_task_mgr.definitions.keys():
-		var task: Dictionary = main.vdisc_task_mgr.definitions[task_id]
-		var download: Dictionary = task.get("download", {}) as Dictionary
-		if str(download.get("mail_attachment", "")) == mail_id:
-			matched = task
-			break
-	if matched.is_empty():
-		main.append_output("没有任务的附件使用邮件 ID：" + mail_id + "\n", false)
-		return
-	main.mail_sys.deliver_inline_mail(
-		mail_id,
-		str(matched.get("mail_subject", matched.get("title", mail_id))),
-		"TASK DISPATCH",
-		str(matched.get("mail_body", "任务附件已就绪，点击下方链接领取。")),
-		true
-	)
-	main.append_output("任务邮件已投递：" + mail_id + "\n", false)
-
-func _debug_vdisc_notice() -> void:
-	await main.get_tree().create_timer(5.0).timeout
-	main.append_output("[后台提示测试] Vdisc 通知已到达；这条记录只应出现在普通终端。\n", false)
+	_print_vdisc_result(await main.vdisc_task_mgr.submit(str(args[0]), str(args[1])))
 
 func _cmd_explore(args: Array = []) -> void:
 	if not main.explore_viewer:
@@ -1430,6 +1422,10 @@ func _cmd_open(args: Array = []) -> void:
 		main._file_password_filename = filename
 		return
 
+	# 文件权限通过后，允许外部模块接管其声明的虚拟启动文件。
+	if main.pkg_mgr and main.pkg_mgr.dispatch_before_file_open(file_path):
+		return
+
 	# 检查是否是音频文件
 	var ext: String = filename.get_extension().to_lower()
 	var audio_extensions: Array[String] = ["ogg", "wav", "mp3"]
@@ -1483,6 +1479,16 @@ func _display_file(file_path: String, filename: String, content: String) -> void
 	var body: String = header_result["body"]
 	var has_header: bool = header_result["has_header"]
 
+	_file_open_generation += 1
+	var generation: int = _file_open_generation
+	var opened_disc: String = disc_mgr.current_loaded_path
+	var opened_path: String = main.current_path
+	var still_current := func() -> bool:
+		return is_instance_valid(main) and main.is_inside_tree() and generation == _file_open_generation and disc_mgr.current_loaded_path == opened_disc and main.current_path == opened_path and not main.is_terminal_covered()
+	if crtml != null and not await crtml.prepare_math(body, still_current):
+		return
+
+
 	# ★ 根据头文件中的 title 字段，优先用头文件标题
 	var display_title: String = filename
 	if has_header:
@@ -1521,8 +1527,6 @@ func _display_file(file_path: String, filename: String, content: String) -> void
 	if template_name == "email" and main.email_viewer != null:
 		# ── 邮件查看器模式 ──
 		var parsed_content: String = body
-		if crtml != null:
-			parsed_content = crtml.parse(body)
 		if user_mgr.is_logged_in:
 			parsed_content = parsed_content.replace("{username}", user_mgr.get_username())
 		main.email_viewer.open(display_title, header, parsed_content, Callable())
@@ -1588,7 +1592,7 @@ func _display_file(file_path: String, filename: String, content: String) -> void
 
 		parsed_content = _replace_inline_image_placeholders(parsed_content)
 
-		main.append_output(parsed_content + "\n", true)
+		await main.append_output(parsed_content + "\n", true)
 
 		# 记录已读
 		if not main.read_files.has(file_path):
@@ -1623,7 +1627,7 @@ func _display_file(file_path: String, filename: String, content: String) -> void
 		
 		parsed_content = _replace_inline_image_placeholders(parsed_content)
 		
-		main.append_output(parsed_content + "\n", true)
+		await main.append_output(parsed_content + "\n", true)
 		
 		# 记录已读
 		if not main.read_files.has(file_path):
@@ -1655,6 +1659,8 @@ func _replace_inline_image_placeholders(text: String) -> String:
 		var placeholder_tag: String = "\u0001IMG:" + placeholder_id + "\u0002"
 
 		if result.contains(placeholder_tag):
+			if placeholder_id.begins_with("LATEX_") or img_path.begins_with("latex:"):
+				continue
 			var file_name: String = img_path.get_file()
 			var size_str: String = ""
 			if original_size.x > 0:
@@ -1794,91 +1800,47 @@ func _cmd_perf(args: Array = []) -> void:
 		_cmd_perf_detail(pm, p, m, w, s)
 	elif sub == "help":
 		main.append_output("[color=" + p + "]═══ 绩效系统命令 ═══[/color]\n", false)
-		main.append_output("  [color=" + p + "]perf[/color]          当日绩效概览 + 累计总分\n", false)
-		main.append_output("  [color=" + p + "]perf detail[/color]   当日得分明细\n", false)
-		main.append_output("  [color=" + p + "]perf history[/color]  历史每日得分表\n", false)
+		main.append_output("  [color=" + p + "]perf[/color]          累计总分、要求与缺口\n", false)
+		main.append_output("  [color=" + p + "]perf detail[/color]   累计绩效详情\n", false)
+		main.append_output("  [color=" + p + "]perf history[/color]  历史累计得分表\n", false)
 	else:
 		_cmd_perf_status(pm, p, m, w, e, s)
 
 func _cmd_perf_status(pm: PerformanceManager, p: String, m: String, w: String, e: String, s: String) -> void:
-	var day_sum: Dictionary = pm.get_day_summary()
-	var career: Dictionary = pm.get_career_summary()
-	var day_total: int = int(day_sum.get("total", 0))
-	var quota: int = int(day_sum.get("quota", 3))
-	var gap: int = int(day_sum.get("overtime_gap", 0))
-
-	main.append_output("\n[color=" + p + "]╔══════════════════════════════════╗[/color]\n", false)
-	main.append_output("[color=" + p + "]║      绩效状态                    ║[/color]\n", false)
-	main.append_output("[color=" + p + "]╠══════════════════════════════════╣[/color]\n", false)
-	# 当日
-	var day_col: String = s if day_total >= quota else (w if day_total > 0 else e)
-	main.append_output("[color=" + m + "]  当日得分: [/color][color=" + day_col + "]%d / %d[/color]\n" % [day_total, quota], false)
-	# 加班缺口
-	if gap > 0:
-		main.append_output("[color=" + m + "]  绩效缺口: [/color][color=" + e + "]%d 分待补[/color]\n" % gap, false)
-	# 累计
-	main.append_output("[color=" + p + "]╠══════════════════════════════════╣[/color]\n", false)
-	main.append_output("[color=" + m + "]  累计总分: [/color][color=" + p + "]%d[/color]\n" % career.get("total", 0), false)
-	main.append_output("[color=" + m + "]  主线:     [/color]%d  [color=" + m + "]每日: [/color]%d  [color=" + m + "]支线: [/color]%d\n" % [
-		career.get("main", 0), career.get("daily", 0), career.get("side", 0)], false)
-	if int(career.get("overtime", 0)) > 0:
-		main.append_output("[color=" + m + "]  加班绩效: [/color][color=" + w + "]%d[/color]\n" % career.get("overtime", 0), false)
-	if int(career.get("warnings", 0)) > 0:
-		main.append_output("[color=" + m + "]  累计警告: [/color][color=" + e + "]%d 次[/color]\n" % career.get("warnings", 0), false)
-	main.append_output("[color=" + m + "]  进度:     [/color]%d / %d 天\n" % [career.get("days_completed", 0), career.get("game_total_days", 28)], false)
-	main.append_output("[color=" + p + "]╚══════════════════════════════════╝[/color]\n\n", false)
+	var gap: int = pm.get_gap()
+	var col: String = e if pm.failed else w if gap > 0 else s
+	main.append_output("\n[color=%s]═══ 累计绩效 ═══[/color]\n" % p, false)
+	main.append_output("[color=%s]  累计总分：%d / 当前累计要求：%d\n  当前缺口：%d 分 / 超额：%d 分\n  累计警告：%d 次\n  状态：%s[/color]\n" % [col, pm.career_total, pm.required_total, gap, maxi(pm.career_total - pm.required_total, 0), pm.warnings_issued, "游戏失败" if pm.failed else "未达标" if gap > 0 else "达标"], false)
+	main.append_output("[color=%s]  收工时缺口超过10分直接失败；未达标发送警告。[/color]\n" % m, false)
 
 func _cmd_perf_history(pm: PerformanceManager, p: String, m: String, w: String, e: String) -> void:
-	var history: Array[Dictionary] = pm.get_history()
-	if history.is_empty():
-		main.append_output("[color=" + m + "]暂无历史绩效记录。[/color]\n", false)
-		return
-	main.append_output("\n[color=" + p + "]═══ 绩效历史 ═══[/color]\n", false)
-	main.append_output("[color=" + m + "] Day │ Main │ Daily│ Side │Bonus │ Total│ Quota│ Gap [/color]\n", false)
-	main.append_output("[color=" + m + "]─────┼──────┼──────┼──────┼──────┼──────┼──────┼─────[/color]\n", false)
-	for record in history:
-		var day: int = int(record.get("day", 0))
-		var total: int = int(record.get("total", 0))
-		var quota: int = int(record.get("quota", 3))
+	main.append_output("\n[color=%s]═══ 绩效历史 ═══[/color]\n" % p, false)
+	main.append_output("[color=%s] Day │ 累计总分 │ 累计要求 │ 缺口 [/color]\n" % m, false)
+	for record in pm.get_history():
 		var gap: int = int(record.get("gap", 0))
-		var col: String = p if gap == 0 else (w if gap <= 2 else e)
-		main.append_output("[color=" + col + "] %3d │ %4d │ %4d │ %4d │ %4d │ %4d │ %4d │ %3d [/color]\n" % [
-			day,
-			int(record.get("main", 0)),
-			int(record.get("daily", 0)),
-			int(record.get("side", 0)),
-			int(record.get("bonus", 0)),
-			total,
-			quota,
-			gap,
-		], false)
-	main.append_output("\n", false)
+		var col: String = e if gap > PerformanceManager.FAILURE_GAP else w if gap > 0 else p
+		main.append_output("[color=%s] %3d │ %8d │ %8d │ %4d [/color]\n" % [col, int(record.day), int(record.total), int(record.quota), gap], false)
 
 func _cmd_perf_detail(pm: PerformanceManager, p: String, m: String, w: String, s: String) -> void:
-	var day_sum: Dictionary = pm.get_day_summary()
-	var scores: Dictionary = day_sum.get("scores", {})
-	var quota: int = int(day_sum.get("quota", 3))
-	var total: int = int(day_sum.get("total", 0))
-	var gap: int = int(day_sum.get("overtime_gap", 0))
-
-	main.append_output("\n[color=" + p + "]═══ 当日绩效明细 ═══[/color]\n", false)
-	main.append_output("[color=" + m + "]  主线绩效:   [/color]%+d\n" % int(scores.get("main", 0)), false)
-	main.append_output("[color=" + m + "]  每日绩效:   [/color]%+d\n" % int(scores.get("daily", 0)), false)
-	main.append_output("[color=" + m + "]  支线绩效:   [/color]%+d\n" % int(scores.get("side", 0)), false)
-	main.append_output("[color=" + m + "]  奖励:       [/color]%+d\n" % int(scores.get("bonus", 0)), false)
-	var penalty: int = int(scores.get("penalty", 0))
-	if penalty != 0:
-		main.append_output("[color=" + m + "]  扣减:       [/color][color=" + w + "]%+d[/color]\n" % penalty, false)
-	main.append_output("[color=" + m + "]  ────────────────[/color]\n", false)
-	var total_col: String = s if total >= quota else w
-	main.append_output("[color=" + m + "]  合计:       [/color][color=" + total_col + "]%+d[/color] [color=" + m + "](配额: %d)[/color]\n" % [total, quota], false)
-	if gap > 0:
-		main.append_output("[color=" + m + "]  历史缺口:   [/color][color=" + w + "]%d 分待补[/color]\n" % gap, false)
-	main.append_output("\n", false)
+	_cmd_perf_status(pm, p, m, w, T.error_hex, s)
 
 func _cmd_save(_args: Array = []) -> void:
-	disc_mgr._auto_save()
-	main.append_output("[color=" + T.success_hex + "]进度已保存。[/color]\n", false)
+	var result: Dictionary = disc_mgr._auto_save()
+	var names: Dictionary = {"host": "会话", "environment": "环境进度", "env_tasks": "环境任务", "performance": "绩效", "story": "主线进度", "disc": "当前盘进度"}
+	var failed_names: Array[String] = []
+	for item in result.items:
+		if item.result.get("status", "failed") not in ["saved", "skipped"]:
+			failed_names.append(str(names.get(item.component, item.component)))
+	var detail: String = "失败项：" + "、".join(failed_names) + "。" if not failed_names.is_empty() else ""
+	match result.status:
+		"saved":
+			main.append_output("[color=" + T.success_hex + "]进度已保存。[/color]\n", false)
+		"partial":
+			main.append_output("[color=" + T.warning_hex + "]保存未全部完成：已写入部分进度。" + detail + "请重试。[/color]\n", false)
+		"skipped":
+			main.append_output("[color=" + T.muted_hex + "]当前没有可保存的进度。[/color]\n", false)
+		_:
+			main.append_output("[color=" + T.error_hex + "]保存失败，未能确认本次进度已写入。" + detail + "[/color]\n", false)
 
 func _cmd_clearsave(args: Array = []) -> void:
 	var m: String = T.muted_hex
@@ -1896,6 +1858,9 @@ func _cmd_clearsave(args: Array = []) -> void:
 
 
 func _cmd_radio(_args: Array = []) -> void:
+	if not _args.is_empty() and str(_args[0]).to_lower() in ["help", "?"]:
+		_show_topic_help("radio")
+		return
 	if main.radio_receiver == null:
 		main.append_output("[color=" + T.error_hex + "]无线电模块未初始化。[/color]\n", false)
 		return
@@ -1938,13 +1903,13 @@ func _cmd_fx_level(args: Array = []) -> void:
 	var level_str: String = str(args[0]).to_lower()
 	match level_str:
 		"full":
-			main.effect_settings.set_level(EffectSettings.Level.FULL)
+			main.settings_mgr.set_value("effect.level", "full")
 			main.append_output("[color=" + s + "]效果等级已设为: 完整 (FULL)[/color]\n", false)
 		"mild":
-			main.effect_settings.set_level(EffectSettings.Level.MILD)
+			main.settings_mgr.set_value("effect.level", "mild")
 			main.append_output("[color=" + w + "]效果等级已设为: 温和 (MILD) — 强度降低50%[/color]\n", false)
 		"off":
-			main.effect_settings.set_level(EffectSettings.Level.OFF)
+			main.settings_mgr.set_value("effect.level", "off")
 			main.append_output("[color=" + m + "]所有动态视觉效果已关闭[/color]\n", false)
 		_:
 			main.append_output("[color=" + e + "]无效选项: " + level_str + "[/color]\n", false)
@@ -1978,11 +1943,11 @@ func _cmd_fx_safe(args: Array = []) -> void:
 		return
 	var val: String = str(args[0]).to_lower()
 	if val in ["on", "true", "1", "yes"]:
-		main.effect_settings.set_photosensitive(true)
+		main.settings_mgr.set_value("effect.photosensitive", true)
 		main.append_output("[color=" + s + "]光敏安全模式已开启[/color]\n", false)
 		main.append_output("[color=" + m + "]已禁用: 快速闪烁、强故障、jumpscare、突然黑屏[/color]\n", false)
 	elif val in ["off", "false", "0", "no"]:
-		main.effect_settings.set_photosensitive(false)
+		main.settings_mgr.set_value("effect.photosensitive", false)
 		main.append_output("[color=" + w + "]光敏安全模式已关闭[/color]\n", false)
 	else:
 		main.append_output("[color=" + T.error_hex + "]无效选项: " + val + "[/color]\n", false)
@@ -2058,6 +2023,11 @@ func _cmd_decode(args: Array = []) -> void:
 		lines.append("  [color=" + p + "]base64[/color]   [color=" + m + "]Base64 解码[/color]")
 		lines.append("  [color=" + p + "]morse[/color]	[color=" + m + "]摩斯电码解码[/color]")
 		lines.append("  [color=" + p + "]reverse[/color]  [color=" + m + "]字符串反转[/color]")
+		lines.append("[color=" + m + "]方法别名：substitution=sub，b64=base64，rev=reverse。[/color]")
+		lines.append("[color=" + m + "]选择：鼠标或↑↓/1—8，Enter确认；输入：选中编辑、Ctrl+V粘贴、Enter确认、Shift+Enter换行、Tab切框。[/color]")
+		lines.append("[color=" + m + "]演示：Space暂停，←→单步，↑↓速度，Enter跳结果，PgUp/PgDn滚动。[/color]")
+		lines.append("[color=" + m + "]结果：R重新解码，N选新方法，C复制；Esc回方法列表，在列表Q/Esc退出。[/color]")
+		lines.append("[color=" + m + "]按钮支持鼠标；结果及步骤日志可选择、换行和滚动。重新编辑保留密文与密钥，错误在输入区提示。[/color]")
 		lines.append("")
 		lines.append("[color=" + p + "]════════════════════════════════════[/color]")
 		main.append_output("\n".join(lines) + "\n", false)
@@ -2086,6 +2056,17 @@ func _cmd_env(args: Array = []) -> void:
 		return
 	var obs: EnvObservation = main.env_observation
 	var sub: String = str(args[0]).to_lower() if not args.is_empty() else "view"
+	if sub in ["issues", "issue", "select", "next", "retest", "respond", "compare", "mark", "calibrate", "cal", "repair", "sensor", "check"]:
+		main.append_output("调查与设备操作已整合至 env details；请点击项目处理。\n", false)
+		return
+	if sub in ["manual", "guide", "compare", "issues", "select", "next", "map", "details", "history", "status", "check"]:
+		_cmd_env_view()
+		if main.env_viewer == null:
+			return
+		var words: Array[String] = []
+		for arg in args: words.append(str(arg))
+		main.env_viewer.execute_command(" ".join(words))
+		return
 	match sub:
 		"view", "panel", "v", "map":
 			_cmd_env_view()
@@ -2128,7 +2109,8 @@ func _cmd_env(args: Array = []) -> void:
 			_cmd_env_help()
 
 func _cmd_env_help() -> void:
-	main.append_output("\nENV 环境监视\nenv / env view   打开观测台\nenv scan         短采集（不自动提交）\nenv report       提交日报\nenv history      日报历史\nenv details      详细传感器数据\nenv retest / env mark / env calibrate   核对、关注或校准当前疑点\n观测台内输入 help 查看命令；scan采集 report提交 details详情 history历史 exit退出\n旧 env read / env anomaly 进入观测台查看结果。\n", false)
+	main.append_output("\n" + main.env_observation.help_text() + "\n", false)
+
 func _cmd_env_status(em: EnvMonitor, colors: Dictionary) -> void:
 	var p: String = str(colors.get("primary", "#00ff00"))
 	var m: String = str(colors.get("muted", "#666666"))
@@ -2218,71 +2200,13 @@ func _cmd_env_exec_task(task_id: String, tm: EnvTaskManager, colors: Dictionary)
 		if main.disc_mgr:
 			main.disc_mgr._auto_save()
 
-func _cmd_env_repair(em: EnvMonitor, sub_args: Array, colors: Dictionary) -> void:
-	if sub_args.is_empty():
-		# 列出所有非在线传感器
-		var offline: Array = []
-		for sid in em.sensors.keys():
-			if em.sensor_status.get(sid, "online") != "online":
-				var cfg: Dictionary = em.get_sensor_config(sid)
-				offline.append({"id": sid, "name": str(cfg.get("name", sid)), "status": em.sensor_status[sid]})
-		if offline.is_empty():
-			main.append_output("[color=" + str(colors.get("success", "")) + "]所有传感器运行正常，无需修复。[/color]\n", false)
-		else:
-			main.append_output("[color=" + str(colors.get("warning", "")) + "]需要修复的传感器:[/color]\n", false)
-			for s in offline:
-				main.append_output("[color=" + str(colors.get("muted", "")) + "]  %s (%s) — %s[/color]\n" % [str(s["name"]), str(s["id"]), str(s["status"])], false)
-			main.append_output("[color=" + str(colors.get("muted", "")) + "]使用: env repair <传感器id>[/color]\n", false)
-		return
-	var sid: String = str(sub_args[0])
-	if not em.sensors.has(sid):
-		main.append_output("[color=" + T.error_hex + "]未知传感器: " + sid + "[/color]\n", false)
-		return
-	if em.repair_sensor(sid):
-		var cfg: Dictionary = em.get_sensor_config(sid)
-		main.append_output("[color=" + T.success_hex + "]传感器 " + str(cfg.get("name", sid)) + " 已修复并重新上线。[/color]\n", false)
-	else:
-		main.append_output("[color=" + T.muted_hex + "]传感器已在线，无需修复。[/color]\n", false)
+func _cmd_env_repair(_em: EnvMonitor, sub_args: Array, _colors: Dictionary) -> void:
+	var obs: EnvObservation = main.env_observation
+	obs.repair_device(str(sub_args[0]) if not sub_args.is_empty() else "")
+	main.append_output(obs.message + "\n", false)
 
-func _cmd_env_sensor(em: EnvMonitor, sub_args: Array, colors: Dictionary) -> void:
-	if sub_args.is_empty():
-		main.append_output("[color=" + T.muted_hex + "]用法: env sensor <传感器id>[/color]\n", false)
-		main.append_output("[color=" + T.muted_hex + "]可用传感器:[/color]\n", false)
-		for sid in em.sensors.keys():
-			var cfg: Dictionary = em.get_sensor_config(sid)
-			main.append_output("[color=" + T.muted_hex + "]  %-16s %s[/color]\n" % [sid, str(cfg.get("name", ""))], false)
-		return
-	var sid: String = str(sub_args[0])
-	if not em.sensors.has(sid):
-		main.append_output("[color=" + T.error_hex + "]未知传感器: " + sid + "[/color]\n", false)
-		return
-	var cfg: Dictionary = em.get_sensor_config(sid)
-	var val: float = em.get_reading(sid)
-	var status: String = em.sensor_status.get(sid, "unknown")
-	var trend: String = em.get_sensor_trend(sid)
-	var offset: float = em.calibration_offsets.get(sid, 0.0)
-	var p: String = str(colors.get("primary", ""))
-	var m: String = str(colors.get("muted", ""))
-	var lines: Array = [
-		"[color=%s]── 传感器详情: %s ──[/color]" % [p, str(cfg.get("name", sid))],
-		"[color=%s]  ID:       %s[/color]" % [m, sid],
-		"[color=%s]  型号:     %s[/color]" % [m, str(cfg.get("description", ""))],
-		"[color=%s]  分类:     %s[/color]" % [m, str(cfg.get("category", ""))],
-		"[color=%s]  当前值:   %s %s[/color]" % [p, "%.1f" % val if not is_nan(val) else "N/A", str(cfg.get("unit", ""))],
-		"[color=%s]  状态:     %s[/color]" % [p if status == "online" else str(colors.get("error", "")), status],
-		"[color=%s]  趋势:     %s[/color]" % [m, trend],
-		"[color=%s]  校准偏移: %.3f[/color]" % [m, offset],
-		"[color=%s]  量程:     %s[/color]" % [m, str(cfg.get("range", []))],
-	]
-	# 历史
-	var history: Array = em.reading_history.get(sid, [])
-	if history.size() > 0:
-		lines.append("[color=%s]  最近读数:[/color]" % m)
-		var show: int = mini(history.size(), 8)
-		for i in range(history.size() - show, history.size()):
-			var h: Dictionary = history[i]
-			lines.append("[color=%s]    %05.1fh → %.1f[/color]" % [m, float(h.get("hour", 0)), float(h.get("value", 0))])
-	main.append_output("\n".join(lines) + "\n\n", false)
+func _cmd_env_sensor(_em: EnvMonitor, sub_args: Array, _colors: Dictionary) -> void:
+	main.append_output(main.env_observation.device_info(str(sub_args[0]) if not sub_args.is_empty() else "") + "\n", false)
 
 func _cmd_env_weather(em: EnvMonitor, colors: Dictionary) -> void:
 	var p: String = str(colors.get("primary", ""))
@@ -2360,6 +2284,9 @@ func _beaufort_scale(wind_speed: float) -> int:
 #  ★ 监控摄像头命令
 # ══════════════════════════════════════════
 func _cmd_camera(args: Array = []) -> void:
+	if not args.is_empty() and str(args[0]).to_lower() in ["help", "?"]:
+		_cmd_camera_help()
+		return
 	if main.camera_mgr == null:
 		main.append_output("[color=" + T.error_hex + "]监控摄像头系统未初始化。[/color]\n", false)
 		return
@@ -2393,7 +2320,9 @@ func _cmd_camera_help() -> void:
 	main.append_output("[color=" + s + "]camera list[/color]          [color=" + m + "]列出所有已解锁摄像头[/color]\n", false)
 	main.append_output("[color=" + s + "]camera view [编号|ID][/color] [color=" + m + "]打开摄像头查看器[/color]\n", false)
 	main.append_output("[color=" + s + "]camera status[/color]        [color=" + m + "]显示所有摄像头状态[/color]\n", false)
-	main.append_output("[color=" + m + "]别名: cam, cctv[/color]\n", false)
+	main.append_output("[color=" + m + "]查看器：方向键平移；[ / ]缩放；Tab/Shift+Tab切换；1—9跳转摄像头[/color]\n", false)
+	main.append_output("[color=" + m + "]F切换照明；R切换区域深度；Q/Esc返回。无参数camera直接打开查看器。[/color]\n", false)
+	main.append_output("[color=" + m + "]帮助：camera help / help camera；别名cam/cctv，list=l、view=v、status=s。[/color]\n", false)
 
 func _cmd_camera_list(cm: CameraManager) -> void:
 	var p: String = T.primary_hex
@@ -2466,932 +2395,24 @@ func _cmd_camera_status(cm: CameraManager) -> void:
 # ══════════════════════════════════════════
 
 func _cmd_debug(args: Array = []) -> void:
-	var e: String = T.error_hex
-	var w: String = T.warning_hex
-	if args.is_empty():
-		_debug_print_help()
-		return
-	var sub: String = args[0].to_lower()
-	var rest: Array = []
-	for i in range(1, args.size()):
-		rest.append(args[i])
-	match sub:
-		# ── 登录/用户 ──
-		"skip_login":     _debug_skip_login()
-		"logout":         _debug_logout()
-		"users":          _debug_users()
-		"deluser":        _debug_dispatch1(rest, "deluser <name>", _debug_deluser)
-		# ── 剧情/对话 ──
-		"jump_day0":      _debug_jump_day0()
-		"reset_progress": _debug_reset_progress()
-		"list_dialogues": _debug_list_dialogues()
-		"dlg_status":     _debug_dispatch1(rest, "dlg_status <id>", _debug_dialogue_status)
-		"trigger":        _debug_dispatch1(rest, "trigger <id>", _debug_trigger_dialogue)
-		"trigger_call":   _debug_dispatch1(rest, "trigger_call <id> (forced/answerable)", _debug_trigger_call)
-		"complete_dlg":   _debug_dispatch1(rest, "complete_dlg <id>", _debug_complete_dialogue)
-		"reset_dlg":      _debug_dispatch1(rest, "reset_dlg <id>", _debug_reset_dialogue)
-		# ── 剧情变量 ──
-		"set_flag":       _debug_dispatch2(rest, "set_flag <name> <value>", _debug_set_flag)
-		"get_flag":       _debug_dispatch1(rest, "get_flag <name>", _debug_get_flag)
-		"list_flags":     _debug_list_flags()
-		"reset_flags":    _debug_reset_flags()
-		"set_choice":     _debug_dispatch2(rest, "set_choice <id> <value>", _debug_set_choice)
-		"get_choice":     _debug_dispatch1(rest, "get_choice <id>", _debug_get_choice)
-		# ── 环境/任务 ──
-		"complete_env":   _debug_complete_env()
-		"complete_task":  _debug_dispatch1(rest, "complete_task <task_id>", _debug_complete_task)
-		"advance_day":    _debug_advance_day()
-		"set_reading":    _debug_dispatch2(rest, "set_reading <sensor_id> <value>", _debug_set_reading)
-		"force_event":    _debug_dispatch1(rest, "force_event <event_id>", _debug_force_event)
-		"set_anomaly":    _debug_dispatch2(rest, "set_anomaly <id> <level 0-4>", _debug_set_anomaly_int)
-		"env_status":     _debug_env_status()
-		"env":            _debug_env_preview(rest)
-		# ── 邮件 ──
-		"deliver":        _debug_dispatch1(rest, "deliver <mail_id>", _debug_deliver_mail)
-		"clear_mail":     _debug_clear_mail()
-		"list_mail":      _debug_list_mail()
-		# ── 绩效 ──
-		"perf_add":       _debug_dispatch2(rest, "perf_add <main|daily|side> <n>", _debug_perf_add_str)
-		"perf_status":    _debug_perf_status()
-		"perf_settle":    _debug_perf_settle()
-		# ── 摄像头 ──
-		"unlock_cam":     _debug_dispatch1(rest, "unlock_cam <cam_id>", _debug_unlock_cam)
-		"lock_cam":       _debug_dispatch1(rest, "lock_cam <cam_id>", _debug_lock_cam)
-		"list_cameras":   _debug_list_cameras()
-		"cam_anomaly":    _debug_dispatch2(rest, "cam_anomaly <cam_id> <anomaly_id>", _debug_cam_anomaly)
-		# ── 特效 ──
-		"glitch":         _debug_glitch(rest)
-		"shake":          _debug_shake(rest)
-		"tear":           _debug_tear(rest)
-		"noise":          _debug_noise(rest)
-		"blackout":       _debug_blackout(rest)
-		"reboot_fx":      _debug_reboot_fx()
-		"reset_fx":       _debug_reset_fx()
-		# ── 无线电 ──
-		"radio":          _debug_radio(rest)
-		"vdisc":          await _debug_vdisc(rest)
-		"voice":          _debug_voice()
-		"voice_meeting":  _debug_voice_meeting(rest)
-		# ── 系统 ──
-		"skip_boot":      _debug_skip_boot()
-		"status":         _debug_status()
-		"saves":          _debug_saves()
-		"delsave":        _debug_dispatch1(rest, "delsave <story_id>", _debug_delsave)
-		"set":            _debug_dispatch2(rest, "set <key> <value>", _debug_settings_set)
-		"get":            _debug_dispatch1(rest, "get <key>", _debug_settings_get)
+	main.append_output("Public Core: use normal commands and package APIs.\n", false)
+
+func _show_topic_help(topic: String) -> bool:
+	var text: String = ""
+	match topic:
+		"suffix":
+			text = "SUFFIX 文件后缀说明\n.txt / .md 等文本：open <文件>阅读；具体版式由文件头 template 决定。\n.ogg / .wav / .mp3：打开音频播放器。\n.png / .jpg / .jpeg / .bmp / .webp / .tga：打开图片查看器。\n视频文件：打开视频播放器；可用格式取决于播放器支持。\n.scp：任务盘容器，使用 scan / load 加载。\n权限或密码限制仍须满足；.meta.cfg 和媒体描述文件由系统读取，不直接展示。\n"
+		"radio":
+			text = "RADIO 操作说明（从桌面输入radio进入）\nTab或点击标签切摩斯/SSTV/瀑布；1/2/3/4选择LF/HF/VHF/UHF\n←→调频；↑↓方位；逗号/句号调整俯仰；Shift加大调整步幅\n+/-音量（沿用游戏媒体音量）；B收藏当前频率；S自动扫频开关；L信标日志\nSSTV锁定后Space或按钮开始接收；完成后P保存，G或已保存图片按钮查看；Esc从大图返回图片列表，再Esc返回接收机\nWATERFALL锁定文件信号后Space或确认接收按钮接收本台分段；再次点击暂停，已收块保留；集齐所有台分段后校验并保存Vdisc；F冻结/继续频谱，不暂停文件接收\n摩斯模式R清记录；音乐/语音电台自动收听，首次从中途加入，循环间隔由电台设置；R重播仅限调试测试台\nQ/Esc退出；先退出再输入终端命令。\n"
+		"mail":
+			text = "MAIL 操作说明\nmail / mail list 打开收件箱；mail read <编号>阅读\nmail download <邮件编号或ID>领取附件，也可点击邮件里的下载链接\n已有附件会询问是否重新下载；下载/校验失败保留原盘。\n邮件阅读：Q/Esc返回，↑↓/PgUp/PgDn滚动，Home/End首尾。\nSpace跳过正在出现的文字；文字显示完后Space向下滚动。\n"
+		"comm":
+			text = "COMM 通讯说明\ncomm查看状态；comm answer接听；comm reject拒绝可拒绝来电\ncomm history/log历史；phonebook/pb或comm phonebook/pb号码簿\ndial <号码>或comm <号码>拨号；comm video/meeting [号码]视频/会议入口\n对话点击或Space/Enter推进；数字键选择；仅允许跳过的对话支持Esc。\n"
+		"settings", "set":
+			text = "SETTINGS 设置说明\nsettings分类列表；settings <分类>分类详情\nsettings <完整键名>查询；settings <完整键名> <值>修改\nsettings reset <键名/分类/all>重置\nsettings export复制JSON到剪贴板；settings import从剪贴板JSON导入\n可用键名和值以当前settings页面为准；Tab补全；别名set。\n"
+		"vdisc":
+			text = "VDISC 任务盘说明\nvdisc查看磁盘/任务进度；桌面scan扫描、load <编号>加载、download <任务ID>领取\nexplore [编号]查看探索；磁盘内ls、cd、back、open、unlock调查\ncp <源> <目标>复制；mv <源> <目标>移动；rm <文件>删除；mkfile <路径> [内容]新建\n以上编辑作用于个人任务副本；eject返回桌面，scan查看盘编号，submit <接收方号码> <盘编号>检查并上交\n未达标会警告：Enter/N/Esc返回重做，Y或点击执意上交\n返回保留进度；执意上交归档未达标结果、结束任务，不能补交\nsave保存；eject回桌面；clearsave [all]清磁盘存档\n具体条件及接收号码以任务盘提示为准。\n"
 		_:
-			main.append_output("[color=" + e + "]未知 debug 子命令: %s[/color]\n" % sub, false)
-			_debug_print_help()
-
-func _debug_dispatch1(rest: Array, usage: String, fn: Callable) -> void:
-	if rest.size() >= 1:
-		fn.call(rest[0])
-	else:
-		_debug_err("用法: debug %s" % usage)
-
-func _debug_dispatch2(rest: Array, usage: String, fn: Callable) -> void:
-	if rest.size() >= 2:
-		fn.call(rest[0], rest[1])
-	else:
-		_debug_err("用法: debug %s" % usage)
-
-func _debug_set_anomaly_int(anomaly_id: String, level_str: String) -> void:
-	_debug_set_anomaly(anomaly_id, int(level_str))
-
-func _debug_perf_add_str(ptype: String, amount_str: String) -> void:
-	_debug_perf_add(ptype, int(amount_str))
-
-func _debug_print_help() -> void:
-	var h: String = T.primary_hex
-	var m: String = T.muted_hex
-	main.append_output("[color=" + h + "]════ 调试模式（debug 114514 已激活）════[/color]\n", false)
-	main.append_output("[color=" + m + "]格式: debug 114514 <子命令> [参数...]（以下省略前缀）[/color]\n", false)
-	var groups: Array = [
-		["登录/用户", [
-			["skip_login",       "自动创建/登录 test 用户并进入桌面"],
-			["logout",            "登出当前用户"],
-			["users",             "列出所有用户"],
-			["deluser <name>",    "删除用户"],
-		]],
-		["剧情/对话", [
-			["jump_day0",         "触发 Day0 教程流程"],
-			["reset_progress",    "清空剧情进度（对话/选择/标记）"],
-			["list_dialogues",    "列出所有对话及完成状态"],
-			["dlg_status <id>",   "查看指定对话状态"],
-			["trigger <id>",       "静默触发对话"],
-			["trigger_call <id>",  "以来电方式触发（forced/answerable）"],
-			["complete_dlg <id>", "标记对话完成"],
-			["reset_dlg <id>",    "清除对话完成标记"],
-		]],
-		["剧情变量", [
-			["set_flag <n> <v>",  "设置标记（支持 int/float/bool/str）"],
-			["get_flag <n>",      "查看标记"],
-			["list_flags",        "列出所有标记"],
-			["reset_flags",       "清空所有标记"],
-			["set_choice <n> <v>","设置选择"],
-			["get_choice <n>",    "查看选择"],
-		]],
-		["环境/任务", [
-			["complete_env",      "所有任务完成 + 提交日报"],
-			["complete_task <id>","标记指定任务完成"],
-			["advance_day",       "推进一天"],
-			["set_reading <s> <v>","设置传感器读数"],
-			["force_event <id>",  "强制启动事件"],
-			["set_anomaly <id> <l>","设置异常等级(0-4)"],
-			["env_status",        "环境系统状态"],
-			["env normal/device/mystery/sea/clear", "观测台隔离预览（不保存、不计分）"],
-		]],
-		["邮件", [
-			["deliver <id>",      "投递邮件"],
-			["clear_mail",        "清空收件箱"],
-			["list_mail",         "列出邮件"],
-		]],
-		["Vdisc", [
-			["vdisc list",        "列出任务状态"],
-			["vdisc mail",        "投递联调附件邮件"],
-			["vdisc give <id>",   "领取任务盘"],
-			["vdisc check",       "检查当前盘上交条件"],
-		]],
-		["绩效", [
-			["perf_add <t> <n>",  "加分(main/daily/side)"],
-			["perf_status",       "绩效状态"],
-			["perf_settle",       "结算当日"],
-		]],
-		["摄像头", [
-			["unlock_cam <id>",   "解锁摄像头"],
-			["lock_cam <id>",     "锁定摄像头"],
-			["list_cameras",      "列出摄像头"],
-			["cam_anomaly <c> <a>","触发摄像头异常"],
-		]],
-		["特效", [
-			["glitch [i] [d]",    "故障效果"],
-			["shake [i] [d]",     "抖屏"],
-			["tear [s] [d]",      "撕裂"],
-			["noise [i] [d]",     "噪点"],
-			["blackout [d]",      "黑屏"],
-			["reboot_fx",         "重启动画"],
-			["reset_fx",          "清除所有特效"],
-		]],
-		["无线电", [
-			["radio test",        "进入无线电演示模式（注入全套测试信号）"],
-			["radio clean",       "移除测试信号（恢复真实信号）"],
-			["radio list",        "列出当前所有信号"],
-		]],
-		["系统", [
-			["voice",             "打开角色实时调音面板（编辑器）"],
-			["voice_meeting [角色ID...]", "自动播放多人会议音色演示"],
-			["skip_boot",         "跳过开机动画"],
-			["status",            "调试系统状态总览"],
-			["saves",             "列出存档"],
-			["delsave <id>",      "删除存档"],
-			["set <key> <val>",   "设置项"],
-			["get <key>",         "读取设置项"],
-		]],
-	]
-	for grp in groups:
-		var gname: String = grp[0]
-		var cmds: Array = grp[1]
-		main.append_output("[color=" + h + "]【%s】[/color]\n" % gname, false)
-		for c in cmds:
-			main.append_output("[color=" + m + "]  %-20s %s[/color]\n" % [c[0], c[1]], false)
-
-func _debug_err(msg: String) -> void:
-	main.append_output("[color=" + T.error_hex + "]%s[/color]\n" % msg, false)
-
-func _debug_ok(msg: String) -> void:
-	main.append_output("[color=" + T.success_hex + "]%s[/color]\n" % msg, false)
-
-# ── 登录/用户 ──
-
-func _debug_skip_login() -> void:
-	if not main or not main.user_mgr:
-		_debug_err("user_mgr 未就绪"); return
-	if main.user_mgr.is_logged_in:
-		_debug_ok("已登录: %s" % main.user_mgr.get_username()); return
-	var uname: String = "test"
-	var pwd: String = "test"
-	if not main.user_mgr.user_exists(uname):
-		var extra := {"nickname": "Test", "gender": "1", "birthday": "2000-01-01"}
-		var r: Dictionary = main.user_mgr.register(uname, pwd, extra)
-		if not r.get("success", false):
-			_debug_err("创建失败: %s" % str(r.get("message", ""))); return
-		_debug_ok("已创建测试用户: %s" % uname)
-	var r2: Dictionary = main.user_mgr.login(uname, pwd)
-	if r2.get("success", false):
-		_debug_ok("已登录: %s" % uname)
-		main._enter_desktop_after_login("调试登录完成")
-	else:
-		_debug_err("登录失败: %s" % str(r2.get("message", "")))
-
-func _debug_logout() -> void:
-	if main and main.user_mgr and main.user_mgr.is_logged_in:
-		main.perform_logout()
-		_debug_ok("已登出")
-	else:
-		_debug_err("未登录")
-
-func _debug_users() -> void:
-	if not main or not main.user_mgr:
-		_debug_err("user_mgr 未就绪"); return
-	var users: Array[String] = main.user_mgr.get_all_users()
-	var m: String = T.muted_hex
-	main.append_output("[color=" + T.primary_hex + "]════ 用户列表 ════[/color]\n", false)
-	if users.is_empty():
-		main.append_output("[color=" + m + "]  (无)[/color]\n", false)
-	for u in users:
-		var cur: String = " ← 当前" if (main.user_mgr.is_logged_in and main.user_mgr.get_username() == u) else ""
-		main.append_output("[color=" + m + "]  %s%s[/color]\n" % [u, cur], false)
-
-func _debug_deluser(name: String) -> void:
-	if not main or not main.user_mgr:
-		_debug_err("user_mgr 未就绪"); return
-	var r: Dictionary = main.user_mgr.delete_user(name)
-	if r.get("success", false):
-		_debug_ok("已删除用户: %s" % name)
-	else:
-		_debug_err(str(r.get("message", "删除失败")))
-
-# ── 剧情/对话 ──
-
-func _debug_jump_day0() -> void:
-	if not main or not main.user_mgr or not main.user_mgr.is_logged_in:
-		_debug_err("需先登录（debug skip_login）"); return
-	if main.daily_dialogue_mgr:
-		main.daily_dialogue_mgr.trigger_day_start(0)
-		_debug_ok("Day0 教程已触发")
-	else:
-		_debug_err("daily_dialogue_mgr 未就绪")
-
-func _debug_reset_progress() -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	var dm = main.daily_dialogue_mgr
-	dm._completed_dialogues.clear()
-	dm._story_choices.clear()
-	dm._story_flags.clear()
-	dm._ensure_default_flags()
-	dm.save_story_save()
-	_debug_ok("剧情进度已重置（对话/选择/标记）")
-
-func _debug_list_dialogues() -> void:
-	if not main or not main.comm_mgr:
-		_debug_err("comm_mgr 未就绪"); return
-	var ids: Array[String] = main.comm_mgr.get_dialogue_ids()
-	var m: String = T.muted_hex
-	var s: String = T.success_hex
-	var w: String = T.warning_hex
-	main.append_output("[color=" + T.primary_hex + "]════ 对话列表 (%d) ════[/color]\n" % ids.size(), false)
-	for id in ids:
-		var done: bool = main.comm_mgr.is_dialogue_completed(id)
-		var mark: String = "[color=" + s + "]✓[/color]" if done else "[color=" + w + "]○[/color]"
-		var data: Dictionary = main.comm_mgr.get_dialogue_data(id)
-		var title: String = str(data.get("title", ""))
-		var callable: bool = bool(data.get("callable", false))
-		var call_tag: String = " [拨号]" if callable else ""
-		var cm: String = str(data.get("call_mode", ""))
-		var cm_tag: String = " [" + cm + "]" if not cm.is_empty() and cm != "silent" else ""
-		main.append_output("[color=" + m + "]  %s %-18s %s%s%s[/color]\n" % [mark, id, title, call_tag, cm_tag], false)
-
-func _debug_dialogue_status(id: String) -> void:
-	if not main or not main.comm_mgr:
-		_debug_err("comm_mgr 未就绪"); return
-	if not main.comm_mgr.has_dialogue(id):
-		_debug_err("对话不存在: %s" % id); return
-	var data: Dictionary = main.comm_mgr.get_dialogue_data(id)
-	var done: bool = main.comm_mgr.is_dialogue_completed(id)
-	var m: String = T.muted_hex
-	main.append_output("[color=" + T.primary_hex + "]对话: %s[/color]\n" % id, false)
-	main.append_output("[color=" + m + "]  标题: %s[/color]\n" % str(data.get("title", "")), false)
-	main.append_output("[color=" + m + "]  完成: %s[/color]\n" % ("是" if done else "否"), false)
-	main.append_output("[color=" + m + "]  可拨号: %s[/color]\n" % str(data.get("callable", false)), false)
-	main.append_output("[color=" + m + "]  来电模式: %s[/color]\n" % str(data.get("call_mode", "silent")), false)
-	main.append_output("[color=" + m + "]  可重复: %s[/color]\n" % str(data.get("repeatable", false)), false)
-	if data.has("requires_flag"):
-		main.append_output("[color=" + m + "]  requires_flag: %s[/color]\n" % str(data["requires_flag"]), false)
-	if data.has("requires_tasks"):
-		main.append_output("[color=" + m + "]  requires_tasks: %s[/color]\n" % str(data["requires_tasks"]), false)
-	if data.has("next"):
-		main.append_output("[color=" + m + "]  next: %s[/color]\n" % str(data["next"]), false)
-	var lines: Array = data.get("lines", [])
-	main.append_output("[color=" + m + "]  行数: %d[/color]\n" % lines.size(), false)
-
-func _debug_trigger_dialogue(id: String) -> void:
-	if not main or not main.comm_mgr:
-		_debug_err("comm_mgr 未就绪"); return
-	if not main.comm_mgr._dialogues.has(id):
-		_debug_err("对话不存在: %s" % id); return
-	main.comm_mgr.trigger_dialogue(id, true)
-	_debug_ok("已触发对话: %s" % id)
-
-func _debug_trigger_call(id: String) -> void:
-	if not main or not main.comm_mgr:
-		_debug_err("comm_mgr 未就绪"); return
-	var mode: String = "forced"
-	if id.find(":") > 0:
-		var parts: PackedStringArray = id.split(":", false)
-		id = parts[0]
-		if parts.size() > 1:
-			mode = parts[1]
-	var action: String = "comm:%s:%s" % [id, mode]
-	if main.comm_mgr.handle_trigger_action(action):
-		_debug_ok("已触发来电: %s (mode=%s)" % [id, mode])
-	else:
-		_debug_err("触发失败（对话不存在或模式无效）: %s" % action)
-
-func _debug_complete_dialogue(id: String) -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	main.daily_dialogue_mgr.mark_dialogue_completed(id)
-	if main.comm_mgr and main.comm_mgr._completed_dialogues != null:
-		main.comm_mgr._completed_dialogues[id] = true
-	_debug_ok("已标记对话完成: %s" % id)
-
-func _debug_reset_dialogue(id: String) -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	main.daily_dialogue_mgr._completed_dialogues.erase(id)
-	if main.comm_mgr and main.comm_mgr._completed_dialogues != null:
-		main.comm_mgr._completed_dialogues.erase(id)
-	_debug_ok("已清除对话完成标记: %s" % id)
-
-# ── 剧情变量 ──
-
-func _debug_parse_value(value: String) -> Variant:
-	if value.is_valid_int():
-		return int(value)
-	elif value.is_valid_float():
-		return float(value)
-	elif value.to_lower() == "true":
-		return true
-	elif value.to_lower() == "false":
-		return false
-	return value
-
-func _debug_set_flag(name: String, value: String) -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	var v: Variant = _debug_parse_value(value)
-	main.daily_dialogue_mgr.set_flag(name, v)
-	_debug_ok("flag %s = %s" % [name, str(v)])
-
-func _debug_get_flag(name: String) -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	var val = main.daily_dialogue_mgr.get_flag(name, "未设置")
-	main.append_output("[color=" + T.primary_hex + "]flag %s = %s[/color]\n" % [name, str(val)], false)
-
-func _debug_list_flags() -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	var flags: Dictionary = main.daily_dialogue_mgr._story_flags
-	var m: String = T.muted_hex
-	main.append_output("[color=" + T.primary_hex + "]════ 剧情标记 (%d) ════[/color]\n" % flags.size(), false)
-	if flags.is_empty():
-		main.append_output("[color=" + m + "]  (无)[/color]\n", false)
-	for k in flags.keys():
-		main.append_output("[color=" + m + "]  %-24s = %s[/color]\n" % [k, str(flags[k])], false)
-
-func _debug_reset_flags() -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	main.daily_dialogue_mgr._story_flags.clear()
-	main.daily_dialogue_mgr._ensure_default_flags()
-	main.daily_dialogue_mgr.save_story_save()
-	_debug_ok("所有标记已重置为初始值")
-
-func _debug_set_choice(id: String, value: String) -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	main.daily_dialogue_mgr.record_choice(id, value)
-	_debug_ok("choice %s = %s" % [id, value])
-
-func _debug_get_choice(id: String) -> void:
-	if not main or not main.daily_dialogue_mgr:
-		_debug_err("daily_dialogue_mgr 未就绪"); return
-	if main.daily_dialogue_mgr.has_choice(id):
-		var val: String = main.daily_dialogue_mgr.get_choice(id)
-		main.append_output("[color=" + T.primary_hex + "]choice %s = %s[/color]\n" % [id, val], false)
-	else:
-		main.append_output("[color=" + T.warning_hex + "]choice %s 未设置[/color]\n" % id, false)
-
-# ── 环境/任务 ──
-
-func _debug_complete_env() -> void:
-	if not main or not main.env_task_mgr:
-		_debug_err("env_task_mgr 未就绪"); return
-	var tm = main.env_task_mgr
-	for tid in tm.task_definitions.keys():
-		tm.task_status[tid] = "completed"
-	tm.report_submitted = true
-	_debug_ok("所有环境任务完成 + 日报已提交")
-
-func _debug_complete_task(task_id: String) -> void:
-	if not main or not main.env_task_mgr:
-		_debug_err("env_task_mgr 未就绪"); return
-	if not main.env_task_mgr.task_definitions.has(task_id):
-		_debug_err("任务不存在: %s" % task_id); return
-	main.env_task_mgr.complete_task(task_id, {})
-	_debug_ok("任务完成: %s" % task_id)
-
-func _debug_advance_day() -> void:
-	if not main or not main.env_monitor:
-		_debug_err("env_monitor 未就绪"); return
-	main.env_monitor.advance_day()
-	if main.env_task_mgr:
-		main.env_task_mgr.reset_for_new_day()
-	_debug_ok("已推进一天 (day=%d)" % main.env_monitor.current_day)
-
-func _debug_set_reading(sensor_id: String, value: String) -> void:
-	if not main or not main.env_monitor:
-		_debug_err("env_monitor 未就绪"); return
-	var v: float = float(value)
-	main.env_monitor.current_readings[sensor_id] = v
-	_debug_ok("传感器 %s = %s" % [sensor_id, str(v)])
-
-func _debug_force_event(event_id: String) -> void:
-	if not main or not main.env_monitor:
-		_debug_err("env_monitor 未就绪"); return
-	main.env_monitor.force_start_event(event_id)
-	_debug_ok("已强制启动事件: %s" % event_id)
-
-func _debug_set_anomaly(anomaly_id: String, level: int) -> void:
-	if not main or not main.env_monitor:
-		_debug_err("env_monitor 未就绪"); return
-	main.env_monitor.set_anomaly_level(anomaly_id, level)
-	_debug_ok("异常 %s 等级 = %d" % [anomaly_id, level])
-
-func _debug_env_preview(rest: Array) -> void:
-	var scenario: String = str(rest[0]).to_lower() if not rest.is_empty() else "normal"
-	if scenario not in ["normal", "device", "mystery", "sea", "clear"]:
-		_debug_err("用法：debug 114514 env normal/device/mystery/sea/clear")
-		return
-	main.env_observation.set_preview(scenario)
-	_cmd_env_view()
-	if scenario == "sea":
-		main.env_viewer.perform_action("sea")
-
-func _debug_env_status() -> void:
-	if not main or not main.env_monitor:
-		_debug_err("env_monitor 未就绪"); return
-	var em = main.env_monitor
-	var m: String = T.muted_hex
-	main.append_output("[color=" + T.primary_hex + "]════ 环境状态 ════[/color]\n", false)
-	main.append_output("[color=" + m + "]  当前天数: %d[/color]\n" % em.current_day, false)
-	main.append_output("[color=" + m + "]  当前时间: %s[/color]\n" % em.get_current_hour_display(), false)
-	main.append_output("[color=" + m + "]  天气: %s[/color]\n" % em.get_weather_name(), false)
-	if main.env_task_mgr:
-		var tm = main.env_task_mgr
-		main.append_output("[color=" + m + "]  必做任务完成: %s[/color]\n" % ("是" if tm.is_all_required_completed() else "否"), false)
-		main.append_output("[color=" + m + "]  日报提交: %s[/color]\n" % ("是" if tm.report_submitted else "否"), false)
-		var progress: Dictionary = tm.get_progress()
-		main.append_output("[color=" + m + "]  任务进度: %d/%d[/color]\n" % [int(progress.get("completed", 0)), int(progress.get("total", 0))], false)
-
-# ── 邮件 ──
-
-func _debug_deliver_mail(mail_id: String) -> void:
-	if not main or not main.mail_sys:
-		_debug_err("mail_sys 未就绪"); return
-	main.mail_sys.deliver_mail(mail_id)
-	_debug_ok("已投递邮件: %s" % mail_id)
-
-func _debug_clear_mail() -> void:
-	if not main or not main.mail_sys:
-		_debug_err("mail_sys 未就绪"); return
-	main.mail_sys.clear_all()
-	_debug_ok("收件箱已清空")
-
-func _debug_list_mail() -> void:
-	if not main or not main.mail_sys:
-		_debug_err("mail_sys 未就绪"); return
-	var ms = main.mail_sys
-	var m: String = T.muted_hex
-	var total: int = ms.get_total_count()
-	var unread: int = ms.get_unread_count()
-	main.append_output("[color=" + T.primary_hex + "]════ 邮件 (%d 封, %d 未读) ════[/color]\n" % [total, unread], false)
-	var inbox: Array = []
-	if ms.get("_merged_inbox") != null:
-		inbox = ms._merged_inbox
-	for i in range(inbox.size()):
-		var mail: Dictionary = inbox[i] if inbox[i] is Dictionary else {}
-		var tag: String = "[T]" if not bool(mail.get("persistent", false)) else "[G]"
-		var rd: String = "" if bool(mail.get("read", false)) else " *"
-		main.append_output("[color=" + m + "]  %s %s %s%s[/color]\n" % [tag, str(mail.get("id", "?")), str(mail.get("title", "")), rd], false)
-
-# ── 绩效 ──
-
-func _debug_perf_add(ptype: String, amount: int) -> void:
-	if not main or not main.perf_mgr:
-		_debug_err("perf_mgr 未就绪"); return
-	match ptype.to_lower():
-		"main":   main.perf_mgr.add_score(amount, "main")
-		"daily":  main.perf_mgr.add_score(amount, "daily")
-		"side":   main.perf_mgr.add_score(amount, "side")
-		_: _debug_err("类型需为 main/daily/side"); return
-	_debug_ok("绩效 %s +%d" % [ptype, amount])
-
-func _debug_perf_status() -> void:
-	if not main or not main.perf_mgr:
-		_debug_err("perf_mgr 未就绪"); return
-	var pm = main.perf_mgr
-	var m: String = T.muted_hex
-	var summary: Dictionary = pm.get_career_summary()
-	main.append_output("[color=" + T.primary_hex + "]════ 绩效状态 ════[/color]\n", false)
-	main.append_output("[color=" + m + "]  生涯总分: %d[/color]\n" % int(summary.get("total", pm.career_total)), false)
-	main.append_output("[color=" + m + "]  主线: %d  日常: %d  支线: %d[/color]\n" % [pm.career_main, pm.career_daily, pm.career_side], false)
-	main.append_output("[color=" + m + "]  当日配额: %d[/color]\n" % pm.daily_quota, false)
-	var day_sum: Dictionary = pm.get_day_summary()
-	main.append_output("[color=" + m + "]  当日得分: %s[/color]\n" % str(day_sum), false)
-	main.append_output("[color=" + m + "]  警告次数: %d  连续缺口: %d[/color]\n" % [pm.warnings_issued, pm.consecutive_low_days], false)
-
-func _debug_perf_settle() -> void:
-	if not main or not main.perf_mgr:
-		_debug_err("perf_mgr 未就绪"); return
-	var day: int = main.env_monitor.current_day if main.env_monitor else 0
-	main.perf_mgr.settle_day(day)
-	_debug_ok("已结算第 %d 天绩效" % day)
-
-# ── 摄像头 ──
-
-func _debug_unlock_cam(cam_id: String) -> void:
-	if not main or not main.camera_mgr:
-		_debug_err("camera_mgr 未就绪"); return
-	main.camera_mgr.unlock_camera(cam_id)
-	_debug_ok("已解锁摄像头: %s" % cam_id)
-
-func _debug_lock_cam(cam_id: String) -> void:
-	if not main or not main.camera_mgr:
-		_debug_err("camera_mgr 未就绪"); return
-	main.camera_mgr.lock_camera(cam_id)
-	_debug_ok("已锁定摄像头: %s" % cam_id)
-
-func _debug_list_cameras() -> void:
-	if not main or not main.camera_mgr:
-		_debug_err("camera_mgr 未就绪"); return
-	var cm = main.camera_mgr
-	var m: String = T.muted_hex
-	var cams: Array = cm.get_all_cameras()
-	main.append_output("[color=" + T.primary_hex + "]════ 摄像头 (%d, 已解锁 %d) ════[/color]\n" % [cm.get_camera_count(), cm.get_unlocked_count()], false)
-	for cam in cams:
-		var lock: String = " [LOCKED]" if not cam.unlocked else ""
-		var st: String = "ONLINE" if cam.online else "OFFLINE"
-		main.append_output("[color=" + m + "]  %s  %s  %s%s[/color]\n" % [st, cam.cam_name, cam.location, lock], false)
-
-func _debug_cam_anomaly(cam_id: String, anomaly_id: String) -> void:
-	if not main or not main.camera_mgr:
-		_debug_err("camera_mgr 未就绪"); return
-	main.camera_mgr.trigger_anomaly(cam_id, anomaly_id)
-	_debug_ok("已触发摄像头异常: %s -> %s" % [cam_id, anomaly_id])
-
-# ── 特效 ──
-
-func _debug_glitch(args: Array) -> void:
-	if not main: return
-	var intensity: float = float(args[0]) if args.size() > 0 and args[0].is_valid_float() else 0.5
-	var duration: float = float(args[1]) if args.size() > 1 and args[1].is_valid_float() else 1.0
-	main.trigger_glitch(intensity, duration)
-	_debug_ok("glitch(%.2f, %.2f)" % [intensity, duration])
-
-func _debug_shake(args: Array) -> void:
-	if not main: return
-	var intensity: float = float(args[0]) if args.size() > 0 and args[0].is_valid_float() else 0.01
-	var duration: float = float(args[1]) if args.size() > 1 and args[1].is_valid_float() else 0.5
-	main.trigger_shake(intensity, duration)
-	_debug_ok("shake(%.3f, %.2f)" % [intensity, duration])
-
-func _debug_tear(args: Array) -> void:
-	if not main: return
-	var strength: float = float(args[0]) if args.size() > 0 and args[0].is_valid_float() else 0.08
-	var duration: float = float(args[1]) if args.size() > 1 and args[1].is_valid_float() else 0.5
-	main.trigger_tear(strength, duration)
-	_debug_ok("tear(%.3f, %.2f)" % [strength, duration])
-
-func _debug_noise(args: Array) -> void:
-	if not main: return
-	var intensity: float = float(args[0]) if args.size() > 0 and args[0].is_valid_float() else 0.8
-	var duration: float = float(args[1]) if args.size() > 1 and args[1].is_valid_float() else 0.3
-	main.trigger_noise_burst(intensity, duration)
-	_debug_ok("noise(%.2f, %.2f)" % [intensity, duration])
-
-func _debug_blackout(args: Array) -> void:
-	if not main: return
-	var duration: float = float(args[0]) if args.size() > 0 and args[0].is_valid_float() else 2.0
-	main.trigger_screen_off(duration)
-	_debug_ok("blackout(%.2f)" % duration)
-
-func _debug_reboot_fx() -> void:
-	if not main or not main.crt_shader: return
-	main.crt_shader.play_reboot()
-	_debug_ok("重启动画播放中")
-
-func _debug_reset_fx() -> void:
-	if not main or not main.crt_shader: return
-	main.crt_shader.reset_all_effects()
-	_debug_ok("所有特效已清除")
-
-# ── 无线电 ──
-
-func _debug_radio(args: Array) -> void:
-	if args.is_empty():
-		_debug_err("用法: debug radio <test|clean|list>")
-		return
-	match str(args[0]).to_lower():
-		"test":  _debug_radio_test()
-		"clean": _debug_radio_clean()
-		"list":  _debug_radio_list()
-		_: _debug_err("未知 radio 子命令: %s（可用: test / clean / list）" % str(args[0]))
-
-## 从 res:// 读取二进制素材
-func _debug_radio_read_bytes(res_path: String) -> PackedByteArray:
-	if not FileAccess.file_exists(res_path):
-		return PackedByteArray()
-	var fa := FileAccess.open(res_path, FileAccess.READ)
-	if fa == null:
-		return PackedByteArray()
-	var bytes: PackedByteArray = fa.get_buffer(fa.get_length())
-	fa.close()
-	return bytes
-
-## 构造测试信号
-func _debug_radio_make_signal(id: String, type: String, band: String, freq: float,
-		label: String, hint: String, opts: Dictionary = {}) -> RadioConfigParser.RadioSignal:
-	var sig := RadioConfigParser.RadioSignal.new()
-	sig.id = id
-	sig.type = type
-	sig.band = band
-	sig.frequency = freq
-	sig.label = label
-	sig.hint = hint
-	sig.azimuth = float(opts.get("azimuth", 0.0))
-	sig.elevation = float(opts.get("elevation", 15.0))
-	sig.tolerance_freq = float(opts.get("tolerance_freq", 0.05))
-	sig.tolerance_dir = int(opts.get("tolerance_dir", 45))
-	sig.proximity_range = float(opts.get("proximity_range", 0.15))
-	sig.loop = bool(opts.get("loop", true))
-	sig.speed_wpm = int(opts.get("speed_wpm", 15))
-	sig.hidden = bool(opts.get("hidden", false))
-	if opts.has("content_text"): sig.content_text = str(opts["content_text"])
-	if opts.has("character_set"): sig.character_set = str(opts["character_set"])
-	if opts.has("group_size"): sig.group_size = int(opts["group_size"])
-	if opts.has("group_pause_ms"): sig.group_pause_ms = float(opts["group_pause_ms"])
-	if opts.has("repeat_count"): sig.repeat_count = int(opts["repeat_count"])
-	if opts.has("beacon_id"): sig.beacon_id = str(opts["beacon_id"])
-	if opts.has("cipher_type"): sig.cipher_type = str(opts["cipher_type"])
-	if opts.has("sstv_mode"): sig.sstv_mode = str(opts["sstv_mode"])
-	if opts.has("transmit_duration"): sig.transmit_duration = float(opts["transmit_duration"])
-	if opts.has("content_file"): sig.content_file = str(opts["content_file"])
-	if opts.has("content_image"): sig.content_image = opts["content_image"]
-	if opts.has("content_audio"): sig.content_audio = opts["content_audio"]
-	return sig
-
-## 进入无线电演示模式：注入全套测试信号并打开界面
-func _debug_radio_test() -> void:
-	if not main or not main.radio_receiver:
-		_debug_err("radio_receiver 未就绪"); return
-	if not main._desktop_mode:
-		_debug_err("需在桌面模式（radio 仅桌面模式可用）"); return
-	var rr = main.radio_receiver
-	var mgr = rr.signal_mgr
-	if mgr == null:
-		_debug_err("signal_mgr 未就绪"); return
-
-	# 1) 清理旧测试信号（幂等，可反复执行）
-	_debug_radio_clean(true)
-	# 2) 载入真实信号（保留 S-00 等）
-	rr.load_local_signals()
-	# 3) 准备素材
-	var sstv_img: PackedByteArray = _debug_radio_read_bytes("res://data/main/cameras/camera_test_main.jpg")
-	var audio_bytes: PackedByteArray = _debug_radio_read_bytes("res://audio/startup.mp3")
-
-	# 4) 测试信号定义：[id, type, band, freq, label, hint, opts]
-	var defs: Array = [
-		["_test_morse_std", "morse", "HF", 7.100, "[测试] 标准摩斯电码",
-			"清晰的电键声，像有人在反复呼号",
-			{"content_text": "CQ CQ CQ DE SCRT READER TEST SIGNAL", "speed_wpm": 15}],
-		["_test_morse_num", "morse", "HF", 5.200, "[测试] 数字电台",
-			"机械的数字播报，五码一组，间隔均匀",
-			{"content_text": "31415 92653 58979 32384 62643", "character_set": "numbers", "speed_wpm": 12}],
-		["_test_beacon", "morse", "HF", 14.100, "[测试] 信标电台",
-			"持续重复的呼号，按 L 查看信标日志",
-			{"content_text": "VVV DE SCRT TEST BEACON", "beacon_id": "VVV DE SCRT", "speed_wpm": 10}],
-		["_test_hidden", "morse", "HF", 9.800, "[测试] 隐藏信号",
-			"不在雷达/标尺/瀑布图上标注，需手动调谐寻找",
-			{"content_text": "YOU FOUND THE HIDDEN SIGNAL", "hidden": true}],
-		["_test_cipher", "morse", "HF", 10.500, "[测试] 加密信号",
-			"内容经过加密，界面会显示 KEY 标记",
-			{"content_text": "WKH TXLFN EURZQ IRA MXPSV RYHU WKH ODCB GRJ", "cipher_type": "caesar"}],
-		["_test_lf", "morse", "LF", 0.300, "[测试] 低频段电台",
-			"低沉的信号，来自很远的地方",
-			{"content_text": "LF BAND TEST", "speed_wpm": 12}],
-		["_test_uhf", "morse", "UHF", 450.000, "[测试] 超高频电台",
-			"短促的高频脉冲",
-			{"content_text": "UHF BAND TEST", "speed_wpm": 18}],
-		["_test_sstv", "sstv", "VHF", 145.800, "[测试] SSTV 图像电台",
-			"锁定 3 秒后按空格接收图像，接收完按 P 保存",
-			{"sstv_mode": "Martin M1", "transmit_duration": 20.0}],
-		["_test_audio", "audio", "VHF", 162.550, "[测试] 音频广播电台",
-			"调准后自动播放，音量随接近度上升",
-			{"content_file": "startup.mp3"}],
-	]
-
-	var injected: int = 0
-	for d in defs:
-		var opts: Dictionary = d[6]
-		if str(d[1]) == "sstv":
-			opts["content_image"] = sstv_img
-		elif str(d[1]) == "audio":
-			opts["content_audio"] = audio_bytes
-		var sig := _debug_radio_make_signal(str(d[0]), str(d[1]), str(d[2]), float(d[3]), str(d[4]), str(d[5]), opts)
-		mgr.add_signal(sig)
-		_test_radio_ids.append(str(d[0]))
-		injected += 1
-
-	# 5) 输出指引
-	_debug_radio_print_guide(injected, sstv_img.is_empty(), audio_bytes.is_empty())
-
-	# 6) 打开无线电界面
-	main.append_output("[color=" + T.muted_hex + "]正在启动无线电演示模式...[/color]\n", false)
-	main.open_radio_receiver()
-
-## 输出测试指引
-func _debug_radio_print_guide(count: int, sstv_missing: bool, audio_missing: bool) -> void:
-	var h: String = T.primary_hex
-	var m: String = T.muted_hex
-	var w: String = T.warning_hex
-	main.append_output("[color=" + h + "]════ 无线电演示模式 ════[/color]\n", false)
-	main.append_output("[color=" + m + "]已注入 %d 个测试信号（3 种类型 / 4 个频段），原信号保留[/color]\n" % count, false)
-	main.append_output("[color=" + m + "]  [MORSE] HF 7.100 标准码 / HF 5.200 数字台 / HF 14.100 信标[/color]\n", false)
-	main.append_output("[color=" + m + "]          HF 9.800 隐藏 / HF 10.500 加密 / LF 0.300 / UHF 450.000[/color]\n", false)
-	main.append_output("[color=" + m + "]  [SSTV ] VHF 145.800 图像接收（锁定后按空格，P 保存）[/color]\n", false)
-	main.append_output("[color=" + m + "]  [AUDIO] VHF 162.550 自动播放广播[/color]\n", false)
-	if sstv_missing:
-		main.append_output("[color=" + w + "]  [!] SSTV 图片素材缺失，图像接收将不可用[/color]\n", false)
-	if audio_missing:
-		main.append_output("[color=" + w + "]  [!] 音频素材缺失，音频电台将不可用[/color]\n", false)
-	main.append_output("[color=" + m + "]操作: ←→调频 ↑↓方位 <>仰角 | 1-4频段 Tab模式 S扫描 B书签[/color]\n", false)
-	main.append_output("[color=" + m + "]      L信标日志 | 空格SSTV接收 P存图 | Q/Esc退出[/color]\n", false)
-	main.append_output("[color=" + w + "]提示: 质量≥0.5 且持续3秒才完全锁定；退出后测试信号保留，[/color]\n", false)
-	main.append_output("[color=" + w + "]      用 debug radio clean 清除，或用 debug radio test 重新进入[/color]\n", false)
-
-## 移除测试信号
-func _debug_radio_clean(silent: bool = false) -> void:
-	if not main or not main.radio_receiver:
-		if not silent: _debug_err("radio_receiver 未就绪")
-		return
-	var mgr = main.radio_receiver.signal_mgr
-	if mgr == null:
-		if not silent: _debug_err("signal_mgr 未就绪")
-		return
-	var removed: int = _test_radio_ids.size()
-	for id in _test_radio_ids:
-		mgr.remove_signal(id)
-	_test_radio_ids.clear()
-	if not silent:
-		_debug_ok("已移除 %d 个测试信号（重新打开 radio 将恢复真实信号）" % removed)
-
-## 列出当前所有信号
-func _debug_radio_list() -> void:
-	if not main or not main.radio_receiver:
-		_debug_err("radio_receiver 未就绪"); return
-	var mgr = main.radio_receiver.signal_mgr
-	if mgr == null:
-		_debug_err("signal_mgr 未就绪"); return
-	var h: String = T.primary_hex
-	var m: String = T.muted_hex
-	main.append_output("[color=" + h + "]════ 无线电信号 (%d) ════[/color]\n" % mgr.get_signal_count(), false)
-	for sig_raw in mgr.signals:
-		var s = sig_raw as RadioConfigParser.RadioSignal
-		if s == null:
-			continue
-		var tags: String = ""
-		if s.id.begins_with("_test_"): tags += " [测试]"
-		if s.hidden: tags += " [隐藏]"
-		if not s.beacon_id.is_empty(): tags += " [信标]"
-		if not s.cipher_type.is_empty(): tags += " [加密]"
-		main.append_output("[color=" + m + "]  %-4s %9.3f MHz  %-6s %s%s[/color]\n" % [s.band, s.frequency, s.type, s.label, tags], false)
-
-# ── 系统 ──
-
-func _debug_skip_boot() -> void:
-	if not main or not main.boot_sequence: return
-	if main.boot_sequence.is_active():
-		main.boot_sequence.skip()
-		_debug_ok("开机动画已跳过")
-	else:
-		_debug_err("开机动画未在播放")
-
-func _debug_voice() -> void:
-	if not OS.has_feature("editor"):
-		_debug_err("角色调音面板只在 Godot 编辑器运行时开放")
-		return
-	if not main or not main.comm_mgr:
-		_debug_err("通讯系统未就绪")
-		return
-	if main.comm_mgr.is_active:
-		_debug_err("请先结束当前对话，再打开调音面板")
-		return
-	for cid in VoiceTuner.CHARACTER_IDS:
-		if not main.comm_mgr.get_registry().has_character(cid):
-			_debug_err("调音角色未加载: " + cid)
-			return
-	main.comm_mgr.open_voice_tuner()
-
-func _debug_voice_meeting(args: Array) -> void:
-	if not main or not main.comm_mgr:
-		_debug_err("通讯系统未就绪")
-		return
-	var file := FileAccess.open("res://comm_system/meeting_voice_demo.json", FileAccess.READ)
-	if file == null:
-		_debug_err("无法读取 meeting_voice_demo.json")
-		return
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	file.close()
-	if not parsed is Dictionary or not parsed.get("participants") is Array:
-		_debug_err("会议测试配置无效：participants 必须为数组")
-		return
-	var scene: Dictionary = parsed
-	if not args.is_empty():
-		var original: Array = scene["participants"]
-		var selected: Array = []
-		var slots: Array[String] = ["left", "center", "right"]
-		for index in range(args.size()):
-			var cid: String = str(args[index])
-			var entry: Dictionary = {"id": cid, "slot": slots[index % slots.size()]}
-			for candidate in original:
-				if candidate is Dictionary and str(candidate.get("id", "")) == cid:
-					entry["intro"] = candidate.get("intro", "")
-			selected.append(entry)
-		scene["participants"] = selected
-	if main.comm_mgr.start_voice_meeting_demo(scene):
-		_debug_ok("会议音色演示已开始：自动轮流发言，Esc 结束；可重复运行此命令")
-	else:
-		_debug_err("无法开始：请结束当前通讯/调音，确认角色 ID 已注册且不重复、slot 为 left/center/right")
-
-func _debug_status() -> void:
-	if not main: return
-	var m: String = T.muted_hex
-	main.append_output("[color=" + T.primary_hex + "]════ 调试状态总览 ════[/color]\n", false)
-	if main.user_mgr:
-		var logged: String = main.user_mgr.get_username() if main.user_mgr.is_logged_in else "(未登录)"
-		main.append_output("[color=" + m + "]  用户: %s[/color]\n" % logged, false)
-	if main.env_monitor:
-		main.append_output("[color=" + m + "]  天数: %d  时间: %s  天气: %s[/color]\n" % [main.env_monitor.current_day, main.env_monitor.get_current_hour_display(), main.env_monitor.get_weather_name()], false)
-	if main.env_task_mgr:
-		main.append_output("[color=" + m + "]  环境: 必做完成=%s 日报=%s[/color]\n" % ["是" if main.env_task_mgr.is_all_required_completed() else "否", "是" if main.env_task_mgr.report_submitted else "否"], false)
-	if main.comm_mgr:
-		main.append_output("[color=" + m + "]  对话: %d 个  当前: %s[/color]\n" % [main.comm_mgr.get_dialogue_ids().size(), main.comm_mgr.get_current_dialogue_id()], false)
-	if main.daily_dialogue_mgr:
-		main.append_output("[color=" + m + "]  标记: %d  选择: %d  已完成对话: %d[/color]\n" % [main.daily_dialogue_mgr._story_flags.size(), main.daily_dialogue_mgr._story_choices.size(), main.daily_dialogue_mgr._completed_dialogues.size()], false)
-	if main.perf_mgr:
-		main.append_output("[color=" + m + "]  绩效: 生涯=%d  当日配额=%d[/color]\n" % [main.perf_mgr.career_total, main.perf_mgr.daily_quota], false)
-	if main.mail_sys:
-		main.append_output("[color=" + m + "]  邮件: %d 封 (%d 未读)[/color]\n" % [main.mail_sys.get_total_count(), main.mail_sys.get_unread_count()], false)
-	if main.camera_mgr:
-		main.append_output("[color=" + m + "]  摄像头: %d/%d 解锁[/color]\n" % [main.camera_mgr.get_unlocked_count(), main.camera_mgr.get_camera_count()], false)
-
-func _debug_saves() -> void:
-	if not main or not main.save_mgr or not main.user_mgr:
-		_debug_err("save_mgr/user_mgr 未就绪"); return
-	var m: String = T.muted_hex
-	main.append_output("[color=" + T.primary_hex + "]════ 存档列表 ════[/color]\n", false)
-	if main.user_mgr.is_logged_in:
-		var sid: String = main.story_id if main.story_id else "(main)"
-		var has: bool = main.save_mgr.has_save(main.story_id) if not main.story_id.is_empty() else false
-		main.append_output("[color=" + m + "]  当前故事: %s  存档: %s[/color]\n" % [sid, "有" if has else "无"], false)
-	var users: Array[String] = main.user_mgr.get_all_users()
-	for u in users:
-		var stories: Array[String] = []
-		var save_dir: String = main.save_mgr.get_game_root_dir() + "saves/" + u + "/"
-		var dir := DirAccess.open(save_dir)
-		if dir:
-			dir.list_dir_begin()
-			var f: String = dir.get_next()
-			while not f.is_empty():
-				if f.ends_with(".json"):
-					stories.append(f.get_basename())
-				f = dir.get_next()
-			dir.list_dir_end()
-		main.append_output("[color=" + m + "]  %s: %s[/color]\n" % [u, str(stories) if not stories.is_empty() else "(无存档)"], false)
-
-func _debug_delsave(story_id: String) -> void:
-	if not main or not main.save_mgr:
-		_debug_err("save_mgr 未就绪"); return
-	if main.save_mgr.delete_save(story_id):
-		_debug_ok("已删除存档: %s" % story_id)
-	else:
-		_debug_err("存档不存在或删除失败: %s" % story_id)
-
-func _debug_settings_set(key: String, value: String) -> void:
-	if not main or not main.settings_mgr:
-		_debug_err("settings_mgr 未就绪"); return
-	var v: Variant = _debug_parse_value(value)
-	var r: Dictionary = main.settings_mgr.set_value(key, v)
-	if r.get("success", false):
-		_debug_ok("设置 %s = %s" % [key, str(v)])
-	else:
-		_debug_err(str(r.get("message", "设置失败")))
-
-func _debug_settings_get(key: String) -> void:
-	if not main or not main.settings_mgr:
-		_debug_err("settings_mgr 未就绪"); return
-	var val: Variant = main.settings_mgr.get_value(key)
-	main.append_output("[color=" + T.primary_hex + "]%s = %s[/color]\n" % [key, str(val)], false)
+			return false
+	main.append_output(text, false)
+	return true

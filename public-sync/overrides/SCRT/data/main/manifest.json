@@ -1,0 +1,19 @@
+{
+  "story": {
+    "id": "reader_core",
+    "title": "Reader Core",
+    "version": "1.0"
+  },
+  "daily_dialogues": {},
+  "initial_flags": {},
+  "comm_dialogues": {},
+  "comm_characters": {},
+  "vdisc_tasks": {},
+  "mail_policy": {
+    "allowed_ids": []
+  },
+  "camera_system": {
+    "cameras": {},
+    "defaults": {}
+  }
+}

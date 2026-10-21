@@ -10,6 +10,7 @@ extends RefCounted
 # ══════════════════════════════════════════
 #  引用
 # ══════════════════════════════════════════
+var _message_images: Array[Dictionary] = []
 var main: Control = null
 var fs: FileSystem = null
 var T: Variant = null
@@ -121,6 +122,7 @@ func _ensure_overlay() -> void:
 	content_rtl.scroll_active = true
 	content_rtl.scroll_following = true
 	content_rtl.selection_enabled = true
+	UIManager.setup_text_selection(content_rtl)
 	content_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_rtl.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -172,7 +174,8 @@ func _ensure_overlay() -> void:
 		tree.process_frame.connect(_on_process_frame)
 
 func _on_process_frame() -> void:
-	if not is_active:
+	if not is_active or not overlay.visible:
+		_last_frame_ms = Time.get_ticks_msec()
 		return
 	var now_ms: int = Time.get_ticks_msec()
 	var delta: float = max(0.001, float(now_ms - _last_frame_ms) / 1000.0) if _last_frame_ms > 0 else 0.016
@@ -227,7 +230,7 @@ func open(p_title: String, p_header: Dictionary, p_body: String, p_on_exit: Call
 	main.prompt_label.visible = false
 	_cached_output_text = main.output_text.text
 	main.output_text.text = ""
-	main.path_label.text = "CHAT LOG | " + viewer_title + " | Q/Esc 退出"
+	main.path_label.text = "CHAT LOG | " + viewer_title + (" | Q/Esc 返回收件箱 | Alt+←→ 上一封/下一封" if main.mail_sys != null and main.mail_sys._reading_mail else " | Q/Esc 退出")
 
 	# overlay 置顶
 	var root_control: Control = main as Control
@@ -469,7 +472,7 @@ func _parse_message_lines(lines: Array[String]) -> void:
 				var parsed_media: String = stripped
 				if main.crtml != null:
 					parsed_media = main.crtml.parse(stripped)
-				_messages.append({"type": "media", "sender": "", "time": "", "content": stripped, "typing_delay": 0, "parsed_bbcode": parsed_media})
+				_messages.append({"type": "media", "sender": "", "time": "", "content": stripped, "typing_delay": 0, "parsed_bbcode": parsed_media, "images": main.crtml.get_inline_images() if main.crtml != null else []})
 			elif not current_msg.is_empty():
 				current_msg["content"] = str(current_msg["content"]) + "\n" + line
 
@@ -483,6 +486,7 @@ func _finalize_message(msg: Dictionary) -> void:
 		parsed = main.crtml.parse(raw)
 	parsed = _replace_username(parsed)
 	msg["parsed_bbcode"] = parsed
+	msg["images"] = main.crtml.get_inline_images() if main.crtml != null else []
 	_messages.append(msg)
 
 func _ensure_participant(pid: String) -> void:
@@ -675,6 +679,7 @@ func _show_all_remaining() -> void:
 # 渲染单条消息
 # ============================================================
 func _render_message(msg: Dictionary) -> void:
+	_message_images.assign(msg.get("images", []))
 	var msg_type: String = str(msg.get("type", "msg"))
 	var sender: String = str(msg.get("sender", ""))
 	var time_str: String = str(msg.get("time", ""))
@@ -698,10 +703,10 @@ func _render_system_message(time_str: String, content: String) -> void:
 		line += "  [" + time_str + "] "
 	line += "--- " + content + " ---"
 	line += "[/color]\n"
-	content_rtl.append_text(line)
+	_append_message_images(content_rtl, line)
 
 func _render_media_message(content: String) -> void:
-	content_rtl.append_text("  " + content + "\n")
+	_append_message_images(content_rtl, "  " + content + "\n")
 
 
 func _render_user_message(sender: String, time_str: String, content: String) -> void:
@@ -731,7 +736,7 @@ func _render_user_message(sender: String, time_str: String, content: String) -> 
 		if not time_str.is_empty():
 			content_rtl.append_text(indent + "[color=" + m + "]" + time_str + "[/color]\n")
 		for cline in content.split("\n"):
-			content_rtl.append_text(indent + cline + "\n")
+			_append_message_images(content_rtl, indent + cline + "\n")
 		content_rtl.append_text("\n")
 	else:
 		# 完整消息：头像 + 用户名 + 角色 + 时间
@@ -751,7 +756,7 @@ func _render_user_message(sender: String, time_str: String, content: String) -> 
 
 		var indent: String = "    " if avatar_tex != null else "  "
 		for cline in content.split("\n"):
-			content_rtl.append_text(indent + cline + "\n")
+			_append_message_images(content_rtl, indent + cline + "\n")
 		content_rtl.append_text("\n")
 
 # ============================================================
@@ -821,3 +826,43 @@ func get_active_page_rtl() -> RichTextLabel:
 	if is_active and content_rtl != null and is_instance_valid(content_rtl):
 		return content_rtl
 	return null
+
+func _append_message_images(rtl: RichTextLabel, line: String) -> void:
+	var crtml_ref = null
+	if main != null and main.crtml != null:
+		crtml_ref = main.crtml
+	if crtml_ref == null:
+		rtl.append_text(line)
+		return
+
+	var images: Array[Dictionary] = _message_images
+	var remaining: String = line
+	while true:
+		var start_pos: int = remaining.find("\u0001IMG:")
+		if start_pos == -1:
+			break
+		var end_pos: int = remaining.find("\u0002", start_pos)
+		if end_pos == -1:
+			break
+		if start_pos > 0:
+			rtl.append_text(remaining.substr(0, start_pos))
+		var placeholder_id: String = remaining.substr(start_pos + 5, end_pos - start_pos - 5)
+		var found: bool = false
+		for img_info in images:
+			if str(img_info.get("placeholder", "")) == placeholder_id:
+				var texture = img_info.get("texture")
+				if texture != null and texture is ImageTexture:
+					var w: int = int(img_info.get("width", 200))
+					var h: int = int(img_info.get("height", 150))
+					rtl.newline()
+					rtl.add_image(texture as Texture2D, w, h)
+					rtl.newline()
+				else:
+					rtl.append_text("[IMG]")
+				found = true
+				break
+		if not found:
+			rtl.append_text("[IMG]")
+		remaining = remaining.substr(end_pos + 1)
+	if not remaining.is_empty():
+		rtl.append_text(remaining)

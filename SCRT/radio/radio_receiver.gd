@@ -18,6 +18,33 @@ var signal_mgr: RadioSignalManager = null
 var morse_engine: MorseEngine = null
 var sstv_decoder: SSTVDecoder = null
 var audio_gen: RadioAudioGenerator = null
+var weather_broadcast: WeatherBroadcast = null
+var file_receiver: RadioFileReceiver = null
+var spectrum_pattern: RadioSpectrumPattern = null
+var _player_key: String = ""
+var action_bar: HBoxContainer = null
+var action_status: Label = null
+var _actions: Dictionary = {}
+var _gallery: VBoxContainer = null
+var _gallery_open: bool = false
+var _sstv_source_id: String = ""
+var _sstv_saved: bool = false
+var _sstv_status: String = ""
+var _waterfall_paused: bool = false
+var _mode_rects: Array[Rect2] = []
+var _radio_bus: StringName = &"SCRTRadio"
+var _radio_analyzer: AudioEffectSpectrumAnalyzerInstance = null
+var _audio_station_ended: bool = false
+var _audio_repeat_timer: float = 0.0
+var _audio_broadcasts: Dictionary = {}  # 同一运行期间，离开接收机也继续走节目时间。
+var _audio_broadcast_key: String = ""
+var _morse_session_id: String = ""
+var debug_controls: bool = false
+var speech_builder = preload("res://radio/radio_speech_builder.gd").new()
+var voice_effects = preload("res://radio/radio_voice_effects.gd").new()
+var _speech_starts: Array[float] = []
+var _speech_program_key: String = ""
+var _audio_load_error: String = ""
 
 # ══════════════════════════════════════════
 #  模式
@@ -88,7 +115,7 @@ var draw_color_dim: Color = Color(0.1, 0.5, 0.15, 0.6)
 var grid_color: Color = Color(0.1, 0.3, 0.1, 0.3)
 var error_color: Color = Color(1.0, 0.3, 0.2, 1.0)
 var warning_color: Color = Color(1.0, 0.7, 0.0, 1.0)
-var bg_color: Color = Color(0.0, 0.02, 0.0, 0.95)
+var bg_color: Color = Color.TRANSPARENT
 
 # UI 布局常量
 const LEFT_PANEL_RATIO: float = 0.42
@@ -153,15 +180,49 @@ func setup(p_main, p_audio_manager) -> void:
 	morse_engine = MorseEngine.new()
 	sstv_decoder = SSTVDecoder.new()
 	audio_gen = RadioAudioGenerator.new()
+	weather_broadcast = WeatherBroadcast.new()
+	file_receiver = RadioFileReceiver.new()
+	file_receiver.setup(main)
+	spectrum_pattern = RadioSpectrumPattern.new()
 	_update_colors()
+
+func load_player_state() -> void:
+	file_receiver.bind_player()
+	var key: String = file_receiver.get_storage_dir()
+	if key == _player_key: return
+	_player_key = key
+	var data: Dictionary = {}
+	if main.user_mgr != null and main.user_mgr.is_logged_in:
+		data = main.user_mgr.current_user.get("radio_data", {})
+	signal_mgr.load_save_data(data)
+	_sstv_saved = false
+	_sstv_status = ""
+	_gallery_open = false
+	sstv_decoder = SSTVDecoder.new()
+
+func _save_player_state() -> void:
+	if main.user_mgr != null and main.user_mgr.is_logged_in:
+		main.user_mgr.current_user["radio_data"] = signal_mgr.get_save_data()
+		main.user_mgr._save_current_profile()
+
+func restore_legacy_state(data: Dictionary) -> void:
+	# 旧磁盘快照只作为账号尚无全局 RADIO 状态时的迁移来源。
+	if main.user_mgr != null and main.user_mgr.is_logged_in and main.user_mgr.current_user.has("radio_data"):
+		return
+	signal_mgr.load_save_data(data)
+	_save_player_state()
+
+func _discover(sig: RadioConfigParser.RadioSignal) -> void:
+	if signal_mgr.discover_signal(sig):
+		_update_nearest_signal()
+		_save_player_state()
 
 func _update_colors() -> void:
 	if T == null:
 		return
 	draw_color = T.primary
 	draw_color.a = 1.0
-	draw_color_dim = T.primary
-	draw_color_dim.a = 0.4
+	draw_color_dim = T.muted
 	grid_color = T.primary
 	grid_color.a = 0.15
 	if T.get("error") != null:
@@ -169,30 +230,73 @@ func _update_colors() -> void:
 	if T.get("warning") != null:
 		warning_color = T.warning
 	bg_color = T.bg
-	bg_color.a = 0.95
+	bg_color.a = 0.0
 
 func has_signals() -> bool:
+	_ensure_weather_signal()
 	return signal_mgr.has_signals()
+
+func _ensure_weather_signal() -> void:
+	if weather_broadcast != null:
+		weather_broadcast.ensure_signal(signal_mgr)
+
+func tune_weather_broadcast() -> void:
+	_ensure_weather_signal()
+	current_band = str(weather_broadcast.config.get("band", "LF")).to_upper()
+	current_frequency = float(weather_broadcast.config.get("frequency", 0.25))
+	current_azimuth = float(weather_broadcast.config.get("azimuth", 320.0))
+	current_elevation = float(weather_broadcast.config.get("elevation", 15.0))
+	current_mode = RadioMode.MORSE
+	_auto_scan_active = false
+	morse_engine.stop()
+	morse_engine.reset()
+	current_signal = null
+	_on_tuning_changed()
+
+func _start_morse_signal(sig: RadioConfigParser.RadioSignal) -> void:
+	if _morse_session_id == sig.id and sig.id != WeatherBroadcast.SIGNAL_ID:
+		return  # 单次播完保持结束；循环由引擎从头续播。
+	_morse_session_id = sig.id
+	if sig.id == WeatherBroadcast.SIGNAL_ID:
+		weather_broadcast.prepare_round(main.env_monitor if main else null, sig)
+		morse_engine.load_text(sig.content_text, sig.speed_wpm, false)
+		morse_engine.start()
+	elif sig.character_set == "numbers":
+		morse_engine.load_numbers_text(sig.content_text, sig.speed_wpm, sig.loop,
+			sig.group_size, sig.group_pause_ms, sig.repeat_count)
+		morse_engine.start_from_random()
+	else:
+		morse_engine.load_text(sig.content_text, sig.speed_wpm, sig.loop)
+		morse_engine.start_from_random()
 
 ## ★ 新增：从 manifest 加载信号源
 func load_signals_from_manifest(manifest: Dictionary, fs) -> void:
+	weather_broadcast.invalidate()
 	signal_mgr.load_signals_from_manifest(manifest, fs)
+	_ensure_weather_signal()
 
 func load_signals_from_fs(fs) -> void:
+	weather_broadcast.invalidate()
 	signal_mgr.load_signals(fs)
+	_ensure_weather_signal()
 
 ## ★ 从本地 data/radio/ 加载信号
 func load_local_signals() -> void:
+	debug_controls = false
+	weather_broadcast.invalidate()
 	if radio_data_mgr != null:
 		signal_mgr.load_local_signals(radio_data_mgr)
+	_ensure_weather_signal()
 
 ## ★ 热重载本地信号（触发器修改后调用）
 func reload_signals() -> void:
+	weather_broadcast.invalidate()
 	if radio_data_mgr != null:
 		signal_mgr.reload_local_signals(radio_data_mgr)
 		# 如果当前正在显示，刷新画布
 		if is_active and radio_canvas != null:
 			radio_canvas.queue_redraw()
+	_ensure_weather_signal()
 
 # ══════════════════════════════════════════
 #  UI 构建
@@ -234,6 +338,22 @@ func _ensure_overlay() -> void:
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 2)
 	margin.add_child(vbox)
+	UIManager.apply_terminal_theme(overlay, main.input_field.get_theme_font_size("font_size"))
+	action_bar = HBoxContainer.new()
+	action_bar.add_theme_constant_override("separation", 6)
+	action_bar.custom_minimum_size.y = 30
+	for action in ["receive", "save", "gallery", "freeze", "replay", "back"]:
+		var button := Button.new()
+		button.pressed.connect(_on_action.bind(action))
+		UIManager.style_terminal_button(button, T)
+		action_bar.add_child(button)
+		_actions[action] = button
+	action_status = Label.new()
+	action_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	action_status.clip_text = true
+	action_status.add_theme_color_override("font_color", T.muted)
+	action_bar.add_child(action_status)
 
 	# 绘制画布
 	radio_canvas = _RadioCanvas.new()
@@ -242,6 +362,13 @@ func _ensure_overlay() -> void:
 	radio_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	(radio_canvas as _RadioCanvas).radio = self
 	vbox.add_child(radio_canvas)
+	_gallery = VBoxContainer.new()
+	_gallery.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_gallery.hide()
+	vbox.add_child(_gallery)
+	# 固定底部操作行：不占左上角，也不因模式／长状态换行挤压仪表。
+	vbox.add_child(action_bar)
+	_style_action_bar()
 
 	# 底部导航
 	nav_label = RichTextLabel.new()
@@ -251,6 +378,21 @@ func _ensure_overlay() -> void:
 	nav_label.selection_enabled = false
 	nav_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(nav_label)
+	nav_label.add_theme_font_size_override("normal_font_size", 12)
+
+func _style_action_bar() -> void:
+	var font_size: int = clampi(roundi(main.input_field.get_theme_font_size("font_size") * 0.78), 12, 16)
+	for button: Button in _actions.values():
+		UIManager.style_terminal_button(button, T)
+		button.add_theme_font_size_override("font_size", font_size)
+		for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+			var style: StyleBox = button.get_theme_stylebox(state).duplicate()
+			style.content_margin_left = 6
+			style.content_margin_right = 6
+			style.content_margin_top = 3
+			style.content_margin_bottom = 3
+			button.add_theme_stylebox_override(state, style)
+	action_status.add_theme_font_size_override("font_size", font_size)
 
 func _align_overlay() -> void:
 	if overlay == null:
@@ -261,11 +403,30 @@ func _align_overlay() -> void:
 	overlay.position = rect.position
 	overlay.size = rect.size
 
+func _ensure_radio_bus() -> void:
+	var index: int = AudioServer.get_bus_index(_radio_bus)
+	if index < 0:
+		AudioServer.add_bus()
+		index = AudioServer.get_bus_count() - 1
+		AudioServer.set_bus_name(index, _radio_bus)
+		AudioServer.set_bus_send(index, &"Master")
+	var effect_index: int = -1
+	for i in range(AudioServer.get_bus_effect_count(index)):
+		if AudioServer.get_bus_effect(index, i) is AudioEffectSpectrumAnalyzer: effect_index = i
+	if effect_index < 0:
+		var analyzer := AudioEffectSpectrumAnalyzer.new()
+		analyzer.fft_size = AudioEffectSpectrumAnalyzer.FFT_SIZE_2048
+		AudioServer.add_bus_effect(index, analyzer)
+		effect_index = AudioServer.get_bus_effect_count(index) - 1
+	_radio_analyzer = AudioServer.get_bus_effect_instance(index, effect_index)
+
 func _ensure_audio_players() -> void:
+	_ensure_radio_bus()
+	voice_effects.setup(_radio_bus)
 	if _noise_player == null:
 		_noise_player = AudioStreamPlayer.new()
 		_noise_player.name = "RadioNoisePlayer"
-		_noise_player.bus = "Master"
+		_noise_player.bus = _radio_bus
 		_noise_player.volume_db = -80.0
 		audio_manager.add_child(_noise_player)
 		var noise_stream: AudioStreamWAV = audio_gen.generate_noise_stream(2.0)
@@ -274,7 +435,7 @@ func _ensure_audio_players() -> void:
 	if _tone_player == null:
 		_tone_player = AudioStreamPlayer.new()
 		_tone_player.name = "RadioTonePlayer"
-		_tone_player.bus = "Master"
+		_tone_player.bus = _radio_bus
 		_tone_player.volume_db = -80.0
 		audio_manager.add_child(_tone_player)
 		var tone_stream: AudioStreamWAV = audio_gen.generate_tone_stream(700.0, 1.0)
@@ -283,7 +444,7 @@ func _ensure_audio_players() -> void:
 	if _sstv_player == null:
 		_sstv_player = AudioStreamPlayer.new()
 		_sstv_player.name = "RadioSSTVPlayer"
-		_sstv_player.bus = "Master"
+		_sstv_player.bus = _radio_bus
 		_sstv_player.volume_db = -80.0
 		audio_manager.add_child(_sstv_player)
 
@@ -291,26 +452,41 @@ func _ensure_audio_players() -> void:
 	if _audio_station_player == null:
 		_audio_station_player = AudioStreamPlayer.new()
 		_audio_station_player.name = "RadioAudioStationPlayer"
-		_audio_station_player.bus = "Master"
+		_audio_station_player.bus = _radio_bus
 		_audio_station_player.volume_db = -80.0
 		audio_manager.add_child(_audio_station_player)
+		_audio_station_player.finished.connect(_on_audio_station_finished)
 
 # ══════════════════════════════════════════
 #  打开 / 关闭
 # ══════════════════════════════════════════
 func open() -> void:
+	load_player_state()
 	_ensure_overlay()
 	_ensure_audio_players()
 	T = ThemeManager.current
 	_update_colors()
+	UIManager.apply_terminal_theme(overlay, main.input_field.get_theme_font_size("font_size"))
+	_style_action_bar()
+	action_status.add_theme_color_override("font_color", T.muted)
 	_align_overlay()
 
 	is_active = true
 	current_mode = RadioMode.MORSE
+	_gallery_open = false
+	_gallery.hide()
+	radio_canvas.show()
+	_waterfall_paused = false
+	spectrum_pattern.reset()
+	_signal_lock_timer = 0.0
+	current_signal = null
+	_morse_session_id = ""
+	_auto_scan_active = false
 
 	# 加载信号（如果尚未加载）
 	if not signal_mgr.has_signals() and main.fs != null:
 		signal_mgr.load_signals(main.fs)
+	_ensure_weather_signal()
 
 	# 缓存终端
 	_cached_input_visible = main.input_field.visible
@@ -324,6 +500,9 @@ func open() -> void:
 	_init_waterfall()
 
 	overlay.visible = true
+	main.move_child(overlay, main.get_child_count() - 1)
+	var crt: Node = main.get_node_or_null("CRTEffect")
+	if crt != null: main.move_child(crt, main.get_child_count() - 1)
 	radio_canvas.set_process(true)
 
 	# 启动噪音与基准音
@@ -337,6 +516,8 @@ func open() -> void:
 func close() -> void:
 	if not is_active:
 		return
+	file_receiver.pause()
+	_save_player_state()
 	is_active = false
 
 	# 停止音频
@@ -351,10 +532,15 @@ func close() -> void:
 	if _audio_station_player and _audio_station_player.playing:
 		_audio_station_player.stop()
 	_audio_station_signal = null
+	_audio_station_stream = null
+	_audio_station_ended = false
+	_gallery_open = false
+	_dragging_freq = false
 
 
 	# 停止摩斯引擎
 	morse_engine.stop()
+	_morse_session_id = ""
 
 	# 停止 SSTV
 	if sstv_decoder.is_receiving:
@@ -378,7 +564,7 @@ func close() -> void:
 	main.prompt_label.visible = _cached_prompt_visible
 
 	main._update_status_bar()
-	main.input_field.grab_focus()
+	main._refocus_input.call_deferred()
 	if main.has_method("_on_radio_closed"):
 		main._on_radio_closed()
 
@@ -388,8 +574,8 @@ func close() -> void:
 func _init_waterfall() -> void:
 	_waterfall_width = 512
 	_waterfall_height = 256
-	_waterfall_image = Image.create(_waterfall_width, _waterfall_height, false, Image.FORMAT_RGB8)
-	_waterfall_image.fill(Color.BLACK)
+	_waterfall_image = Image.create(_waterfall_width, _waterfall_height, false, Image.FORMAT_RGBA8)
+	_waterfall_image.fill(Color.TRANSPARENT)
 	_waterfall_texture = ImageTexture.create_from_image(_waterfall_image)
 	_waterfall_spectrum.resize(_waterfall_width)
 	_waterfall_spectrum.fill(0.0)
@@ -397,6 +583,7 @@ func _init_waterfall() -> void:
 
 
 func _update_waterfall(delta: float) -> void:
+	if _waterfall_paused: return
 	_waterfall_update_timer += delta
 	if _waterfall_update_timer < WATERFALL_UPDATE_INTERVAL:
 		return
@@ -405,26 +592,32 @@ func _update_waterfall(delta: float) -> void:
 		return
 
 	# 显式类型，避免类型推断失败
-	var analyzer: AudioEffectSpectrumAnalyzerInstance = audio_manager.get_spectrum_analyzer_instance()  # [1]
-	if analyzer == null:
-		return
+	var analyzer: AudioEffectSpectrumAnalyzerInstance = _radio_analyzer
 
 	var min_f: float = maxf(_wf_min_freq, 20.0)
 	var max_f: float = maxf(_wf_max_freq, min_f + 10.0)
 	var bars: int = _waterfall_width
 
-	# 对数分桶采样
+	# 线性音频频率轴，不能把基带 FFT 伪装成整个 RF 波段。
 	for i in range(bars):
 		var t0: float = float(i) / float(bars)
 		var t1: float = float(i + 1) / float(bars)
-		var f0: float = min_f * pow(max_f / min_f, t0)
-		var f1: float = min_f * pow(max_f / min_f, t1)
-		var mag: Vector2 = analyzer.get_magnitude_for_frequency_range(
-			f0, f1, AudioEffectSpectrumAnalyzerInstance.MAGNITUDE_AVERAGE
-		)
+		var f0: float = lerpf(min_f, max_f, t0)
+		var f1: float = lerpf(min_f, max_f, t1)
+		var mag: Vector2 = Vector2.ZERO
+		if analyzer != null:
+			mag = analyzer.get_magnitude_for_frequency_range(f0, f1, AudioEffectSpectrumAnalyzerInstance.MAGNITUDE_AVERAGE)
 		var m: float = (mag.x + mag.y) * 0.5
 		var e: float = clampf((linear_to_db(maxf(m, 0.00001)) + 80.0) / 80.0, 0.0, 1.0)
 		_waterfall_spectrum[i] = e
+	spectrum_pattern.mix_row(_waterfall_spectrum, WATERFALL_UPDATE_INTERVAL, current_signal, current_signal_quality)
+	# 窄带数据的接收模拟；载波与谱图线索分别生成，下载不会替换线索。
+	if current_signal != null and current_signal.type == "data" and current_signal_quality > 0.03:
+		for x in range(bars):
+			var hz: float = lerpf(min_f, max_f, float(x) / bars)
+			var carrier: float = 900.0 + (float(file_receiver._cursor % 4) - 1.5) * 70.0
+			if absf(hz - carrier) < 20.0:
+				_waterfall_spectrum[x] = maxf(_waterfall_spectrum[x], current_signal_quality * (0.95 if file_receiver.active_signal != null else 0.6))
 
 	# 下滚 1 行（Godot 4 的 Image 无需 lock/unlock）
 	_waterfall_image.blit_rect(
@@ -442,7 +635,7 @@ func _update_waterfall(delta: float) -> void:
 func _spectrum_to_color(value: float) -> Color:
 	# 冷-热色彩映射：黑 → 深蓝 → 青 → 绿 → 黄 → 红 → 白
 	if value < 0.1:
-		return Color(0.0, 0.0, value * 3.0)
+		return Color(0.0, 0.0, value * 3.0, value * 3.0)
 	elif value < 0.25:
 		var t: float = (value - 0.1) / 0.15
 		return Color(0.0, t * 0.5, 0.3 + t * 0.4)
@@ -465,12 +658,18 @@ func _spectrum_to_color(value: float) -> Color:
 func handle_input(event: InputEvent) -> bool:
 	if not is_active:
 		return false
+	if _gallery_open and not event is InputEventKey:
+		return false # 图片列表交给原生控件，不能命中隐藏画布的旧刻度区域。
 
 	# 鼠标事件处理
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				var local_pos: Vector2 = event.position - overlay.global_position
+				var local_pos: Vector2 = event.position - radio_canvas.global_position
+				for i in range(_mode_rects.size()):
+					if _mode_rects[i].has_point(local_pos):
+						_set_mode(i)
+						return true
 				if _freq_ruler_rect.has_point(local_pos):
 					_dragging_freq = true
 					_set_freq_from_mouse(local_pos.x)
@@ -483,7 +682,7 @@ func handle_input(event: InputEvent) -> bool:
 
 	if event is InputEventMouseMotion:
 		if _dragging_freq:
-			var local_pos2: Vector2 = event.position - overlay.global_position
+			var local_pos2: Vector2 = event.position - radio_canvas.global_position
 			_set_freq_from_mouse(local_pos2.x)
 			return true
 		return false
@@ -492,27 +691,16 @@ func handle_input(event: InputEvent) -> bool:
 		return false
 
 	var shift: bool = event.shift_pressed
+	if event.echo and event.keycode in [KEY_Q, KEY_ESCAPE, KEY_TAB, KEY_SPACE, KEY_G, KEY_P, KEY_F, KEY_B, KEY_S]: return true
+	if _gallery_open:
+		if event.keycode in [KEY_Q, KEY_ESCAPE, KEY_G]: _on_action("back")
+		return true
 	match event.keycode:
 		KEY_Q, KEY_ESCAPE:
 			close()
 			return true
 		KEY_TAB:
-			# 记住切换前的模式，用于退出 SSTV 时清理预听
-			var prev_mode: RadioMode = current_mode
-			match current_mode:
-				RadioMode.MORSE:
-					current_mode = RadioMode.SSTV
-				RadioMode.SSTV:
-					current_mode = RadioMode.WATERFALL
-				RadioMode.WATERFALL:
-					current_mode = RadioMode.MORSE
-
-			# 若从 SSTV 切出，立即停止预听音（接收不中断，因接收推进已与模式解耦）
-			if prev_mode == RadioMode.SSTV and current_mode != RadioMode.SSTV:
-				if _sstv_previewing and _sstv_player and _sstv_player.playing:
-					_sstv_player.stop()
-				_sstv_previewing = false
-			_update_nav()
+			_set_mode((int(current_mode) + 1) % 3)
 			return true
 		KEY_LEFT:
 			var step: float = _get_freq_step()
@@ -572,18 +760,21 @@ func handle_input(event: InputEvent) -> bool:
 				current_azimuth, current_elevation,
 				"%.3f MHz %s" % [current_frequency, current_band]
 			)
+			_save_player_state()
 			return true
 		KEY_S:
 			_auto_scan_active = not _auto_scan_active
 			_auto_scan_timer = 0.0
 			return true
 		KEY_SPACE:
-			if current_mode == RadioMode.SSTV and _sstv_detected and not _sstv_receiving:
-				_start_sstv_receive()
+			_on_action("receive")
 			return true
 		KEY_R:
-			if current_mode == RadioMode.MORSE:
+			if current_signal != null and current_signal.type == "audio":
+				_on_action("replay")
+			elif current_mode == RadioMode.MORSE:
 				morse_engine.reset()
+				if current_signal != null and current_signal.type == "morse": morse_engine.start()
 			elif current_mode == RadioMode.SSTV:
 				if sstv_decoder.is_receiving:
 					sstv_decoder.interrupt()
@@ -596,6 +787,12 @@ func handle_input(event: InputEvent) -> bool:
 		KEY_P:
 			if current_mode == RadioMode.SSTV and sstv_decoder.is_complete:
 				_save_sstv_image()
+			return true
+		KEY_G:
+			_open_gallery()
+			return true
+		KEY_F:
+			if current_mode == RadioMode.WATERFALL: _on_action("freeze")
 			return true
 		KEY_L:
 			_show_beacon_log = not _show_beacon_log
@@ -625,6 +822,7 @@ func _switch_band(band: String) -> void:
 	var band_info: Dictionary = RadioConfigParser.BAND_RANGES[band]
 	current_frequency = float(band_info["min"])
 	_nearest_signal = null
+	_display_quality = 0.0
 	_on_tuning_changed()
 
 func _get_freq_step() -> float:
@@ -647,12 +845,14 @@ func _get_band_max() -> float:
 # ══════════════════════════════════════════
 func _update_nearest_signal() -> void:
 	_nearest_signal = signal_mgr.get_nearest_signal_by_freq(current_frequency, current_band)
+	if _nearest_signal != null and _nearest_signal.hidden and not signal_mgr.is_discovered(_nearest_signal.id):
+		_nearest_signal = null
 
 # ══════════════════════════════════════════
 #  调谐变化回调
 # ══════════════════════════════════════════
-func _on_tuning_changed() -> void:
-	_auto_scan_active = false
+func _on_tuning_changed(manual: bool = true) -> void:
+	if manual: _auto_scan_active = false
 	_update_signal_lock()
 	_update_nearest_signal()
 
@@ -685,6 +885,7 @@ func _on_tuning_changed() -> void:
 
 	if radio_canvas:
 		radio_canvas.queue_redraw()
+	_refresh_actions()
 
 
 
@@ -695,6 +896,7 @@ func _update_signal_lock() -> void:
 
 	if new_signal != current_signal:
 		current_signal = new_signal
+		_morse_session_id = ""
 		_signal_lock_timer = 0.0
 		morse_engine.stop()
 		morse_engine.reset()
@@ -716,6 +918,7 @@ func process(delta: float) -> void:
 	var best_sig = result["signal"]
 	if best_sig != current_signal:
 		current_signal = best_sig
+		_morse_session_id = ""
 		_signal_lock_timer = 0.0
 		morse_engine.stop()
 		morse_engine.reset()
@@ -724,33 +927,31 @@ func process(delta: float) -> void:
 	_display_quality = lerpf(_display_quality, current_signal_quality, QUALITY_SMOOTH * delta)
 
 	# 信号锁定计时
+	var was_locked: bool = _signal_lock_timer >= SIGNAL_LOCK_TIME
 	if current_signal != null and current_signal_quality >= SIGNAL_LOCK_THRESHOLD:
 		_signal_lock_timer += delta
 	else:
 		_signal_lock_timer = maxf(_signal_lock_timer - delta * 2.0, 0.0)
+	if was_locked != (_signal_lock_timer >= SIGNAL_LOCK_TIME): _refresh_actions()
 
 	# 锁定后自动开始（morse/sstv 内容解码仍需锁定）
 	if _signal_lock_timer >= SIGNAL_LOCK_TIME and current_signal != null:
 		_on_signal_locked(current_signal)
 
 	# ★ 渐进感知：morse 信号质量 > 0 即开始播放音调（不等锁定）
-	if current_mode == RadioMode.MORSE and current_signal != null and current_signal.type == "morse":
+	if current_signal != null and current_signal.type == "morse":
+		if current_signal_quality <= 0.02:
+			morse_engine.reset()
+			_morse_session_id = ""
 		if current_signal_quality > 0.02 and morse_engine.is_playing:
 			# 已在播放，音调音量由质量控制（在 _update_tone 中处理）
 			pass
 		elif current_signal_quality > 0.15 and not morse_engine.is_playing and not current_signal.content_text.is_empty():
-			# ★ 质量够高时自动开始（不用等满锁定时间）
-			if current_signal.character_set == "numbers":
-				morse_engine.load_numbers_text(
-					current_signal.content_text, current_signal.speed_wpm, current_signal.loop,
-					current_signal.group_size, current_signal.group_pause_ms, current_signal.repeat_count
-				)
-			else:
-				morse_engine.load_text(current_signal.content_text, current_signal.speed_wpm, current_signal.loop)
-			morse_engine.start_from_random()
+			_start_morse_signal(current_signal)
 
 	# ★ 音频电台渐进播放
 	_update_audio_station(delta)
+	file_receiver.process(delta, current_signal, current_signal_quality, _signal_lock_timer >= SIGNAL_LOCK_TIME)
 
 	# 自动扫描
 	if _auto_scan_active:
@@ -767,6 +968,11 @@ func process(delta: float) -> void:
 		_update_tone(tone_on and current_signal_quality > 0.02)
 	else:
 		_update_tone(false)
+	if current_signal != null and current_signal.type == "data":
+		_tone_player.pitch_scale = (900.0 + (float(file_receiver._cursor % 4) - 1.5) * 70.0) / 700.0
+		_update_tone(current_signal_quality > 0.03)
+	elif _tone_player != null:
+		_tone_player.pitch_scale = 1.0
 
 
 	# —— SSTV：接收推进与音频管理（与模式无关）——
@@ -777,13 +983,13 @@ func process(delta: float) -> void:
 	if _sstv_receiving and sstv_decoder.is_audio_ready() and _sstv_player != null:
 		if not _sstv_player.playing and sstv_decoder.has_sstv_audio():
 			_sstv_player.stream = sstv_decoder.get_sstv_audio_stream()
-			_sstv_player.volume_db = linear_to_db(maxf(current_volume * 0.6, 0.001))
+			_sstv_player.volume_db = _radio_volume_db(current_volume * 0.6)
 			_sstv_player.play()
 
 		# 接收态下随质量动态调音量
 		if _sstv_player.playing:
 			var sstv_vol: float = current_signal_quality * current_volume * 0.6
-			_sstv_player.volume_db = linear_to_db(maxf(sstv_vol, 0.001))
+			_sstv_player.volume_db = _radio_volume_db(sstv_vol)
 
 	# 接收完成后，标记结束并停播（is_complete 为 bool 属性）
 	if sstv_decoder.is_complete:
@@ -813,7 +1019,7 @@ func process(delta: float) -> void:
 				_sstv_player.play()
 				_sstv_previewing = true
 			var pv_vol: float = current_signal_quality * current_volume * 0.4
-			_sstv_player.volume_db = linear_to_db(maxf(pv_vol, 0.001))
+			_sstv_player.volume_db = _radio_volume_db(pv_vol)
 		elif _sstv_previewing and _sstv_player.playing:
 			_sstv_player.stop()
 			_sstv_previewing = false
@@ -834,6 +1040,7 @@ func process(delta: float) -> void:
 	if _nav_timer >= 0.5:
 		_nav_timer = 0.0
 		_update_nav()
+		_refresh_actions()
 
 	# 重绘
 	if radio_canvas:
@@ -849,7 +1056,7 @@ func _update_tone(tone_on: bool) -> void:
 	if current_signal_quality < 0.3:
 		effective_vol *= current_signal_quality / 0.3
 	var db: float = audio_gen.get_tone_volume_db(current_signal_quality, tone_on, effective_vol)
-	_tone_player.volume_db = db
+	_tone_player.volume_db = db + audio_manager.media_volume_db
 
 
 func _update_noise_volume() -> void:
@@ -866,12 +1073,15 @@ func _update_noise_volume() -> void:
 		)
 		effective_quality = maxf(effective_quality, aq)
 	var db: float = audio_gen.get_noise_volume_db(effective_quality, current_volume * 0.15)
-	_noise_player.volume_db = db
+	_noise_player.volume_db = db + audio_manager.media_volume_db
+
+func _radio_volume_db(linear: float, gain: float = 0.0) -> float:
+	return (-80.0 if linear <= 0.0 else linear_to_db(linear)) + audio_manager.media_volume_db + gain
 
 # ══════════════════════════════════════════
 #  ★ 音频电台渐进播放
 # ══════════════════════════════════════════
-func _update_audio_station(_delta: float) -> void:
+func _update_audio_station(delta: float) -> void:
 	if _audio_station_player == null:
 		return
 
@@ -884,7 +1094,7 @@ func _update_audio_station(_delta: float) -> void:
 		if s.type != "audio":
 			continue
 		var q: float = signal_mgr.calculate_signal_quality(
-			s, current_frequency, current_band, current_azimuth, current_elevation
+			s, current_frequency, current_band, current_azimuth, current_elevation, false
 		)
 		if q > best_audio_quality:
 			best_audio_quality = q
@@ -895,61 +1105,110 @@ func _update_audio_station(_delta: float) -> void:
 		if _audio_station_player.playing:
 			_audio_station_player.stop()
 		_audio_station_signal = null
+		_audio_station_stream = null
+		_audio_station_ended = false
 		return
 
 	# 信号切换 → 重新加载音频
-	if best_audio_sig != _audio_station_signal:
+	var text_key: String = speech_builder.fingerprint(best_audio_sig) if best_audio_sig.audio_role == "speech" and not best_audio_sig.content_text.is_empty() else ""
+	# 更新报文在一轮播完后生效，避免截断正在播出的词。
+	var updating_program: bool = best_audio_sig == _audio_station_signal and text_key != _speech_program_key and _audio_station_ended and (not best_audio_sig.loop or _audio_repeat_timer + delta >= best_audio_sig.repeat_delay)
+	if best_audio_sig != _audio_station_signal or updating_program:
 		_audio_station_signal = best_audio_sig
 		_audio_station_stream = null
+		_audio_station_player.stream = null
+		_audio_station_ended = false
+		_audio_repeat_timer = 0.0
+		_speech_starts.clear()
+		_speech_program_key = text_key
+		_audio_load_error = ""
+		_audio_station_player.bus = voice_effects.BUS if best_audio_sig.audio_role == "speech" else _radio_bus
 		if _audio_station_player.playing:
 			_audio_station_player.stop()
 
 		# 加载音频流
-		if not best_audio_sig.content_audio.is_empty():
-			var stream = audio_manager.load_audio_from_bytes(
+		var stream: AudioStream = null
+		if not text_key.is_empty():
+			var program: Dictionary = speech_builder.build(best_audio_sig, audio_manager)
+			if program.has("error"):
+				_audio_load_error = str(program.error)
+			else:
+				stream = program.stream
+				_speech_starts.assign(program.starts)
+		elif not best_audio_sig.content_audio.is_empty():
+			stream = audio_manager.load_audio_from_bytes(
 				best_audio_sig.content_file,
 				best_audio_sig.content_audio
 			) if audio_manager.has_method("load_audio_from_bytes") else null
-			if stream != null:
-				# 音频电台需要无缝循环
-				if stream is AudioStreamMP3:
-					stream.loop = true
-				elif stream is AudioStreamOggVorbis:
-					stream.loop = true
-				elif stream is AudioStreamWAV:
-					stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-				_audio_station_stream = stream
-				_audio_station_player.stream = stream
-				_audio_station_player.play()
+		if stream != null:
+			var seamless_loop: bool = best_audio_sig.loop and best_audio_sig.repeat_delay <= 0.0
+			if stream is AudioStreamMP3:
+				stream.loop = seamless_loop
+			elif stream is AudioStreamOggVorbis:
+				stream.loop = seamless_loop
+			elif stream is AudioStreamWAV:
+				stream.loop_mode = AudioStreamWAV.LOOP_FORWARD if seamless_loop else AudioStreamWAV.LOOP_DISABLED
+			_audio_station_stream = stream
+			_audio_station_player.stream = stream
+			if updating_program:
+				_audio_broadcasts[best_audio_sig.id + ":" + text_key] = Time.get_ticks_msec() / 1000.0
+			_join_audio_broadcast(best_audio_sig, stream.get_length())
 
 	# 确保正在播放
-	if _audio_station_stream != null and not _audio_station_player.playing:
-		_audio_station_player.play()
+	if _audio_station_stream != null and not _audio_station_player.playing and _audio_station_ended and best_audio_sig.loop:
+		_audio_repeat_timer += delta
+		if _audio_repeat_timer >= best_audio_sig.repeat_delay:
+			_audio_station_ended = false
+			_audio_repeat_timer = 0.0
+			_audio_broadcasts[_audio_broadcast_key] = Time.get_ticks_msec() / 1000.0
+			_audio_station_player.play()
 
 	# ★ 音量随信号质量渐变：质量越高越清晰
 	var target_vol_linear: float = best_audio_quality * current_volume * 0.8
-	_audio_station_player.volume_db = linear_to_db(maxf(target_vol_linear, 0.001))
+	if best_audio_sig.audio_role == "speech":
+		# 保持录音输入强度，在失真后应用接收音量／媒体音量／电台增益。
+		_audio_station_player.volume_db = 0.0
+		voice_effects.set_output_volume(_radio_volume_db(target_vol_linear, best_audio_sig.audio_gain_db))
+		voice_effects.update(best_audio_quality, delta)
+	else:
+		_audio_station_player.volume_db = _radio_volume_db(target_vol_linear, best_audio_sig.audio_gain_db)
 
 	# ★ 发现信号（质量达到阈值时自动标记发现）
 	if best_audio_quality >= SIGNAL_LOCK_THRESHOLD:
-		signal_mgr.discover_signal(best_audio_sig)
+		_discover(best_audio_sig)
+
+func _on_audio_station_finished() -> void:
+	_audio_station_ended = true
+	_audio_repeat_timer = 0.0
+	if _audio_station_stream != null:
+		_audio_broadcasts[_audio_broadcast_key] = Time.get_ticks_msec() / 1000.0 - _audio_station_stream.get_length()
+
+func _join_audio_broadcast(sig: RadioConfigParser.RadioSignal, duration: float) -> void:
+	_audio_broadcast_key = sig.id + ":" + (_speech_program_key if not _speech_program_key.is_empty() else RadioFileReceiver.sha256(sig.content_audio))
+	if duration <= 0.0:
+		_audio_station_player.play()
+		return
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if not _audio_broadcasts.has(_audio_broadcast_key):
+		# 仅首次截获随机；合成语音从完整字母开头接入，后续整轮从头播。
+		var initial: float = _speech_starts.pick_random() if not _speech_starts.is_empty() else randf_range(0.0, duration)
+		_audio_broadcasts[_audio_broadcast_key] = now - initial
+	var elapsed: float = maxf(0.0, now - float(_audio_broadcasts[_audio_broadcast_key]))
+	var position: float = fmod(elapsed, duration + sig.repeat_delay) if sig.loop else elapsed
+	if position >= duration:
+		_audio_station_ended = true
+		_audio_repeat_timer = position - duration if sig.loop else 0.0
+	else:
+		_audio_station_player.play(position)
 
 # ══════════════════════════════════════════
 #  信号锁定与自动行为
 # ══════════════════════════════════════════
 func _on_signal_locked(sig: RadioConfigParser.RadioSignal) -> void:
-	signal_mgr.discover_signal(sig)
-	if current_mode == RadioMode.MORSE and sig.type == "morse":
+	_discover(sig)
+	if sig.type == "morse":
 		if not morse_engine.is_playing and not sig.content_text.is_empty():
-			# ★ 数字电台信号使用专用加载
-			if sig.character_set == "numbers":
-				morse_engine.load_numbers_text(
-					sig.content_text, sig.speed_wpm, sig.loop,
-					sig.group_size, sig.group_pause_ms, sig.repeat_count
-				)
-			else:
-				morse_engine.load_text(sig.content_text, sig.speed_wpm, sig.loop)
-			morse_engine.start_from_random()
+			_start_morse_signal(sig)
 	elif current_mode == RadioMode.SSTV and sig.type == "sstv":
 		if not _sstv_receiving and not sig.content_image.is_empty():
 			_sstv_detected = true
@@ -959,6 +1218,9 @@ func _start_sstv_receive() -> void:
 	if current_signal == null or current_signal.type != "sstv":
 		return
 	if current_signal.content_image.is_empty():
+		return
+	if _signal_lock_timer < SIGNAL_LOCK_TIME or current_signal_quality < SIGNAL_LOCK_THRESHOLD:
+		_sstv_status = "[INFO] 请先稳定锁定信号。"
 		return
 
 	# 若在预听或已有播放，先停掉避免重叠
@@ -975,6 +1237,9 @@ func _start_sstv_receive() -> void:
 		_sstv_receiving = true
 		_sstv_detected = false
 		_sstv_target_id = current_signal.id  # 记录接收目标
+		_sstv_source_id = current_signal.id
+		_sstv_saved = false
+		_sstv_status = ""
 	# 音频不在此处立即播放，由 process() 中检测 is_audio_ready 后播放
 
 
@@ -984,11 +1249,11 @@ func _save_sstv_image() -> void:
 	var png_data: PackedByteArray = sstv_decoder.get_image_as_png()
 	if png_data.is_empty():
 		return
-	if main.fs != null and main.fs.has_method("write_file"):
-		var filename: String = "sstv_%s.png" % Time.get_unix_time_from_system()
-		var save_path: String = "/radio/" + filename
-		main.fs.write_file(save_path, png_data)
-		print("[RadioReceiver] SSTV 图像已保存: ", save_path)
+	if _sstv_saved: return
+	var result: Dictionary = file_receiver.save_sstv(png_data, _sstv_source_id)
+	_sstv_saved = bool(result.get("ok", false))
+	_sstv_status = ("[OK] " if _sstv_saved else "[ERROR] ") + str(result.message)
+	_refresh_actions()
 
 # ══════════════════════════════════════════
 #  自动扫描
@@ -1004,7 +1269,7 @@ func _do_auto_scan_step() -> void:
 	var result: Dictionary = signal_mgr.get_best_signal(current_frequency, current_band, current_azimuth, current_elevation)
 	if result["quality"] > 0.3:
 		_auto_scan_active = false
-	_on_tuning_changed()
+	_on_tuning_changed(false)
 
 # ══════════════════════════════════════════
 #  导航栏
@@ -1023,15 +1288,119 @@ func _update_nav() -> void:
 	parts.append("[color=%s]Tab[/color] 模式" % m)
 	parts.append("[color=%s]S[/color] 扫描" % m)
 	parts.append("[color=%s]L[/color] 日志" % m)
-	if current_mode == RadioMode.SSTV:
-		parts.append("[color=%s]Space[/color] 接收" % m)
-	if sstv_decoder.is_complete:
-		parts.append("[color=%s]P[/color] 保存" % m)
-	parts.append("[color=%s]Q[/color] 退出" % m)
+	parts.append("[color=%s]Esc[/color] 返回" % m)
 
 	# 使用 append_text 以启用 BBCode 颜色
 	nav_label.text = ""
 	nav_label.append_text(" | ".join(parts))
+	_refresh_actions()
+
+func _set_mode(value: int) -> void:
+	current_mode = value as RadioMode
+	if current_mode != RadioMode.SSTV and _sstv_previewing:
+		if _sstv_player != null: _sstv_player.stop()
+		_sstv_previewing = false
+	_update_nav()
+	if radio_canvas != null: radio_canvas.queue_redraw()
+
+func _refresh_actions() -> void:
+	if action_bar == null: return
+	for button in _actions.values(): button.hide()
+	var receive: Button = _actions.receive
+	if _gallery_open:
+		_actions.back.text = "返回接收机 [Esc]"
+		_actions.back.show()
+		action_status.text = "[ SSTV 图库 ] 点击图片查看 | Esc 返回接收机"
+		action_status.tooltip_text = action_status.text
+		return
+	if current_mode == RadioMode.SSTV:
+		receive.show()
+		receive.text = "接收 [Space]"
+		receive.disabled = _sstv_receiving or current_signal == null or current_signal.type != "sstv" or _signal_lock_timer < SIGNAL_LOCK_TIME or current_signal_quality < SIGNAL_LOCK_THRESHOLD
+		_actions.save.show()
+		_actions.save.text = "已保存" if _sstv_saved else "保存 [P]"
+		_actions.save.disabled = not sstv_decoder.is_complete or _sstv_saved
+		_actions.gallery.show()
+		_actions.gallery.text = "图库 [G]"
+		action_status.text = _sstv_status
+	elif current_mode == RadioMode.WATERFALL:
+		receive.show()
+		receive.text = "暂停 [Space]" if file_receiver.active_signal != null else "接收 [Space]"
+		receive.disabled = file_receiver.active_signal == null and (current_signal == null or current_signal.type != "data" or _signal_lock_timer < SIGNAL_LOCK_TIME or current_signal_quality < SIGNAL_LOCK_THRESHOLD)
+		_actions.freeze.show()
+		_actions.freeze.text = "继续 [F]" if _waterfall_paused else "冻结 [F]"
+		action_status.text = file_receiver.status if current_signal != null and current_signal.type == "data" else "[ WATERFALL ] 监听当前信号 | F 冻结观察"
+	else:
+		if current_signal != null and current_signal.type == "audio":
+			if _can_replay_audio(): _actions.replay.show()
+			_actions.replay.text = "重新播放 [R]"
+			var role: String = {"music": "音乐电台", "speech": "语音电台"}.get(current_signal.audio_role, "音频电台")
+			var state: String = "正在接收"
+			if _audio_station_stream == null: state = _audio_load_error if not _audio_load_error.is_empty() else "素材无法加载"
+			elif _audio_station_ended: state = "下一轮 %.0f 秒" % maxf(0.0, current_signal.repeat_delay - _audio_repeat_timer) if current_signal.loop else "播报结束"
+			action_status.text = "[INFO] %s | %s" % [role, state]
+		else: action_status.text = ""
+	action_status.tooltip_text = action_status.text
+
+func _on_action(action: String) -> void:
+	match action:
+		"receive":
+			if current_mode == RadioMode.SSTV and not _sstv_receiving: _start_sstv_receive()
+			elif current_mode == RadioMode.WATERFALL:
+				if file_receiver.active_signal != null: file_receiver.pause()
+				elif _signal_lock_timer >= SIGNAL_LOCK_TIME and current_signal_quality >= SIGNAL_LOCK_THRESHOLD: file_receiver.begin(current_signal)
+		"save": _save_sstv_image()
+		"gallery": _open_gallery()
+		"back":
+			_gallery_open = false
+			_gallery.hide()
+			radio_canvas.show()
+		"freeze": _waterfall_paused = not _waterfall_paused
+		"replay":
+			if not _can_replay_audio(): return
+			if _audio_station_player != null and _audio_station_stream != null:
+				_audio_station_ended = false
+				_audio_repeat_timer = 0.0
+				_audio_broadcasts[_audio_broadcast_key] = Time.get_ticks_msec() / 1000.0
+				_audio_station_player.play()
+	_refresh_actions()
+
+func _can_replay_audio() -> bool:
+	return debug_controls and current_signal != null and current_signal.type == "audio" and current_signal.id.begins_with("_test_")
+
+func _open_gallery() -> void:
+	if _gallery == null: return
+	_gallery_open = true
+	radio_canvas.hide()
+	for child in _gallery.get_children():
+		_gallery.remove_child(child)
+		child.queue_free()
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UIManager.setup_scrollbar_style(scroll)
+	_gallery.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	var files: Array[String] = file_receiver.get_saved_images()
+	if files.is_empty():
+		var empty := Label.new()
+		empty.text = "尚未保存图片。接收完成后点击保存图片。"
+		list.add_child(empty)
+	for path in files:
+		var button := Button.new()
+		button.text = path.get_file()
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.pressed.connect(_open_saved_image.bind(path))
+		UIManager.style_terminal_button(button, T)
+		list.add_child(button)
+	_gallery.show()
+	_refresh_actions()
+
+func _open_saved_image(path: String) -> void:
+	if path not in file_receiver.get_saved_images(): return
+	main.open_image_viewer_with_file(path, path.get_file(), FileAccess.get_file_as_bytes(path))
 
 # ══════════════════════════════════════════
 #  方位辅助
@@ -1088,7 +1457,10 @@ class _RadioCanvas extends Control:
 	var _tiny_font_size: int = 11
 
 	func _ready() -> void:
-		_font = ThemeDB.fallback_font
+		_font = UIManager.TERMINAL_FONT
+		_font_size = radio.main.input_field.get_theme_font_size("font_size")
+		_small_font_size = maxi(12, int(_font_size * 0.85))
+		_tiny_font_size = _small_font_size
 
 	func _process(_delta: float) -> void:
 		if radio and radio.is_active:
@@ -1137,7 +1509,7 @@ class _RadioCanvas extends Control:
 			_:
 				mode_str = "UNKNOWN"
 
-		var title: String = "RADIO RECEIVER — " + mode_str
+		var title: String = "RADIO RECEIVER | " + mode_str
 		draw_string(_font, Vector2(x, y + _font_size), title, HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size, col)
 		y += _font_size + SECTION_GAP
 		draw_line(Vector2(x, y), Vector2(panel_w - MARGIN, y), gc, 1.0)
@@ -1230,6 +1602,9 @@ class _RadioCanvas extends Control:
 		var ds = radio._nearest_signal
 		if ds != null:
 			var sig = ds as RadioConfigParser.RadioSignal
+			if sig.hidden and not radio.signal_mgr.is_discovered(sig.id):
+				draw_string(_font, Vector2(x, y + _small_font_size), "NO IDENTIFIED SIGNAL", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, dim)
+				return
 			var freq_dist: float = absf(radio.current_frequency - sig.frequency)
 			var lock_label: String
 			var label_col: Color
@@ -1256,9 +1631,6 @@ class _RadioCanvas extends Control:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, dim
 			)
 			y += _small_font_size + 2
-			if not sig.hint.is_empty():
-				draw_string(_font, Vector2(x, y + _small_font_size), "HINT: " + sig.hint, HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
-				y += _small_font_size + 2
 		else:
 			draw_string(_font, Vector2(x, y + _small_font_size), "NO SIGNAL", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, dim)
 			y += _small_font_size + 2
@@ -1300,7 +1672,7 @@ class _RadioCanvas extends Control:
 			draw_string(_font, Vector2(x, y + _small_font_size), pct_str, HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, pct_col)
 			y += _small_font_size + 2
 			if radio.signal_mgr.all_beacons_found():
-				draw_string(_font, Vector2(x, y + _small_font_size), "★ ALL BEACONS LOGGED", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
+				draw_string(_font, Vector2(x, y + _small_font_size), UIManager.terminal_status("OK", "ALL BEACONS LOGGED"), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.T.success)
 				y += _small_font_size + 2
 		else:
 			if stats["total"] > 0:
@@ -1310,7 +1682,7 @@ class _RadioCanvas extends Control:
 
 		# ── 状态行 ──
 		if radio._auto_scan_active:
-			draw_string(_font, Vector2(x, y + _small_font_size), "◉ SCANNING...", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
+			draw_string(_font, Vector2(x, y + _small_font_size), UIManager.terminal_status("BUSY", "SCANNING..."), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
 			y += _small_font_size + 2
 		if radio._signal_lock_timer > 0 and radio._signal_lock_timer < SIGNAL_LOCK_TIME:
 			var lock_pct: int = int((radio._signal_lock_timer / SIGNAL_LOCK_TIME) * 100.0)
@@ -1458,8 +1830,10 @@ class _RadioCanvas extends Control:
 		# ── 模式标签页 ──
 		var tab_names: Array[String] = ["MORSE", "SSTV", "WATERFALL"]
 		var tab_w: float = rw / 3.0
+		radio._mode_rects.clear()
 		for i in range(3):
 			var tx: float = rx + i * tab_w
+			radio._mode_rects.append(Rect2(tx, y, tab_w, _small_font_size + 4.0))
 			var is_active_tab: bool = (i == int(radio.current_mode))
 			var tab_col: Color = col if is_active_tab else dim
 			if is_active_tab:
@@ -1485,6 +1859,8 @@ class _RadioCanvas extends Control:
 
 		# 数字电台模式标识
 		var morse_title: String = "MORSE DECODER"
+		if radio.current_signal != null and radio.current_signal.id == WeatherBroadcast.SIGNAL_ID:
+			morse_title = "REGIONAL WEATHER / MORSE"
 		if radio.morse_engine.numbers_mode:
 			morse_title = "NUMBERS STATION DECODER"
 		# ★ 如果当前信号是音频电台，显示额外信息
@@ -1492,17 +1868,33 @@ class _RadioCanvas extends Control:
 			morse_title = "AUDIO STATION"
 		draw_string(_font, Vector2(rx, y + _font_size), morse_title, HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size, col)
 		y += _font_size + SECTION_GAP
+		if radio.current_signal != null and radio.current_signal.type == "audio":
+			var sig: RadioConfigParser.RadioSignal = radio.current_signal
+			var role: String = {"music": "音乐电台", "speech": "语音播报电台"}.get(sig.audio_role, "音频电台")
+			var instruction: String = "调准频率即可收听"
+			if radio._can_replay_audio(): instruction += " | DEBUG: R 从头播"
+			var lines: Array[String] = [role, sig.label, instruction, "循环播放" if sig.loop else "单次播报"]
+			if sig.loop and sig.repeat_delay > 0.0: lines.append("每遍播完间隔 %.1f 秒" % sig.repeat_delay)
+			for line in lines:
+				for wrapped in _wrap_text(line, maxi(int(rw / _small_font_size), 10)):
+					draw_string(_font, Vector2(rx, y + _small_font_size), wrapped, HORIZONTAL_ALIGNMENT_LEFT, rw, _small_font_size, col)
+					y += _small_font_size + 4
+			if radio._audio_station_stream != null and radio._audio_station_player != null:
+				var duration: float = radio._audio_station_stream.get_length()
+				var position: float = radio._audio_station_player.get_playback_position()
+				draw_string(_font, Vector2(rx, y + _small_font_size), "%.1f / %.1f s" % [position, duration], HORIZONTAL_ALIGNMENT_LEFT, rw, _small_font_size, dim)
+			return
 
 		# 数字电台提示信息
 		if radio.morse_engine.numbers_mode and radio.current_signal != null:
 			var sig = radio.current_signal as RadioConfigParser.RadioSignal
-			if sig.has_method("cipher_type") and not sig.cipher_type.is_empty():
+			if not sig.cipher_type.is_empty():
 				draw_string(_font, Vector2(rx, y + _small_font_size), "CIPHER: " + sig.cipher_type.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
 				y += _small_font_size + 2
-			if sig.has_method("cipher_key_file") and not sig.cipher_key_file.is_empty():
+			if not sig.cipher_key_file.is_empty():
 				draw_string(_font, Vector2(rx, y + _small_font_size), "KEY FILE: " + sig.cipher_key_file.get_file(), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
 				y += _small_font_size + 2
-			if (not sig.has_method("cipher_type") or sig.cipher_type.is_empty()) and (not sig.has_method("cipher_key_file") or sig.cipher_key_file.is_empty()):
+			if sig.cipher_type.is_empty() and sig.cipher_key_file.is_empty():
 				draw_string(_font, Vector2(rx, y + _small_font_size), "记录数字序列以获取线索", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, dim)
 				y += _small_font_size + 2
 
@@ -1541,9 +1933,7 @@ class _RadioCanvas extends Control:
 		if radio.morse_engine.is_playing:
 			var progress: float = radio.morse_engine.get_progress()
 			var bar_y: float = y + text_area_h + 4
-			var bar_w: float = rw * progress
-			draw_rect(Rect2(rx, bar_y, rw, 3), dim)
-			draw_rect(Rect2(rx, bar_y, bar_w, 3), col)
+			draw_string(_font, Vector2(rx, bar_y + _small_font_size), Typewriter.format_progress_bar(progress), HORIZONTAL_ALIGNMENT_LEFT, rw, _small_font_size, col)
 
 	# ══════════════════════════════════════════
 	#  SSTV 面板
@@ -1562,17 +1952,15 @@ class _RadioCanvas extends Control:
 				var prep_text: String = "PREPARING AUDIO... %.0f%%" % (prep_pct * 100.0)
 				draw_string(_font, Vector2(rx, y + _small_font_size), prep_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
 				y += _small_font_size + 4
-				draw_rect(Rect2(rx, y, rw, 4), dim)
-				draw_rect(Rect2(rx, y, rw * prep_pct, 4), radio.warning_color)
-				y += 8
+				draw_string(_font, Vector2(rx, y + _small_font_size), Typewriter.format_progress_bar(prep_pct), HORIZONTAL_ALIGNMENT_LEFT, rw, _small_font_size, radio.warning_color)
+				y += _small_font_size + 8
 
 			var progress: float = radio.sstv_decoder.get_progress()
 			var remaining: float = radio.sstv_decoder.get_remaining_time()
 			draw_string(_font, Vector2(rx, y + _small_font_size), "RECEIVING: %d%% | %.1fs left" % [int(progress * 100), remaining], HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
 			y += _small_font_size + 4
-			draw_rect(Rect2(rx, y, rw, 4), dim)
-			draw_rect(Rect2(rx, y, rw * progress, 4), col)
-			y += 8
+			draw_string(_font, Vector2(rx, y + _small_font_size), Typewriter.format_progress_bar(progress), HORIZONTAL_ALIGNMENT_LEFT, rw, _small_font_size, col)
+			y += _small_font_size + 8
 
 			var tex: ImageTexture = radio.sstv_decoder.get_received_texture()
 			if tex != null:
@@ -1587,7 +1975,7 @@ class _RadioCanvas extends Control:
 				draw_texture_rect(tex, Rect2(img_x, y, img_w, img_h), false)
 		elif radio.sstv_decoder.is_complete:
 			var avg_q: float = radio.sstv_decoder.get_average_quality()
-			draw_string(_font, Vector2(rx, y + _small_font_size), "COMPLETE — AVG QUALITY: %d%%" % int(avg_q * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, col)
+			draw_string(_font, Vector2(rx, y + _small_font_size), UIManager.terminal_status("OK", "COMPLETE | AVG QUALITY: %d%%") % int(avg_q * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, col)
 			y += _small_font_size + 4
 			draw_string(_font, Vector2(rx, y + _small_font_size), "Press P to save image", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, dim)
 			y += _small_font_size + 8
@@ -1604,7 +1992,7 @@ class _RadioCanvas extends Control:
 				var img_x2: float = rx + (rw - img_w2) * 0.5
 				draw_texture_rect(tex2, Rect2(img_x2, y, img_w2, img_h2), false)
 		elif radio._sstv_detected:
-			draw_string(_font, Vector2(rx, y + _small_font_size), "◉ SSTV SIGNAL DETECTED", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
+			draw_string(_font, Vector2(rx, y + _small_font_size), UIManager.terminal_status("INFO", "SSTV SIGNAL DETECTED"), HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, radio.warning_color)
 			y += _small_font_size + 4
 			if radio.current_signal != null:
 				draw_string(_font, Vector2(rx, y + _small_font_size), "Mode: " + radio.current_signal.sstv_mode, HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, col)
@@ -1620,14 +2008,21 @@ class _RadioCanvas extends Control:
 		var col: Color = radio.draw_color
 		var dim: Color = radio.draw_color_dim
 		var gc: Color = radio.grid_color
-		var base_y: float = y
 
 		draw_string(_font, Vector2(rx, y + _font_size), "SPECTRUM WATERFALL", HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size, col)
 		y += _font_size + SECTION_GAP
-
-		var band_min: float = radio._get_band_min()
-		var band_max: float = radio._get_band_max()
-		var band_range: float = band_max - band_min
+		if radio.current_signal != null and radio.current_signal.type == "data" and radio._signal_lock_timer >= SIGNAL_LOCK_TIME:
+			var sig: RadioConfigParser.RadioSignal = radio.current_signal
+			var meta: Dictionary = sig.transfer
+			var progress: Dictionary = radio.file_receiver.get_progress(sig)
+			var caption: String = "%s | 第 %d / %d 段" % [str(meta.get("filename", "文件")), int(meta.get("part_index", 0)), int(meta.get("part_count", 0))]
+			for line in _wrap_text(caption, maxi(int(rw / _small_font_size), 10)):
+				draw_string(_font, Vector2(rx, y + _small_font_size), line, HORIZONTAL_ALIGNMENT_LEFT, rw, _small_font_size, col)
+				y += _small_font_size + 3
+			draw_string(_font, Vector2(rx, y + _small_font_size), Typewriter.format_progress_bar(float(progress.get("ratio", 0.0)), "本台接收"), HORIZONTAL_ALIGNMENT_LEFT, rw, _small_font_size, col)
+			y += _small_font_size + 4
+			draw_string(_font, Vector2(rx, y + _small_font_size), "已集齐 %d / %d 段 | 数据块 %d / %d" % [int(progress.get("completed_parts", 0)), int(progress.get("part_count", 0)), int(progress.get("received", 0)), int(progress.get("total", 0))], HORIZONTAL_ALIGNMENT_LEFT, rw, _small_font_size, dim)
+			y += _small_font_size + SECTION_GAP
 
 		# 顶部实时柱状谱（能量条）
 		var spectrum_h: float = minf(panel_h * 0.25, 80.0)
@@ -1645,58 +2040,24 @@ class _RadioCanvas extends Control:
 				bar_col.a = 0.8
 				draw_rect(Rect2(bar_x, y + spectrum_h - bar_h, maxf(bar_w - 0.5, 1.0), bar_h), bar_col)
 
-		# 频率标记线（顶部柱状谱）
-		if band_range > 0.0:
-			var freq_ratio: float = clampf((radio.current_frequency - band_min) / band_range, 0.0, 1.0)
-			var marker_x: float = rx + freq_ratio * rw
-			draw_line(Vector2(marker_x, y), Vector2(marker_x, y + spectrum_h), col, 1.5)
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(marker_x, y),
-				Vector2(marker_x - 3, y - 4),
-				Vector2(marker_x + 3, y - 4)
-			]), col)
-
 		# 频率刻度
 		var tick_y: float = y + spectrum_h
 		var tick_count: int = 5
 		for t_idx in range(tick_count + 1):
 			var t_ratio: float = float(t_idx) / float(tick_count)
 			var t_x: float = rx + t_ratio * rw
-			var t_freq: float = band_min + t_ratio * band_range if band_range > 0.0 else 0.0
+			var t_freq: float = lerpf(radio._wf_min_freq, radio._wf_max_freq, t_ratio)
 			draw_line(Vector2(t_x, tick_y), Vector2(t_x, tick_y + 3), dim, 1.0)
-			var freq_str: String = "%.1f" % t_freq
+			var freq_str: String = "%.0f Hz" % t_freq
 			draw_string(_font, Vector2(t_x - 12, tick_y + 3 + _tiny_font_size), freq_str, HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, dim)
 
 		y = tick_y + _tiny_font_size + 8.0
 
 		# 瀑布图
-		var remaining_h: float = maxf(base_y + panel_h - y - _tiny_font_size - 10.0, 40.0)
+		var remaining_h: float = maxf(panel_h - y - _tiny_font_size - 10.0, 40.0)
 		if radio._waterfall_texture != null:
 			draw_texture_rect(radio._waterfall_texture, Rect2(rx, y, rw, remaining_h), false)
-
-			# 当前频率标记线（瀑布图）
-			if band_range > 0.0:
-				var freq_ratio2: float = clampf((radio.current_frequency - band_min) / band_range, 0.0, 1.0)
-				var marker_x2: float = rx + freq_ratio2 * rw
-				draw_line(Vector2(marker_x2, y), Vector2(marker_x2, y + remaining_h), Color(col.r, col.g, col.b, 0.5), 1.0)
-
-			# 已发现信号标记（仅画竖线，隐藏标签文字）
-			for sig in radio.signal_mgr.signals:
-				var s = sig as RadioConfigParser.RadioSignal
-				if s.band != radio.current_band:
-					continue
-				if not radio.signal_mgr.is_discovered(s.id):
-					continue
-				# ★ 隐藏电台不在瀑布图上标记
-				if s.hidden:
-					continue
-				var sig_ratio: float = 0.0
-				if band_range > 0.0:
-					sig_ratio = clampf((s.frequency - band_min) / band_range, 0.0, 1.0)
-				var sig_x: float = rx + sig_ratio * rw
-				draw_line(Vector2(sig_x, y), Vector2(sig_x, y + 8), col, 1.0)
-				if not WF_HIDE_LABELS:
-					draw_string(_font, Vector2(sig_x + 2, y + _tiny_font_size), s.label.left(8), HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, col * 0.7)
+		# RF 电台标记仍留在左侧调谐标尺，不能画到音频频谱轴上。
 
 		y += remaining_h + 4.0
 

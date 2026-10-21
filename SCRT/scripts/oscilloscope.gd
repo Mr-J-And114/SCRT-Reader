@@ -724,17 +724,17 @@ func _draw_lissajous(canvas: Control, rect: Rect2) -> void:
 		canvas.draw_polyline(draw_points, draw_color, 2.0, true)
 
 	# 显示缩放倍率
-	var font: Font = ThemeDB.fallback_font
+	var font: Font = UIManager.TERMINAL_FONT
 	var scale_text: String = "SCALE: " + str(snapped(lissajous_scale, 0.1)) + "x"
 	canvas.draw_string(font, Vector2(rect.position.x + 4, rect.position.y + rect.size.y - 8), scale_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, draw_color_dim)
 
 func _draw_title(canvas: Control, full_size: Vector2, _draw_rect: Rect2) -> void:
-	var font: Font = ThemeDB.fallback_font
+	var font: Font = UIManager.TERMINAL_FONT
 	var font_size: int = 13
 
 	var title: String = "OSCILLOSCOPE"
 	if not current_file_name.is_empty():
-		title += "  —  " + current_file_name
+		title += " | " + current_file_name
 
 	var mode_text: String = "[" + mode_names[current_mode] + "]"
 
@@ -749,23 +749,23 @@ func _draw_progress_bar(canvas: Control, rect: Rect2) -> void:
 
 	var progress: float = pos / total
 
-	# 进度条放在绘制区域底部上方 20px 处，避免被遮挡
+	# 与 load vdisc 共用字符进度条，媒体时间另列，避免改变播放控制。
 	var bar_y: float = rect.position.y + rect.size.y - 20.0
-	var bar_width: float = rect.size.x
-	var bar_height: float = 3.0
-
-	# 背景
-	canvas.draw_rect(Rect2(rect.position.x, bar_y, bar_width, bar_height), grid_color)
-	# 前景
-	canvas.draw_rect(Rect2(rect.position.x, bar_y, bar_width * progress, bar_height), draw_color)
+	var progress_font: Font = preload("res://fonts/SarasaMonoSC-Regular.ttf")
+	var progress_size: int = 16
+	var bar: String = Typewriter.progress_cells(progress)
+	var available: float = maxf(1.0, rect.size.x)
+	while progress_size > 12 and progress_font.get_string_size(bar, HORIZONTAL_ALIGNMENT_LEFT, -1, progress_size).x > available:
+		progress_size -= 1
+	canvas.draw_string(progress_font, Vector2(rect.position.x, bar_y), bar, HORIZONTAL_ALIGNMENT_LEFT, available, progress_size, draw_color)
 
 	# 时间文字
-	var font: Font = ThemeDB.fallback_font
+	var font: Font = UIManager.TERMINAL_FONT
 	var font_size: int = 12
 	var paused: bool = audio_manager.is_media_paused()
 	var icon: String = "||" if paused else ">"
 	var time_text: String = icon + " " + _format_time(pos) + " / " + _format_time(total)
-	canvas.draw_string(font, Vector2(rect.position.x, bar_y - 5), time_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, draw_color)
+	canvas.draw_string(font, Vector2(rect.position.x, bar_y - 20), time_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, draw_color)
 
 # ══════════════════════════════════════════
 #  导航栏

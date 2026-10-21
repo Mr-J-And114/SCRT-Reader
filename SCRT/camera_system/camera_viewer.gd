@@ -571,7 +571,7 @@ func _draw_ui(canvas_node: Control) -> void:
 	var cam: SecurityCameraFeed = _get_current_camera()
 	var unlocked: Array[SecurityCameraFeed] = camera_mgr.get_unlocked_cameras()
 
-	var font: Font = ThemeDB.fallback_font
+	var font: Font = UIManager.TERMINAL_FONT
 	var font_size: int = 14
 	var small_size: int = 11
 	var margin: float = 12.0
@@ -582,7 +582,7 @@ func _draw_ui(canvas_node: Control) -> void:
 	var col_dim: Color = Color(theme_primary.r * 0.6, theme_primary.g * 0.6, theme_primary.b * 0.6, 0.7)
 	var col_rec: Color = Color(1.0, 0.15, 0.1, 1.0) if _rec_blink else Color(0.4, 0.1, 0.08, 0.6)
 	var col_offline: Color = Color(1.0, 0.3, 0.2, 0.9)
-	var col_bg: Color = Color(0, 0, 0, 0.5)
+	var col_bg: Color = Color(T.primary, 0.08)
 
 	if cam == null:
 		# 无摄像头可用

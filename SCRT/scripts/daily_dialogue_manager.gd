@@ -30,6 +30,9 @@ var _pending_dialogues: Array = []
 var _story_day: int = 1             # 当前主线天数
 var _completed_dialogues: Array[String] = []  # 已完成的对话 ID 列表
 var _story_choices: Dictionary = {} # 关键剧情选项记录 {choice_id: selected_option}
+var _archive_effect_receipts: Dictionary = {}
+var _story_evidence_blocked: bool = false
+var _completion_notice_day: int = -1
 var _story_flags: Dictionary = {}   # 剧情标记 {flag_name: value}
 
 # ★ 剧情变量初始值（manifest 的 initial_flags 段，新存档时自动补齐）
@@ -161,8 +164,17 @@ func trigger_day_start(day: int) -> void:
 	_apply_day_performance_config(day)
 	# ★ 处理当日邮件投递
 	_deliver_day_mails(day)
+	if main.env_monitor:
+		var environment: Dictionary = get_environment_config(day)
+		var event_definitions: Dictionary = environment.get("event_definitions", {})
+		for event_id in event_definitions:
+			main.env_monitor.inject_event(str(event_id), event_definitions[event_id])
+		main.env_monitor.apply_story_events(environment.get("events", []))
+		main.env_monitor.save_env_progress()
 	# ★ 执行当日触发器动作（radio_update 等）
 	_execute_day_actions(day)
+	if main.radio_receiver:
+		main.radio_receiver.reload_signals()
 	var dlg_ids: Array = _get_trigger_list(day, "on_start")
 	if dlg_ids.size() > 0 and not _triggered_today.has("on_start"):
 		var valid_ids: Array = _filter_playable(dlg_ids)
@@ -170,7 +182,6 @@ func trigger_day_start(day: int) -> void:
 			_triggered_today["on_start"] = true
 			_trigger_dialogues(valid_ids)
 
-## ★ 查询某天是否有剧情配置（供 comm_manager 判断 Day0 教程是否由本系统驱动）
 func has_day_config(day: int) -> bool:
 	return _daily_config.has(str(day))
 
@@ -192,15 +203,14 @@ func _ensure_default_flags() -> void:
 func _apply_day_performance_config(day: int) -> void:
 	if main == null or not main.get("perf_mgr"):
 		return
-	var day_key: String = str(day)
-	var config: Dictionary = {}
-	if _daily_config.has(day_key):
-		config = _daily_config[day_key]
-	elif _daily_config.has("default"):
-		config = _daily_config["default"]
-	var perf_cfg: Dictionary = config.get("performance", {})
-	if perf_cfg.has("min_quota"):
-		main.perf_mgr.daily_quota = int(perf_cfg["min_quota"])
+	var cumulative: int = 0
+	for index in range(day + 1):
+		cumulative += _day_quota(index)
+	main.perf_mgr.configure_day(day, _day_quota(day), cumulative)
+
+func _day_quota(day: int) -> int:
+	var config: Dictionary = _daily_config.get(str(day), _daily_config.get("default", {}))
+	return int(config.get("performance", {}).get("min_quota", 3))
 
 ## ★ 执行每日触发器动作（如 radio_update、radio_visible 等）
 func _execute_day_actions(day: int) -> void:
@@ -308,15 +318,18 @@ func _get_save_path() -> String:
 	var user_dir: String = main.save_mgr.get_game_root_dir() + "saves/" + main.user_mgr.get_username() + "/"
 	return user_dir + "story_progress.json"
 
-func save_story_save() -> void:
+func save_story_save() -> Dictionary:
 	## 保存主线剧情进度到独立文件
+	if main == null or main.get("user_mgr") == null or main.get("save_mgr") == null:
+		return SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)
+	if not main.user_mgr.is_logged_in:
+		return SaveManager.save_result("skipped", "no_account")
+	var evidence: Dictionary = _check_story_evidence()
+	if evidence.status != "saved":
+		return evidence
+	if _story_evidence_blocked:
+		return SaveManager.save_result("failed", "story_reload_required", ERR_FILE_CORRUPT)
 	var path: String = _get_save_path()
-	if path.is_empty():
-		return
-	# 确保目录存在
-	var dir_path: String = path.get_base_dir()
-	if not DirAccess.dir_exists_absolute(dir_path):
-		DirAccess.make_dir_recursive_absolute(dir_path)
 	var save_data: Dictionary = {
 		"pending_dialogues": _pending_dialogues.duplicate(true),
 		"story_day": _story_day,
@@ -325,25 +338,37 @@ func save_story_save() -> void:
 		"story_choices": _story_choices.duplicate(),
 		"story_flags": _story_flags.duplicate(),
 		"story_version": _story_version,
+		"archive_effect_receipts": _archive_effect_receipts.duplicate(true),
 		"saved_at": Time.get_datetime_string_from_system(),
 	}
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		file.store_string(JSON.stringify(save_data, "\t"))
-		file.close()
+	return SaveManager.write_json_checked(path, save_data)
 
 func load_story_save() -> void:
+	_completion_notice_day = -1
+	_story_evidence_blocked = false
+	_archive_effect_receipts.clear()
 	## 从独立文件加载主线剧情进度
 	_pending_dialogues.clear()
+	# 新账号没有剧情文件时也必须清空前一账号的内存状态。
+	_completed_dialogues.clear()
+	_story_choices.clear()
+	_story_flags.clear()
+	_triggered_today.clear()
 	var path: String = _get_save_path()
+	if DirAccess.dir_exists_absolute(path):
+		_story_evidence_blocked = true
+		return
 	if path.is_empty() or not FileAccess.file_exists(path):
+		_story_evidence_blocked = _has_archive_story_evidence()
 		return
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
+		_story_evidence_blocked = true
 		return
 	var json := JSON.new()
-	if json.parse(file.get_as_text()) != OK or not (json.data is Dictionary):
+	if json.parse(file.get_as_text()) != OK or not _valid_story_evidence(json.data):
 		file.close()
+		_story_evidence_blocked = true
 		return
 	file.close()
 	var data: Dictionary = json.data
@@ -356,6 +381,7 @@ func load_story_save() -> void:
 		_story_choices.clear()
 		_story_flags.clear()
 		return
+	_archive_effect_receipts = data.get("archive_effect_receipts", {}).duplicate(true)
 	_story_day = int(data.get("story_day", 1))
 	_pending_dialogues = data.get("pending_dialogues", []).duplicate(true)
 	if data.has("triggered_today"):
@@ -470,11 +496,34 @@ func _trigger_dialogues(dlg_ids: Array) -> void:
 	_pending_dialogues.append({"ids": valid_ids, "day": _story_day, "delay": 1.5})
 	save_story_save()
 
+## 现实时间后安排独立来电；截止时间存档，界面被覆盖时不丢失来电。
+func schedule_dialogue(dlg_id: String, real_seconds: float) -> void:
+	if _filter_playable([dlg_id]).is_empty():
+		return
+	for pending in _pending_dialogues:
+		if dlg_id in pending.get("ids", []):
+			return
+	_pending_dialogues.append({"ids": [dlg_id], "day": _story_day,
+		"due_unix": Time.get_unix_time_from_system() + maxf(0.0, real_seconds)})
+	save_story_save()
+
+## 剧情奖励独立去重，防止调试重播或中断后重复领取。
+func award_score_once(reward_id: String, amount: int, category: String) -> void:
+	var flag_name: String = "reward:" + reward_id
+	if bool(get_flag(flag_name, false)) or main == null or main.perf_mgr == null:
+		return
+	main.perf_mgr.add_score(amount, category)
+	main.perf_mgr.save_progress()
+	set_flag(flag_name, true)
+
 func process_pending(delta: float) -> void:
 	# 延迟期间重新检查覆盖界面，防止重新打开 mail/env 后被来电穿透。
+	if _story_day == 2:
+		update_day2_progress()
+	show_day_complete_notice()
 	if _pending_dialogues.is_empty() or main == null or main.comm_mgr == null:
 		return
-	if main.is_terminal_covered() or main._command_running or main.comm_mgr.is_active or main.comm_mgr.is_call_ringing():
+	if main.is_terminal_covered() or main._command_running or main.comm_mgr.is_active or main.comm_mgr.is_call_ringing() or main.comm_mgr.has_pending_call_answer():
 		return
 	if main.dial_mgr and main.dial_mgr.is_active():
 		return
@@ -482,9 +531,13 @@ func process_pending(delta: float) -> void:
 	if int(pending.get("day", -1)) != _story_day:
 		_pending_dialogues.pop_front()
 		return
-	pending["delay"] = float(pending.get("delay", 1.5)) - delta
-	if float(pending["delay"]) > 0:
-		return
+	if pending.has("due_unix"):
+		if Time.get_unix_time_from_system() < float(pending["due_unix"]):
+			return
+	else:
+		pending["delay"] = float(pending.get("delay", 1.5)) - delta
+		if float(pending["delay"]) > 0:
+			return
 	_pending_dialogues.pop_front()
 	save_story_save()
 	var ids: Array = _filter_playable(pending.get("ids", []))
@@ -493,7 +546,11 @@ func process_pending(delta: float) -> void:
 	elif ids.size() > 1:
 		main.comm_mgr.trigger_dialogue_sequence(ids)
 
-## ★ 过滤出可播放的对话（未完成或可重复，且条件满足）
+## A session-only reminder; it never advances the day or awards performance.
+func show_day_complete_notice() -> void:
+	# Completion behavior belongs to the content package.
+	pass
+
 func _filter_playable(dlg_ids: Array) -> Array:
 	var valid_ids: Array = []
 	for dlg_id in dlg_ids:
@@ -519,6 +576,8 @@ func check_dialogue_conditions(dlg_data: Dictionary) -> bool:
 
 func _check_conditions(dlg_data: Dictionary) -> bool:
 	## 检查对话的前置条件是否满足
+	if dlg_data.has("requires_day") and int(dlg_data["requires_day"]) != _story_day:
+		return false
 	# requires_choice: {"choice_id": "expected_value"}
 	var req_choice: Dictionary = dlg_data.get("requires_choice", {})
 	for choice_id in req_choice.keys():
@@ -544,6 +603,10 @@ func _check_conditions(dlg_data: Dictionary) -> bool:
 			return false
 		var all_done: bool = main.env_task_mgr.is_all_required_completed() \
 				and main.env_task_mgr.report_submitted
+		# 邮件阅读也属于岗前任务；不能只核查 ENV 就判定全部完成。
+		for mail_id in dlg_data.get("required_task_mails", []):
+			var mail_read: bool = main.mail_sys != null and main.mail_sys.is_mail_read(str(mail_id))
+			all_done = all_done and mail_read
 		if req_tasks == "all" and not all_done:
 			return false
 		if req_tasks == "incomplete" and all_done:
@@ -554,3 +617,110 @@ func mark_dialogue_completed(dlg_id: String) -> void:
 	if dlg_id not in _completed_dialogues:
 		_completed_dialogues.append(dlg_id)
 		save_story_save()
+
+func get_environment_config(day: int) -> Dictionary:
+	# 缺省环境与当日字段合并；显式 contacts/events 空数组表示清空。
+	var result: Dictionary = {}
+	for key in ["default", str(day)]:
+		var day_data: Variant = _daily_config.get(key, {})
+		if not (day_data is Dictionary): continue
+		var environment: Variant = day_data.get("environment", {})
+		if environment is Dictionary: result.merge(environment, true)
+	return result
+
+func day2_tasks_complete() -> bool:
+	return false
+
+func update_day2_progress() -> void:
+	pass
+
+func prepare_day2_dialogue(dialogue_id: String, data: Dictionary) -> Dictionary:
+	return data
+
+func day2_contact_dialogue(character_id: String) -> String:
+	return ""
+
+func commit_archive_effects(operation_id: String, flags: Dictionary, feedback: String, version: String) -> Dictionary:
+	if version != _story_version or operation_id.is_empty():
+		return SaveManager.save_result("failed", "story_context", ERR_INVALID_DATA)
+	var evidence: Dictionary = _check_story_evidence()
+	if evidence.status != "saved":
+		return evidence
+	if _story_evidence_blocked:
+		load_story_save()
+		if _story_evidence_blocked:
+			return SaveManager.save_result("failed", "story_reload_required", ERR_FILE_CORRUPT)
+	var receipt: Dictionary = JSON.parse_string(JSON.stringify({"flags": flags, "feedback": feedback}))
+	if _archive_effect_receipts.has(operation_id):
+		if _archive_effect_receipts[operation_id] != receipt:
+			return SaveManager.save_result("failed", "story_conflict", ERR_INVALID_DATA)
+	else:
+		for key in flags:
+			_story_flags[key] = flags[key]
+		if not feedback.is_empty() and not _filter_playable([feedback]).is_empty():
+			_pending_dialogues.append({"ids": [feedback], "day": _story_day, "due_unix": Time.get_unix_time_from_system()})
+		_archive_effect_receipts[operation_id] = receipt
+	return save_story_save()
+
+func has_archive_effect_receipt(operation_id: String) -> bool:
+	var evidence: Dictionary = _check_story_evidence()
+	if evidence.status != "saved" or not evidence.has("data"):
+		return false
+	if str(evidence.data.get("story_version", "")) != _story_version:
+		return false
+	if _story_evidence_blocked:
+		load_story_save()
+	var persisted: Dictionary = evidence.data.get("archive_effect_receipts", {})
+	if not _archive_effect_receipts.has(operation_id) or not persisted.get(operation_id) is Dictionary:
+		return false
+	return JSON.stringify(JSON.parse_string(JSON.stringify(_archive_effect_receipts[operation_id]))) == JSON.stringify(persisted[operation_id])
+
+## 已知归档意味着剧情文件是恢复证据；缺失不能再按首次登录建空白档。
+func _has_archive_story_evidence() -> bool:
+	if not _archive_effect_receipts.is_empty():
+		return true
+	if main == null or main.user_mgr == null or not main.user_mgr.is_logged_in:
+		return false
+	var data: Dictionary = main.user_mgr.current_user.get("vdisc_task_data", {})
+	if not (data.get("archive", []) as Array).is_empty():
+		return true
+	for state in (data.get("tasks", {}) as Dictionary).values():
+		if not str(state.get("archive_operation", "")).is_empty():
+			return true
+	# 意图可能已写入，但 profile 尚未确认；仅检查当前账号的专用操作目录。
+	var operations: String = _get_save_path().get_base_dir().path_join("vdisc/archive_operations")
+	if DirAccess.dir_exists_absolute(operations):
+		for filename in DirAccess.get_files_at(operations):
+			if filename.get_extension() == "json":
+				return true
+	return false
+
+func _valid_story_evidence(data: Variant) -> bool:
+	if not data is Dictionary:
+		return false
+	for key in ["story_flags", "story_choices", "triggered_today", "archive_effect_receipts"]:
+		if data.has(key) and not data[key] is Dictionary:
+			return false
+	for key in ["pending_dialogues", "completed_dialogues"]:
+		if data.has(key) and not data[key] is Array:
+			return false
+	return true
+
+## 不清除损坏锁存；有效文件恢复后由归档入口先重载，再允许写入。
+func _check_story_evidence() -> Dictionary:
+	var path: String = _get_save_path()
+	if path.is_empty():
+		return SaveManager.save_result("failed", "story_dependency", ERR_UNCONFIGURED)
+	if not FileAccess.file_exists(path) and not DirAccess.dir_exists_absolute(path):
+		_story_evidence_blocked = _story_evidence_blocked or _has_archive_story_evidence()
+		return SaveManager.save_result("failed", "story_evidence_missing", ERR_FILE_NOT_FOUND) if _story_evidence_blocked else SaveManager.save_result("saved", "first_story")
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return SaveManager.save_result("failed", "open", FileAccess.get_open_error())
+	var json := JSON.new()
+	var parsed: Error = json.parse(file.get_as_text())
+	file.close()
+	if parsed != OK or not _valid_story_evidence(json.data):
+		_story_evidence_blocked = true
+		return SaveManager.save_result("failed", "story_evidence", ERR_FILE_CORRUPT)
+	return {"status": "saved", "stage": "existing_story", "error": OK, "data": json.data}

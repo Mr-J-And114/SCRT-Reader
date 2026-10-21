@@ -2,6 +2,7 @@
 # 负责：环境音播放、音效播放、媒体播放、音量控制、淡入淡出、Ducking
 # ============================================================
 extends Node
+const StartupSettings := preload("res://settings/startup_settings.gd")
 
 # ============================================================
 #  节点引用（会在 _ready 中动态创建）
@@ -113,14 +114,20 @@ func _create_players() -> void:
 
 ## 预加载内置音效资源
 func _preload_sfx() -> void:
-	# 加载蜂鸣音效
-	if ResourceLoader.exists("res://audio/beep.mp3"):
-		beep_stream = load("res://audio/beep.mp3")
-		print("[AudioManager] 蜂鸣音效已加载")
-	else:
-		push_warning("[AudioManager] 未找到 res://audio/beep.mp3")
+	# Generate a neutral tone instead of bundling an unlicensed recording.
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = 22050
+	var samples := PackedByteArray()
+	var count: int = 1764
+	samples.resize(count * 2)
+	for i in range(count):
+		var envelope: float = sin(PI * float(i) / float(count))
+		var sample: int = int(sin(TAU * 880.0 * float(i) / 22050.0) * envelope * 5000.0)
+		samples.encode_s16(i * 2, sample)
+	stream.data = samples
+	beep_stream = stream
 
-## 确保 Master 总线上有 SpectrumAnalyzer 效果
 func _ensure_spectrum_analyzer() -> void:
 	var bus_idx: int = AudioServer.get_bus_index("Master")
 	if bus_idx == -1:
@@ -198,7 +205,7 @@ func play_beep() -> void:
 
 	# — 音量随机化 —
 	var vol_offset: float = beep_volume_offset_db + randf_range(-beep_volume_variation_db, beep_volume_variation_db)
-	sfx_player.volume_db = sfx_volume_db + master_volume_db + vol_offset
+	sfx_player.volume_db = sfx_volume_db + vol_offset
 	sfx_player.play()
 
 # ============================================================
@@ -263,7 +270,7 @@ func play_sfx(stream: AudioStream, volume_offset_db: float = 0.0) -> void:
 	if stream == null:
 		return
 	sfx_player.stream = stream
-	sfx_player.volume_db = sfx_volume_db + master_volume_db + volume_offset_db
+	sfx_player.volume_db = sfx_volume_db + volume_offset_db
 	sfx_player.play()
 
 # ============================================================
@@ -280,7 +287,7 @@ func play_media(stream: AudioStream) -> void:
 	_set_stream_loop(stream, false)
 
 	media_player.stream = stream
-	media_player.volume_db = media_volume_db + master_volume_db
+	media_player.volume_db = media_volume_db
 	media_player.play()
 	_duck_ambient(true)
 
@@ -326,8 +333,9 @@ func _on_media_finished() -> void:
 
 ## 设置主音量（0.0 ~ 1.0 线性值）
 func set_master_volume(linear: float) -> void:
-	master_volume_db = linear_to_db(clampf(linear, 0.001, 1.0))
-	_update_all_volumes()
+	master_volume_db = linear_to_db(clampf(linear, 0.0, 1.0))
+	# 总音量在总线上只乘一次，覆盖独立浪声、摩斯、开机及其他音频。
+	StartupSettings.apply_master(linear)
 
 ## 设置环境音音量（0.0 ~ 1.0）
 func set_ambient_volume(linear: float) -> void:
@@ -338,24 +346,26 @@ func set_ambient_volume(linear: float) -> void:
 ## 设置音效音量（0.0 ~ 1.0）
 func set_sfx_volume(linear: float) -> void:
 	sfx_volume_db = linear_to_db(clampf(linear, 0.001, 1.0))
+	if sfx_player:
+		sfx_player.volume_db = sfx_volume_db
 
 ## 设置媒体音量（0.0 ~ 1.0）
 func set_media_volume(linear: float) -> void:
 	media_volume_db = linear_to_db(clampf(linear, 0.001, 1.0))
 	if media_player:
-		media_player.volume_db = media_volume_db + master_volume_db
+		media_player.volume_db = media_volume_db
 
 ## 更新所有通道音量
 func _update_all_volumes() -> void:
 	_update_ambient_volume()
 	if sfx_player:
-		sfx_player.volume_db = sfx_volume_db + master_volume_db
+		sfx_player.volume_db = sfx_volume_db
 	if media_player:
-		media_player.volume_db = media_volume_db + master_volume_db
+		media_player.volume_db = media_volume_db
 
-## 计算环境音的目标音量（综合：基础 + 主音量 + manifest覆盖 + ducking）
+## 计算环境音的目标音量（综合：基础 + manifest覆盖 + ducking；主音量由总线处理）
 func _get_ambient_target_db() -> float:
-	var target_db: float = ambient_volume_db + master_volume_db + _ambient_override_db
+	var target_db: float = ambient_volume_db + _ambient_override_db
 	if ducking_active:
 		target_db += ducking_amount_db
 	return target_db
@@ -384,7 +394,7 @@ func _duck_ambient(duck: bool, duration: float = 0.5) -> void:
 	if not player.playing:
 		return
 
-	var target_db: float = ambient_volume_db + master_volume_db + _ambient_override_db
+	var target_db: float = ambient_volume_db + _ambient_override_db
 	if duck:
 		target_db += ducking_amount_db
 

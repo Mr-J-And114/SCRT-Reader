@@ -102,7 +102,7 @@ func get_nearest_signal_by_freq(current_freq: float, current_band: String):
 ## 返回 0.0 ~ 1.0
 func calculate_signal_quality(sig: RadioConfigParser.RadioSignal,
 		current_freq: float, current_band: String,
-		current_azimuth: float, current_elevation: float) -> float:
+		current_azimuth: float, current_elevation: float, fluctuate: bool = true) -> float:
 	# 波段不匹配 → 完全无信号
 	if sig.band != current_band:
 		return 0.0
@@ -128,12 +128,18 @@ func calculate_signal_quality(sig: RadioConfigParser.RadioSignal,
 	if sig.type == "sstv" or sig.type == "audio":
 		elev_tolerance *= 2.0
 	var elev_factor: float = 1.0 - clampf(elev_diff / elev_tolerance, 0.0, 1.0)
+	if sig.omnidirectional:
+		azim_factor = 1.0
+		elev_factor = 1.0
 
 	# 三因素乘积
 	var raw_signal: float = freq_factor * azim_factor * elev_factor
+	# 衰落只能改变已收到的信号，不能凭空制造范围外电台。
+	if raw_signal <= 0.0: return 0.0
 
 	# 温和的锐化曲线
 	var quality: float = pow(raw_signal, 1.2)
+	if not fluctuate: return quality
 
 	# HF 波段衰落效果（SSTV/audio 不叠加）
 	if sig.band == "HF" and sig.type != "sstv" and sig.type != "audio":
@@ -176,10 +182,13 @@ func get_best_signal(current_freq: float, current_band: String,
 	for sig in signals:
 		var s = sig as RadioConfigParser.RadioSignal
 		var q: float = calculate_signal_quality(s, current_freq, current_band,
-				current_azimuth, current_elevation)
+				current_azimuth, current_elevation, false)
 		if q > best_quality:
 			best_quality = q
 			best_signal = s
+	# 身份由稳定匹配决定，起伏只影响选定电台的质量。
+	if best_signal != null:
+		best_quality = calculate_signal_quality(best_signal, current_freq, current_band, current_azimuth, current_elevation)
 	return {
 		"signal": best_signal,
 		"quality": best_quality,

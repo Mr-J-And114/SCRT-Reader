@@ -88,6 +88,10 @@ func reset_all() -> void:
 #  外部模组加载/卸载
 # ══════════════════════════════════════════
 
+## 身份和挂载仍完整时先结束外部模组，避免统一关闭再次调用其钩子。
+func prepare_for_logout() -> void:
+	_unload_external_mod()
+
 ## 卸载当前已加载的外部模组
 func _unload_external_mod() -> void:
 	if _loaded_external_mod != null:
@@ -96,13 +100,15 @@ func _unload_external_mod() -> void:
 		# 注销该模组注册的所有命令
 		if main.pkg_mgr:
 			main.pkg_mgr._unregister_all_commands_for_mod(_loaded_external_mod_id)
+			main.pkg_mgr._clear_event_subscriptions(_loaded_external_mod_id)
+			main.pkg_mgr._destroy_mod_container(_loaded_external_mod_id)
 			main.pkg_mgr.active_mods.erase(_loaded_external_mod_id)
 			main.pkg_mgr.mod_pack_files.erase(_loaded_external_mod_id)
 			main.pkg_mgr._process_mods.erase(_loaded_external_mod_id)
 			# 释放输入捕获
 			if not main.pkg_mgr._input_capture.is_empty():
 				if str(main.pkg_mgr._input_capture.get("mod_id", "")) == _loaded_external_mod_id:
-					main.pkg_mgr._input_capture.clear()
+					main.pkg_mgr._api_release_input_capture(_loaded_external_mod_id)
 					if main.input_field:
 						main.input_field.editable = true
 		print("[DiscManager] 已卸载外部模组: %s" % _loaded_external_mod_id)
@@ -182,6 +188,7 @@ func scan_stories(silent: bool = false) -> void:
 			var info: Dictionary = _quick_read_manifest(full_path)
 			info["filename"] = filename
 			info["path"] = full_path
+			info["_scan_source"] = "shared"
 			# ★ 标记是否为软件包
 			if PackageManager.is_package_manifest(info):
 				info["_is_package"] = true
@@ -202,9 +209,19 @@ func scan_stories(silent: bool = false) -> void:
 				if not inbox.current_is_dir() and own_name.get_extension().to_lower() == "scp":
 					var own_path: String = inbox_dir.path_join(own_name)
 					var own_info: Dictionary = _quick_read_manifest(own_path)
+					var own_story: Dictionary = own_info.get("story", {})
+					var task_id: String = main.vdisc_task_mgr.get_task_for_story(str(own_story.get("id", "")))
+					if not task_id.is_empty():
+						var state: Dictionary = main.vdisc_task_mgr.task_states.get(task_id, {})
+						# 旧版本不作为第二份当前任务显示；文件和旧进度保留。
+						if str(state.get("status", "")) in ["submitted", "confiscated"] or (not str(state.get("filename", "")).is_empty() and str(state.filename) != own_name):
+							own_name = inbox.get_next()
+							continue
 					own_info["filename"] = own_name
 					own_info["path"] = own_path
 					own_info["_player_copy"] = true
+					own_info["_scan_source"] = "personal"
+					own_info["_task_id"] = task_id
 					own_info["_is_package"] = false
 					own_info["_package_type"] = ""
 					available_stories.append(own_info)
@@ -212,7 +229,7 @@ func scan_stories(silent: bool = false) -> void:
 			inbox.list_dir_end()
 	# 非静默模式：显示扫描进度条和结果
 	if not silent:
-		main.append_output("[color=" + str(T.muted_hex) + "]正在扫描 vdisc/ 目录...[/color]\n", false)
+		main.append_output("[color=" + str(T.muted_hex) + "]正在扫描共用磁盘目录和当前账号个人磁盘箱...[/color]\n", false)
 		# 使用 typewriter 内置的进度条动画
 		var scan_size: int = maxi(available_stories.size() * 200, 300)
 		await tw.show_progress_bar(scan_size)
@@ -224,6 +241,7 @@ func scan_stories(silent: bool = false) -> void:
 			main.append_output("[color=" + m + "]请将 .scp 文件放入 vdisc/ 目录。[/color]\n", false)
 		else:
 			main.append_output("\n[color=" + p + "]═══════════ 虚拟磁盘扫描结果 ═══════════[/color]\n\n", false)
+			main.append_output("[color=" + m + "]共用目录：" + vdisc_dir + "；个人副本来自当前账号磁盘箱。[/color]\n\n", false)
 			for i in range(available_stories.size()):
 				var story: Dictionary = available_stories[i]
 				var filename_str: String = str(story.get("filename", ""))
@@ -253,9 +271,10 @@ func scan_stories(silent: bool = false) -> void:
 				if has_save:
 					save_marker = " [color=" + w + "][存档][/color]"
 				# ★ 包类型标记
+				main.append_output("  [color=" + m + "]来源: " + ("个人磁盘箱" if bool(story.get("_player_copy", false)) else "共用磁盘目录") + "[/color]\n", false)
 				var type_marker: String = ""
 				if bool(story.get("_player_copy", false)):
-					type_marker = " [color=" + p + "][个人任务盘][/color]"
+					type_marker = " [color=" + p + "]" + ("[个人任务盘]" if not str(story.get("_task_id", "")).is_empty() else "[个人接收盘]") + "[/color]"
 				if is_pkg:
 					if pkg_type_str == "internal":
 						type_marker = " [color=" + T.warning_hex + "][内部软件][/color]"
@@ -474,7 +493,7 @@ func load_story(args: Array) -> void:
 		# 无线电信号发现状态仍从存档恢复（兼容旧存档）
 		if save_data.has("radio_data"):
 			if main.radio_receiver and main.radio_receiver.signal_mgr:
-				main.radio_receiver.signal_mgr.load_save_data(save_data["radio_data"])
+				main.radio_receiver.restore_legacy_state(save_data["radio_data"])
 	else:
 		fs.player_clearance = start_clearance
 		main.read_files.clear()
@@ -537,12 +556,6 @@ func load_story(args: Array) -> void:
 			main.env_task_mgr.reset_for_new_day(false)
 		else:
 			main.env_observation.migrate_legacy()
-			if main.env_task_mgr.can_advance_day() and main.env_monitor:
-				main.env_monitor.advance_day()
-				main.env_task_mgr.reset_for_new_day()
-				main.env_monitor.save_env_progress()
-				main.env_task_mgr.save_task_progress()
-				print("[DiscManager] 自动推进至第 %d 天" % main.env_monitor.current_day)
 	# ── ★ 加载每日剧情对话覆盖 ──
 	if main.daily_dialogue_mgr:
 		main.daily_dialogue_mgr.load_from_manifest(main.story_manifest)
@@ -621,17 +634,52 @@ func eject_story() -> void:
 # ══════════════════════════════════════════
 #  自动保存
 # ══════════════════════════════════════════
-func _auto_save() -> void:
+func _summarize_save(items: Array[Dictionary]) -> Dictionary:
+	var saved: int = 0
+	var failed: int = 0
+	for item in items:
+		match item.result.get("status", "failed"):
+			"saved": saved += 1
+			"skipped": pass
+			_: failed += 1
+	var status: String = "partial" if saved > 0 else "failed"
+	if failed == 0:
+		status = "saved" if saved > 0 else "skipped"
+	if failed > 0:
+		# 自动保存调用者仍按原生命周期继续；失败不能无声丢失。
+		push_warning("[DiscManager] 保存未全部完成: " + str(items))
+	return {"status": status, "items": items}
+
+func _auto_save() -> Dictionary:
+	var items: Array[Dictionary] = []
+	if main == null:
+		items.append({"component": "host", "result": SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)})
+		return _summarize_save(items)
+	# Main._ready无条件创建这四个账号管理器；登录后缺失不是可选功能。
+	var account_active: bool = main.get("user_mgr") != null and main.user_mgr.is_logged_in
 	# ★ 玩家专属进度总是保存（不依赖磁盘状态）
 	if main.env_monitor:
-		main.env_monitor.save_env_progress()
+		items.append({"component": "environment", "result": main.env_monitor.save_env_progress()})
+	elif account_active:
+		items.append({"component": "environment", "result": SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)})
 	if main.env_task_mgr:
-		main.env_task_mgr.save_task_progress()
+		items.append({"component": "env_tasks", "result": main.env_task_mgr.save_task_progress()})
+	elif account_active:
+		items.append({"component": "env_tasks", "result": SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)})
 	if main.get("perf_mgr"):
-		main.perf_mgr.save_progress()
+		items.append({"component": "performance", "result": main.perf_mgr.save_progress()})
+	elif account_active:
+		items.append({"component": "performance", "result": SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)})
 
+	if main.daily_dialogue_mgr:
+		items.append({"component": "story", "result": main.daily_dialogue_mgr.save_story_save()})
+	elif account_active:
+		items.append({"component": "story", "result": SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)})
 	if main.story_id.is_empty():
-		return
+		return _summarize_save(items)
+	if fs == null or save_mgr == null:
+		items.append({"component": "disc", "result": SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)})
+		return _summarize_save(items)
 	# ★ 收集额外存档数据
 	var extra: Dictionary = {}
 	if main.trigger_sys and main.trigger_sys.has_method("get_save_data"):
@@ -652,8 +700,7 @@ func _auto_save() -> void:
 	# ★ 每日剧情对话状态（兼容旧存档 + 独立存档双写）
 	if main.daily_dialogue_mgr:
 		extra["daily_dialogue_data"] = main.daily_dialogue_mgr.get_save_data()
-		main.daily_dialogue_mgr.save_story_save()
-	save_mgr.auto_save(
+	var disc_result: Dictionary = save_mgr.auto_save(
 		main.story_id,
 		fs.player_clearance,
 		main.read_files,
@@ -662,6 +709,8 @@ func _auto_save() -> void:
 		main.current_path,
 		extra
 	)
+	items.append({"component": "disc", "result": disc_result})
+	return _summarize_save(items)
 
 # ══════════════════════════════════════════
 #  桌面欢迎界面
@@ -679,7 +728,7 @@ func show_desktop_welcome(clear_screen: bool = false) -> void:
 	else:
 		user_greeting = "未登录"
 	var box: String = fs.build_box([
-		"SCP FOUNDATION",
+		"SCRT-READER CORE",
 		"SECURE TERMINAL SYSTEM",
 		user_greeting
 	] as Array[String], p)
@@ -700,7 +749,7 @@ func show_story_info() -> void:
 		main.append_output("[color=" + p + "]磁盘数量: [/color][color=" + m + "]" + str(available_stories.size()) + "[/color]\n", false)
 		if main.vdisc_task_mgr:
 			for task in main.vdisc_task_mgr.get_task_list():
-				main.append_output("  [color=" + p + "]" + str(task["title"]) + "[/color]  [" + str(task["status"]) + "]  ID: " + str(task["id"]) + "\n", false)
+				main.append_output("  [color=" + p + "]" + str(task["title"]) + "[/color]  [" + str(task["status_label"]) + "]  ID: " + str(task["id"]) + "\n", false)
 			if not main.vdisc_task_mgr.archive.is_empty():
 				main.append_output("[color=" + m + "]个人归档: " + str(main.vdisc_task_mgr.archive.size()) + " 条记录[/color]\n", false)
 		if available_stories.size() > 0:
@@ -734,12 +783,13 @@ func show_story_info() -> void:
 			var task: Dictionary = main.vdisc_task_mgr.definitions[task_id]
 			var verdict: Dictionary = main.vdisc_task_mgr.check_requirements(task_id)
 			lines.append("  任务：" + str(task.get("title", task_id)))
-			lines.append("  上交命令：submit " + str(task.get("giver_number", "")))
+			lines.append("  上交：eject 返回桌面，scan 查看盘编号，再输入 submit " + str(task.get("giver_number", "")) + " <盘编号>")
 			if bool(verdict["passed"]):
 				lines.append("  [color=" + p + "]已满足上交要求，可执行上述命令。[/color]")
 			else:
 				for reason in verdict["missing"]:
 					lines.append("  [color=" + w + "]待完成：" + str(reason) + "[/color]")
+				lines.append("  未达标上交需确认：可返回补做，或执意上交结束任务。")
 
 	# ★ 显示外部模组信息
 	if _loaded_external_mod != null:

@@ -130,6 +130,8 @@ const COLOR_NAMES := {
 # ══════════════════════════════════════════
 
 var _host: Node = null
+var _drawing: bool = false
+signal draw_finished
 var _viewport: SubViewport = null
 var _canvas: _LatexCanvas = null
 var _fonts: Dictionary = {}
@@ -248,6 +250,18 @@ func _render_to_image_internal(latex: String, font_size: int, color: Color) -> I
 	return await _draw_to_image(box)
 
 func _draw_to_image(box: Dictionary) -> Image:
+	# 所有调用共用一个 SubViewport，避免并发打开时相互覆盖绘制内容。
+	while _drawing:
+		await draw_finished
+	if not is_instance_valid(_host):
+		return _create_empty_image()
+	_drawing = true
+	var result: Image = await _draw_to_image_exclusive(box)
+	_drawing = false
+	draw_finished.emit()
+	return result
+
+func _draw_to_image_exclusive(box: Dictionary) -> Image:
 	var w: int = int(ceil(box.get("width", 1.0))) + int(PADDING * 2)
 	var h: int = int(ceil(box.get("height", 1.0))) + int(PADDING * 2)
 	w = max(w, 2)
@@ -262,6 +276,8 @@ func _draw_to_image(box: Dictionary) -> Image:
 	await _await_frame()
 	await RenderingServer.frame_post_draw
 
+	if not is_instance_valid(_viewport):
+		return _create_empty_image()
 	var tex: ViewportTexture = _viewport.get_texture()
 	if tex == null:
 		return _create_empty_image()

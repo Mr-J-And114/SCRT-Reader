@@ -19,6 +19,27 @@ var is_active: bool = false
 var overlay: Panel = null
 var decode_canvas: Control = null
 var nav_label: RichTextLabel = null
+var _menu_panel: VBoxContainer
+var _menu_buttons: Array[Button] = []
+var _input_panel: VBoxContainer
+var _cipher_edit: TextEdit
+var _key_edit: LineEdit
+var _key_label: Label
+var _input_error: Label
+var _readout: VBoxContainer
+var _result_text: RichTextLabel
+var _step_log: RichTextLabel
+var _toolbar: HFlowContainer
+var _back_button: Button
+var _method_label: Label
+var _log_title: Label
+var _pause_button: Button
+var _copy_button: Button
+var _retry_button: Button
+var _skip_button: Button
+var _step_buttons: Array[Button] = []
+var _rendered_step_count := -1
+var _rendered_output := ""
 
 # 缓存
 var _cached_input_visible: bool = true
@@ -50,9 +71,6 @@ var _anim_decoded_so_far: String = ""
 var _menu_index: int = 0
 var _menu_items: Array[Dictionary] = []
 
-# 滚动偏移（步骤日志）
-var _log_scroll: int = 0
-
 # 绘制参数
 var draw_color: Color = Color(0.2, 1.0, 0.3, 1.0)
 var draw_color_dim: Color = Color(0.1, 0.5, 0.15, 0.6)
@@ -65,11 +83,6 @@ var highlight_color: Color = Color(0.3, 1.0, 0.5, 0.3)
 const MARGIN: float = 16.0
 const LINE_HEIGHT: float = 18.0
 const SECTION_GAP: float = 10.0
-
-# 文本输入缓冲区
-var _text_buffer: String = ""
-var _cursor_blink_timer: float = 0.0
-var _cursor_visible: bool = true
 
 # ══════════════════════════════════════════
 #  初始化
@@ -86,8 +99,7 @@ func _update_colors() -> void:
 		return
 	draw_color = T.primary
 	draw_color.a = 1.0
-	draw_color_dim = T.primary
-	draw_color_dim.a = 0.4
+	draw_color_dim = T.muted
 	grid_color = T.primary
 	grid_color.a = 0.15
 	if T.get("error") != null:
@@ -132,9 +144,9 @@ func _ensure_overlay() -> void:
 
 	var root_control: Control = main as Control
 	root_control.add_child(overlay)
-	var crt_node: Node = root_control.get_node_or_null("CRTEffect")
-	if crt_node:
-		root_control.move_child(overlay, crt_node.get_index())
+	# CRT 是独立 CanvasLayer；同层控件必须在 MainContent 之后接收鼠标。
+	root_control.move_child(overlay, root_control.get_child_count() - 1)
+	UIManager.apply_terminal_theme(overlay, main.input_field.get_theme_font_size("font_size"))
 
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.offset_left = 0
@@ -155,11 +167,13 @@ func _ensure_overlay() -> void:
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 2)
 	margin.add_child(vbox)
+	_build_controls(vbox)
 
 	decode_canvas = _DecodeCanvas.new()
 	decode_canvas.name = "DecodeCanvas"
 	decode_canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	decode_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	decode_canvas.clip_contents = true
 	(decode_canvas as _DecodeCanvas).viewer = self
 	vbox.add_child(decode_canvas)
 
@@ -170,6 +184,246 @@ func _ensure_overlay() -> void:
 	nav_label.selection_enabled = false
 	nav_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(nav_label)
+	main.get_viewport().size_changed.connect(_align_overlay)
+
+func _button(parent: Control, text: String, action: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	UIManager.style_terminal_button(button, T)
+	button.pressed.connect(action)
+	parent.add_child(button)
+	return button
+
+func _build_controls(column: VBoxContainer) -> void:
+	_toolbar = HFlowContainer.new()
+	column.add_child(_toolbar)
+	_back_button = _button(_toolbar, "返回方法 [Esc]", _show_select)
+	_button(_toolbar, "退出解码器", close)
+	_pause_button = _button(_toolbar, "暂停 [Space]", _toggle_pause)
+	_step_buttons.append(_button(_toolbar, "上一步 [←]", func() -> void: _single_step(-1)))
+	_step_buttons.append(_button(_toolbar, "下一步 [→]", func() -> void: _single_step(1)))
+	_skip_button = _button(_toolbar, "显示结果 [Enter]", _finish_animation)
+	_retry_button = _button(_toolbar, "重新编辑 [R]", _retry_decode)
+	_copy_button = _button(_toolbar, "复制结果 [C]", _copy_result)
+	_menu_panel = VBoxContainer.new()
+	_menu_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(_menu_panel)
+	for i in range(_menu_items.size()):
+		var button := _button(_menu_panel, "%d. %s | %s" % [i + 1, _menu_items[i].name, _menu_items[i].desc], func() -> void: _choose_cipher(i))
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		button.toggle_mode = true
+		_menu_buttons.append(button)
+	_input_panel = VBoxContainer.new()
+	_input_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(_input_panel)
+	_method_label = Label.new()
+	_input_panel.add_child(_method_label)
+	var label := Label.new()
+	label.text = "密文（Enter 确认，Shift+Enter 换行；支持选中、编辑和粘贴）"
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_input_panel.add_child(label)
+	_cipher_edit = TextEdit.new()
+	_cipher_edit.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_cipher_edit.custom_minimum_size.y = 100
+	_cipher_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_cipher_edit.caret_blink = true
+	var input_style := StyleBoxFlat.new()
+	input_style.bg_color = Color.TRANSPARENT
+	input_style.border_color = Color(draw_color, 0.4)
+	input_style.set_border_width_all(1)
+	input_style.set_content_margin_all(6)
+	_cipher_edit.add_theme_stylebox_override("normal", input_style)
+	_cipher_edit.add_theme_stylebox_override("focus", input_style)
+	UIManager.setup_ime_guard(_cipher_edit)
+	UIManager.setup_text_selection(_cipher_edit, T)
+	_input_panel.add_child(_cipher_edit)
+	_key_label = Label.new()
+	_key_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_input_panel.add_child(_key_label)
+	_key_edit = LineEdit.new()
+	UIManager.setup_input_field(_key_edit)
+	_key_edit.text_submitted.connect(func(_value: String) -> void: _submit_input())
+	_input_panel.add_child(_key_edit)
+	_input_error = Label.new()
+	_input_error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_input_error.add_theme_color_override("font_color", error_color)
+	_input_panel.add_child(_input_error)
+	_button(_input_panel, "开始解码", _submit_input)
+
+func _ensure_readout() -> void:
+	if _readout != null:
+		return
+	_readout = VBoxContainer.new()
+	_readout.mouse_filter = Control.MOUSE_FILTER_PASS
+	_readout.add_theme_constant_override("separation", 6)
+	decode_canvas.add_child(_readout)
+	var title := Label.new()
+	title.text = "解码结果（可选中／滚动）"
+	_readout.add_child(title)
+	_result_text = RichTextLabel.new()
+	_result_text.selection_enabled = true
+	_style_readout(_result_text)
+	_result_text.focus_mode = Control.FOCUS_CLICK
+	_result_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_result_text.size_flags_stretch_ratio = 0.4
+	_readout.add_child(_result_text)
+	_log_title = Label.new()
+	_log_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_readout.add_child(_log_title)
+	_step_log = RichTextLabel.new()
+	_step_log.selection_enabled = true
+	_style_readout(_step_log)
+	_step_log.focus_mode = Control.FOCUS_CLICK
+	_step_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_step_log.size_flags_stretch_ratio = 0.6
+	_step_log.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_step_log.scroll_following = false)
+	_readout.add_child(_step_log)
+
+func _style_readout(control: RichTextLabel) -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = Color(draw_color, 0.3)
+	style.set_border_width_all(1)
+	style.set_content_margin_all(6)
+	control.add_theme_stylebox_override("normal", style)
+	UIManager.setup_text_selection(control, T)
+
+func _apply_ui_theme() -> void:
+	_ensure_readout()
+	UIManager.apply_terminal_theme(overlay, main.input_field.get_theme_font_size("font_size"))
+	UIManager.setup_text_selection(_cipher_edit, T)
+	_input_error.add_theme_color_override("font_color", error_color)
+	UIManager.setup_input_field(_key_edit)
+	var buttons: Array[Button] = _menu_buttons.duplicate()
+	for parent in [_toolbar, _input_panel]:
+		for child in parent.get_children():
+			if child is Button:
+				buttons.append(child)
+	for button in buttons:
+		UIManager.style_terminal_button(button, T)
+	for readout in [_result_text, _step_log]:
+		_style_readout(readout)
+	(_cipher_edit.get_theme_stylebox("normal") as StyleBoxFlat).border_color = Color(draw_color, 0.4)
+
+func _choose_cipher(index: int) -> void:
+	_menu_index = index
+	selected_cipher = _menu_items[index].type
+	cipher_key = ""
+	_key_edit.text = ""
+	_cipher_edit.text = cipher_input_text
+	view_mode = ViewMode.INPUT
+	_input_step = 1
+	_input_error.text = ""
+	_update_nav()
+	_cipher_edit.grab_focus.call_deferred()
+
+func _show_select() -> void:
+	if view_mode == ViewMode.INPUT:
+		cipher_input_text = _cipher_edit.text
+	view_mode = ViewMode.SELECT
+	current_result = null
+	_update_nav()
+
+func _submit_input() -> void:
+	if view_mode != ViewMode.INPUT:
+		return
+	UIManager.sync_ime(_cipher_edit)
+	UIManager.sync_ime(_key_edit)
+	if _cipher_edit.has_ime_text() or _key_edit.has_ime_text():
+		return
+	cipher_input_text = _cipher_edit.text
+	cipher_key = _key_edit.text.strip_edges()
+	if cipher_input_text.strip_edges().is_empty():
+		_input_error.text = "请先输入密文。"
+		_cipher_edit.grab_focus()
+		return
+	if _menu_items[_menu_index].needs_key and cipher_key.is_empty():
+		_input_error.text = "此方法需要密钥，请在密钥框中填写。"
+		_key_edit.grab_focus()
+		return
+	_start_decode()
+
+func _retry_decode() -> void:
+	view_mode = ViewMode.INPUT
+	_input_step = 1
+	_cipher_edit.text = cipher_input_text
+	_key_edit.text = cipher_key
+	_input_error.text = ""
+	current_result = null
+	_update_nav()
+	_cipher_edit.grab_focus.call_deferred()
+
+func _toggle_pause() -> void:
+	_anim_paused = not _anim_paused
+	_update_nav()
+
+func _single_step(direction: int) -> void:
+	_anim_paused = true
+	if direction < 0:
+		_anim_step_index = maxi(0, _anim_step_index - 1)
+		_rebuild_decoded_so_far()
+	else:
+		_advance_anim_step()
+	_update_nav()
+
+func _finish_animation() -> void:
+	_anim_step_index = current_result.steps.size()
+	_anim_complete = true
+	_anim_decoded_so_far = current_result.output_text
+	view_mode = ViewMode.RESULT
+	_update_nav()
+
+func _copy_result() -> void:
+	if current_result != null and current_result.success:
+		DisplayServer.clipboard_set(current_result.output_text)
+		_copy_button.text = "已复制 [C]"
+
+func _sync_controls() -> void:
+	_ensure_readout()
+	_menu_panel.visible = view_mode == ViewMode.SELECT
+	_input_panel.visible = view_mode == ViewMode.INPUT
+	decode_canvas.visible = view_mode in [ViewMode.ANIMATING, ViewMode.RESULT]
+	_readout.visible = decode_canvas.visible and current_result != null and current_result.success
+	for i in range(_menu_buttons.size()):
+		_menu_buttons[i].set_pressed_no_signal(i == _menu_index)
+	var item: Dictionary = _menu_items[_menu_index]
+	_method_label.text = "解码方式：" + str(item.name)
+	_back_button.visible = view_mode != ViewMode.SELECT
+	var has_key := bool(item.needs_key) or bool(item.optional_key)
+	_key_edit.visible = has_key
+	_key_label.visible = has_key
+	_key_label.text = "密钥：" + str(item.key_hint)
+	_pause_button.visible = view_mode == ViewMode.ANIMATING
+	_pause_button.text = "继续 [Space]" if _anim_paused else "暂停 [Space]"
+	for button in _step_buttons:
+		button.visible = view_mode == ViewMode.ANIMATING
+	_skip_button.visible = view_mode == ViewMode.ANIMATING
+	_retry_button.visible = view_mode == ViewMode.RESULT
+	_copy_button.visible = view_mode == ViewMode.RESULT and current_result != null and current_result.success
+	_refresh_readout()
+
+func _refresh_readout() -> void:
+	if _readout == null or not _readout.visible:
+		return
+	var w := decode_canvas.size.x
+	var h := decode_canvas.size.y
+	_log_title.text = "步骤 %d/%d | 滚轮／PgUp／PgDn" % [_anim_step_index, current_result.steps.size()]
+	_readout.position = Vector2(w * 0.55 + MARGIN, MARGIN + 42)
+	_readout.size = Vector2(maxf(80, w * 0.45 - MARGIN * 2), maxf(80, h - MARGIN * 2 - 42))
+	if _rendered_output != _anim_decoded_so_far:
+		_result_text.text = _anim_decoded_so_far
+		_rendered_output = _anim_decoded_so_far
+	if _rendered_step_count != _anim_step_index:
+		if _rendered_step_count < 0 or _rendered_step_count > _anim_step_index:
+			_step_log.text = ""
+			_rendered_step_count = 0
+		for i in range(_rendered_step_count, _anim_step_index):
+			_step_log.append_text("%03d  %s\n" % [i + 1, current_result.steps[i].description])
+		_rendered_step_count = _anim_step_index
 
 func _align_overlay() -> void:
 	if overlay == null:
@@ -177,7 +431,7 @@ func _align_overlay() -> void:
 	var output_area: ScrollContainer = main.scroll_container
 	var rect: Rect2 = output_area.get_global_rect()
 	overlay.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	overlay.position = rect.position
+	overlay.position = rect.position - main.global_position
 	overlay.size = rect.size
 
 # ══════════════════════════════════════════
@@ -185,9 +439,13 @@ func _align_overlay() -> void:
 # ══════════════════════════════════════════
 func open(args: Array = []) -> void:
 	_ensure_overlay()
+	if is_active:
+		return
 	T = ThemeManager.current
 	_update_colors()
+	_apply_ui_theme()
 	_align_overlay()
+	main.move_child(overlay, main.get_child_count() - 1)
 
 	is_active = true
 
@@ -196,6 +454,9 @@ func open(args: Array = []) -> void:
 	_cached_prompt_visible = main.prompt_label.visible
 	main.input_field.visible = false
 	main.prompt_label.visible = false
+	main.input_field.release_focus()
+	cipher_input_text = ""
+	_cipher_edit.text = ""
 	_cached_output_text = main.output_text.text
 	main.output_text.text = ""
 	main.path_label.text = "CIPHER DECODER | Q/Esc 退出"
@@ -214,7 +475,6 @@ func open(args: Array = []) -> void:
 				break
 		view_mode = ViewMode.INPUT
 		_input_step = 1  # 直接进入密文输入
-		_text_buffer = ""
 
 		# 如果命令显式传入了 key，这里才使用；否则保持清空
 		if args.size() >= 2:
@@ -228,11 +488,13 @@ func open(args: Array = []) -> void:
 	_anim_step_index = 0
 	_anim_complete = false
 	_anim_decoded_so_far = ""
-	_log_scroll = 0
+	_key_edit.text = cipher_key
 
 	overlay.visible = true
 	decode_canvas.set_process(true)
 	_update_nav()
+	if view_mode == ViewMode.INPUT:
+		_cipher_edit.grab_focus.call_deferred()
 
 
 func close() -> void:
@@ -264,29 +526,30 @@ func handle_input(event: InputEvent) -> bool:
 		return false
 	if not (event is InputEventKey and event.pressed):
 		return false
+	if view_mode == ViewMode.INPUT:
+		UIManager.sync_ime(_cipher_edit)
+		UIManager.sync_ime(_key_edit)
+		if _cipher_edit.has_ime_text() or _key_edit.has_ime_text():
+			return false
+	# 文本选择、复制、全选等组合键交给实际 GUI 控件。
+	if event.ctrl_pressed or event.meta_pressed:
+		return false
 
 	# 全局退出
 	if event.keycode == KEY_ESCAPE:
-		if view_mode == ViewMode.ANIMATING or view_mode == ViewMode.RESULT:
-			view_mode = ViewMode.SELECT
-			_menu_index = 0
-			current_result = null
-			cipher_key = ""  # 返回选择时清空密钥
-			_update_nav()
-			return true
-		elif view_mode == ViewMode.INPUT:
-			view_mode = ViewMode.SELECT
-			_menu_index = 0
-			cipher_key = ""  # 返回选择时清空密钥
-			_update_nav()
-			return true
-		else:
+		if view_mode == ViewMode.SELECT:
 			close()
+		else:
+			_show_select()
 			return true
+		return true
 
 	if event.keycode == KEY_Q and view_mode == ViewMode.SELECT:
 		close()
 		return true
+	var focus: Control = main.get_viewport().gui_get_focus_owner()
+	if focus in [_result_text, _step_log] and event.keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END, KEY_PAGEUP, KEY_PAGEDOWN]:
+		return false
 
 	match view_mode:
 		ViewMode.SELECT:
@@ -305,91 +568,37 @@ func _handle_select_input(event: InputEventKey) -> bool:
 	match event.keycode:
 		KEY_UP:
 			_menu_index = maxi(_menu_index - 1, 0)
+			_sync_controls()
 			_play_beep()
 			return true
 		KEY_DOWN:
 			_menu_index = mini(_menu_index + 1, _menu_items.size() - 1)
+			_sync_controls()
 			_play_beep()
 			return true
 		KEY_ENTER:
-			selected_cipher = _menu_items[_menu_index]["type"] as CipherDecoder.CipherType
-			view_mode = ViewMode.INPUT
-			_input_step = 1
-			_text_buffer = ""
-			cipher_key = ""  # ★ 清空上一次密钥，强制重新输入
+			_choose_cipher(_menu_index)
 			_play_beep()
-			_update_nav()
 			return true
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8:
 			var idx: int = event.keycode - KEY_1
 			if idx >= 0 and idx < _menu_items.size():
-				_menu_index = idx
-				selected_cipher = _menu_items[idx]["type"] as CipherDecoder.CipherType
-				view_mode = ViewMode.INPUT
-				_input_step = 1
-				_text_buffer = ""
-				cipher_key = ""  # ★ 清空上一次密钥，强制重新输入
+				_choose_cipher(idx)
 				_play_beep()
-				_update_nav()
 				return true
 	return false
 
 
 
 func _handle_text_input(event: InputEventKey) -> bool:
-	if event.keycode == KEY_V and event.ctrl_pressed:
-		var clip: String = DisplayServer.clipboard_get()
-		if not clip.is_empty():
-			_text_buffer += clip.replace("\r", "").replace("\n", "")
-		return true
-	if event.keycode == KEY_BACKSPACE:
-		if not _text_buffer.is_empty():
-			_text_buffer = _text_buffer.left(-1)
-		return true
-	
-	if event.keycode == KEY_ENTER:
-		if _input_step == 1:
-			if _text_buffer.strip_edges().is_empty():
-				return true
-			cipher_input_text = _text_buffer
-			_text_buffer = ""
-			_play_beep()  # ★ 添加
-			var needs_key: bool = _menu_items[_menu_index].get("needs_key", false) as bool
-			var optional_key: bool = _menu_items[_menu_index].get("optional_key", false) as bool
-			if (needs_key or optional_key) and cipher_key.is_empty():
+	if event.keycode in [KEY_ENTER, KEY_KP_ENTER] and not event.shift_pressed:
+		var item: Dictionary = _menu_items[_menu_index]
+		if _cipher_edit.has_focus() and (item.needs_key or item.optional_key) and _key_edit.text.is_empty():
+			if not _cipher_edit.text.strip_edges().is_empty():
 				_input_step = 2
-			else:
-				_start_decode()
-			_update_nav()
-			return true
-		elif _input_step == 2:
-			cipher_key = _text_buffer
-			_text_buffer = ""
-			_play_beep()  # ★ 添加
-			_start_decode()
-			_update_nav()
-			return true
-		return true
-	
-	if event.keycode == KEY_TAB:
-		if _input_step == 2:
-			cipher_key = ""
-			_text_buffer = ""
-			_play_beep()  # ★ 添加
-			_start_decode()
-			_update_nav()
-			return true
-		return true
-
-	
-	# 普通字符输入
-	var unicode: int = event.unicode
-	if unicode > 31 and unicode < 127:
-		_text_buffer += char(unicode)
-		return true
-	# 支持中文等（unicode > 127）
-	if unicode > 127:
-		_text_buffer += char(unicode)
+				_key_edit.grab_focus()
+		else:
+			_submit_input()
 		return true
 	return false
 
@@ -397,19 +606,14 @@ func _handle_text_input(event: InputEventKey) -> bool:
 func _handle_anim_input(event: InputEventKey) -> bool:
 	match event.keycode:
 		KEY_SPACE:
-			_anim_paused = not _anim_paused
+			_toggle_pause()
 			_play_beep()  # ★ 添加
 			return true
 		KEY_RIGHT:
-			# 单步前进
-			if _anim_step_index < current_result.steps.size():
-				_advance_anim_step()
+			_single_step(1)
 			return true
 		KEY_LEFT:
-			# 单步后退
-			if _anim_step_index > 0:
-				_anim_step_index -= 1
-				_rebuild_decoded_so_far()
+			_single_step(-1)
 			return true
 		KEY_UP:
 			# 加速
@@ -420,55 +624,41 @@ func _handle_anim_input(event: InputEventKey) -> bool:
 			_anim_speed = minf(_anim_speed + 0.02, 0.5)
 			return true
 		KEY_ENTER:
-			# 跳到结果
-			_anim_step_index = current_result.steps.size()
-			_anim_complete = true
-			_anim_decoded_so_far = current_result.output_text
-			view_mode = ViewMode.RESULT
+			_finish_animation()
 			_play_beep()  # ★ 添加
 			_update_nav()
 			return true
 		KEY_PAGEUP:
-			_log_scroll = maxi(_log_scroll - 5, 0)
+			_scroll_log(-1)
 			return true
 		KEY_PAGEDOWN:
-			_log_scroll += 5
+			_scroll_log(1)
 			return true
 	return false
 
 func _handle_result_input(event: InputEventKey) -> bool:
 	match event.keycode:
 		KEY_R:
-			# 重新解码（回到输入）
-			view_mode = ViewMode.INPUT
-			_input_step = 1
-			_text_buffer = cipher_input_text
-			cipher_key = ""  # ★ 重新解码必须重新输入密钥
-			current_result = null
-			_update_nav()
+			_retry_decode()
 			return true
 		KEY_N:
-			# 新解码（回到选择）
-			view_mode = ViewMode.SELECT
-			_menu_index = 0
-			cipher_input_text = ""
-			cipher_key = ""
-			current_result = null
-			_update_nav()
+			_show_select()
 			return true
 		KEY_C:
-			# 复制结果到剪贴板
-			if current_result != null:
-				DisplayServer.clipboard_set(current_result.output_text)
-				_play_beep()
+			_copy_result()
 			return true
 		KEY_PAGEUP:
-			_log_scroll = maxi(_log_scroll - 5, 0)
+			_scroll_log(-1)
 			return true
 		KEY_PAGEDOWN:
-			_log_scroll += 5
+			_scroll_log(1)
 			return true
 	return false
+
+func _scroll_log(direction: int) -> void:
+	_step_log.scroll_following = false
+	var bar := _step_log.get_v_scroll_bar()
+	bar.value = clampf(bar.value + direction * bar.page, bar.min_value, maxf(bar.min_value, bar.max_value - bar.page))
 
 
 # ══════════════════════════════════════════
@@ -478,8 +668,8 @@ func _start_decode() -> void:
 	current_result = decoder.decode(selected_cipher, cipher_input_text, cipher_key)
 
 	if not current_result.success:
-		view_mode = ViewMode.RESULT
-		_anim_complete = true
+		_input_error.text = current_result.error_message
+		return
 	else:
 		view_mode = ViewMode.ANIMATING
 		_anim_step_index = 0
@@ -487,7 +677,13 @@ func _start_decode() -> void:
 		_anim_paused = false
 		_anim_complete = false
 		_anim_decoded_so_far = ""
-		_log_scroll = 0
+	_rendered_step_count = -1
+	_rendered_output = ""
+	_result_text.text = ""
+	_step_log.text = ""
+	_step_log.scroll_following = true
+	_copy_button.text = "复制结果 [C]"
+	_input_error.text = ""
 
 	_update_nav()
 
@@ -510,12 +706,9 @@ func _advance_anim_step() -> void:
 	if _anim_speed >= 0.05 or _anim_step_index % 5 == 0:
 		_play_beep()
 
-	# 自动滚动日志
-	var visible_lines: int = 12
-	if _anim_step_index > visible_lines:
-		_log_scroll = _anim_step_index - visible_lines
 	if _anim_step_index >= current_result.steps.size():
 		_anim_complete = true
+		_anim_decoded_so_far = current_result.output_text
 		view_mode = ViewMode.RESULT
 		_update_nav()
 
@@ -533,11 +726,6 @@ func process(delta: float) -> void:
 	if not is_active:
 		return
 
-	_cursor_blink_timer += delta
-	if _cursor_blink_timer >= 0.5:
-		_cursor_blink_timer = 0.0
-		_cursor_visible = not _cursor_visible
-
 	if view_mode == ViewMode.ANIMATING and not _anim_paused and not _anim_complete:
 		_anim_timer += delta
 		if _anim_timer >= _anim_speed:
@@ -545,6 +733,8 @@ func process(delta: float) -> void:
 			_advance_anim_step()
 
 	if decode_canvas:
+		_align_overlay()
+		_refresh_readout()
 		decode_canvas.queue_redraw()
 
 # ══════════════════════════════════════════
@@ -553,6 +743,7 @@ func process(delta: float) -> void:
 func _update_nav() -> void:
 	if nav_label == null:
 		return
+	_sync_controls()
 	var m: String = T.muted_hex if T else "#666666"
 	var parts: Array[String] = []
 
@@ -563,13 +754,8 @@ func _update_nav() -> void:
 			parts.append("[color=%s]1-8[/color] 快速选择" % m)
 			parts.append("[color=%s]Q/Esc[/color] 退出" % m)
 		ViewMode.INPUT:
-			parts.append("[color=%s]输入文本后按 Enter 确认[/color]" % m)
+			parts.append("[color=%s]Enter 确认 | Shift+Enter 换行 | Tab 切换输入框[/color]" % m)
 			parts.append("[color=%s]Esc[/color] 返回" % m)
-			if _input_step == 2:
-				var is_optional: bool = _menu_items[_menu_index].get("optional_key", false) as bool
-				if is_optional:
-					parts.append("[color=%s]Enter(留空)[/color] 自动检测" % m)
-				parts.append("[color=%s]Tab[/color] 跳过密钥" % m)
 		ViewMode.ANIMATING:
 			parts.append("[color=%s]Space[/color] 暂停/继续" % m)
 			parts.append("[color=%s]←→[/color] 单步" % m)
@@ -595,7 +781,10 @@ class _DecodeCanvas extends Control:
 	var _tiny_font_size: int = 11
 
 	func _ready() -> void:
-		_font = ThemeDB.fallback_font
+		_font = viewer.main.input_field.get_theme_font("font")
+		_font_size = viewer.main.input_field.get_theme_font_size("font_size")
+		_small_font_size = maxi(12, int(_font_size * 0.85))
+		_tiny_font_size = _small_font_size
 
 	func _process(delta: float) -> void:
 		if viewer and viewer.is_active:
@@ -618,125 +807,16 @@ class _DecodeCanvas extends Control:
 		var y: float = MARGIN
 
 		draw_string(_font, Vector2(MARGIN, y + _font_size),
-			"CIPHER DECODER", HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size, col)
+			"算法演示", HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size, col)
 		y += _font_size + 4
 		draw_line(Vector2(MARGIN, y), Vector2(w - MARGIN, y), gc, 1.0)
 		y += SECTION_GAP
 
-		match viewer.view_mode:
-			ViewMode.SELECT:
-				_draw_select_menu(y, w, h)
-			ViewMode.INPUT:
-				_draw_input_mode(y, w, h)
-			ViewMode.ANIMATING, ViewMode.RESULT:
-				_draw_decode_view(y, w, h)
+		if viewer.view_mode in [ViewMode.ANIMATING, ViewMode.RESULT]:
+			_draw_decode_view(y, w, h)
 
 	# ══════════════════════════════════════════
 	#  选择菜单
-	# ══════════════════════════════════════════
-	func _draw_select_menu(y: float, w: float, _h: float) -> void:
-		var col: Color = viewer.draw_color
-		var dim: Color = viewer.draw_color_dim
-		var wc: Color = viewer.warning_color
-
-		draw_string(_font, Vector2(MARGIN, y + _small_font_size),
-			"选择解码方式:", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, dim)
-		y += _small_font_size + SECTION_GAP
-
-		for i in range(viewer._menu_items.size()):
-			var item: Dictionary = viewer._menu_items[i]
-			var is_selected: bool = (i == viewer._menu_index)
-			var item_col: Color = col if is_selected else dim
-			var prefix: String = "► " if is_selected else "  "
-			var num: String = str(i + 1) + ". "
-
-			if is_selected:
-				draw_rect(Rect2(MARGIN - 2, y - 2, w - MARGIN * 2 + 4, _small_font_size + 6),
-					viewer.highlight_color)
-
-			draw_string(_font, Vector2(MARGIN, y + _small_font_size),
-				prefix + num + str(item["name"]),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, item_col)
-			y += _small_font_size + 2
-
-			draw_string(_font, Vector2(MARGIN + 40, y + _tiny_font_size),
-				str(item["desc"]),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, dim * 0.7)
-			y += _tiny_font_size + 8
-
-		# 底部说明框
-		y += SECTION_GAP
-		draw_line(Vector2(MARGIN, y), Vector2(w - MARGIN, y), viewer.grid_color, 1.0)
-		y += 8
-
-		var selected_item: Dictionary = viewer._menu_items[viewer._menu_index]
-		draw_string(_font, Vector2(MARGIN, y + _small_font_size),
-			"选中: " + str(selected_item["name"]),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, col)
-		y += _small_font_size + 4
-
-		var key_hint: String = str(selected_item.get("key_hint", ""))
-		if not key_hint.is_empty():
-			draw_string(_font, Vector2(MARGIN, y + _tiny_font_size),
-				"密钥: " + key_hint,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, dim)
-
-	# ══════════════════════════════════════════
-	#  文本输入模式
-	# ══════════════════════════════════════════
-	func _draw_input_mode(y: float, w: float, h: float) -> void:
-		var col: Color = viewer.draw_color
-		var dim: Color = viewer.draw_color_dim
-
-		var cipher_name: String = CipherDecoder.get_type_name(viewer.selected_cipher)
-		draw_string(_font, Vector2(MARGIN, y + _small_font_size),
-			"解码方式: " + cipher_name,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, viewer.warning_color)
-		y += _small_font_size + SECTION_GAP
-
-		if viewer._input_step == 1:
-			draw_string(_font, Vector2(MARGIN, y + _small_font_size),
-				"输入密文:", HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, col)
-			y += _small_font_size + 4
-		elif viewer._input_step == 2:
-			# 显示已输入的密文
-			draw_string(_font, Vector2(MARGIN, y + _small_font_size),
-				"密文: " + _truncate(viewer.cipher_input_text, 60),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, dim)
-			y += _small_font_size + SECTION_GAP
-
-			var key_hint: String = str(viewer._menu_items[viewer._menu_index].get("key_hint", "密钥"))
-			var is_optional: bool = viewer._menu_items[viewer._menu_index].get("optional_key", false) as bool
-			var prompt_text: String = "输入密钥 (" + key_hint + "):"
-			if is_optional:
-				prompt_text = "输入密钥 (" + key_hint + ") [Enter留空=自动/Tab跳过]:"
-			draw_string(_font, Vector2(MARGIN, y + _small_font_size),
-				prompt_text,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, col)
-			y += _small_font_size + 4
-
-		# 输入框
-		var input_box_h: float = minf(h - y - MARGIN * 4, 200.0)
-		draw_rect(Rect2(MARGIN, y, w - MARGIN * 2, input_box_h), viewer.grid_color)
-
-		var cursor_ch: String = "█" if viewer._cursor_visible else " "
-		var display_text: String = viewer._text_buffer + cursor_ch
-		# 简单换行显示
-		var max_chars: int = int((w - MARGIN * 2 - 8) / (_small_font_size * 0.6))
-		if max_chars < 10:
-			max_chars = 10
-		var text_y: float = y + 4
-		var remaining: String = display_text
-		while not remaining.is_empty() and text_y + _small_font_size < y + input_box_h:
-			var line_len: int = mini(remaining.length(), max_chars)
-			var line: String = remaining.substr(0, line_len)
-			remaining = remaining.substr(line_len)
-			draw_string(_font, Vector2(MARGIN + 4, text_y + _small_font_size),
-				line, HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, col)
-			text_y += _small_font_size + 2
-
-	# ══════════════════════════════════════════
-	#  解码动画/结果视图
 	# ══════════════════════════════════════════
 	func _draw_decode_view(y: float, w: float, h: float) -> void:
 		var col: Color = viewer.draw_color
@@ -751,7 +831,7 @@ class _DecodeCanvas extends Control:
 		# 错误显示
 		if not result.success:
 			draw_string(_font, Vector2(MARGIN, y + _font_size),
-				"ERROR", HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size, viewer.error_color)
+				UIManager.terminal_status("ERROR", "解码失败"), HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size, viewer.error_color)
 			y += _font_size + 8
 			draw_string(_font, Vector2(MARGIN, y + _small_font_size),
 				result.error_message,
@@ -760,8 +840,6 @@ class _DecodeCanvas extends Control:
 
 		# 布局：左侧=可视化图表，右侧=步骤日志
 		var left_w: float = w * 0.55
-		var right_x: float = left_w + MARGIN
-		var right_w: float = w - right_x - MARGIN
 
 		# ── 左侧顶部：信息 ──
 		var cipher_name: String = CipherDecoder.get_type_name(result.cipher_type)
@@ -772,11 +850,11 @@ class _DecodeCanvas extends Control:
 		var status_text: String = ""
 		if viewer.view_mode == ViewMode.ANIMATING:
 			if viewer._anim_paused:
-				status_text = "⏸ PAUSED"
+				status_text = UIManager.terminal_status("PAUSED", "已暂停")
 			else:
-				status_text = "▶ DECODING... %d/%d" % [viewer._anim_step_index, result.steps.size()]
+				status_text = UIManager.terminal_status("BUSY", "DECODING... %d/%d") % [viewer._anim_step_index, result.steps.size()]
 		else:
-			status_text = "✓ COMPLETE"
+			status_text = UIManager.terminal_status("OK", "COMPLETE")
 		var status_w: float = _font.get_string_size(status_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size).x
 		draw_string(_font, Vector2(left_w - status_w - MARGIN, y + _small_font_size),
 			status_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size,
@@ -788,9 +866,8 @@ class _DecodeCanvas extends Control:
 		if result.steps.size() > 0:
 			progress = float(viewer._anim_step_index) / float(result.steps.size())
 		var bar_w: float = left_w - MARGIN * 2
-		draw_rect(Rect2(MARGIN, y, bar_w, 4), dim)
-		draw_rect(Rect2(MARGIN, y, bar_w * progress, 4), col)
-		y += 8
+		draw_string(_font, Vector2(MARGIN, y + _tiny_font_size), Typewriter.format_progress_bar(progress), HORIZONTAL_ALIGNMENT_LEFT, bar_w, _tiny_font_size, col)
+		y += _tiny_font_size + 6
 
 		# 分隔线
 		draw_line(Vector2(left_w, y), Vector2(left_w, h - MARGIN), viewer.grid_color, 1.0)
@@ -814,7 +891,7 @@ class _DecodeCanvas extends Control:
 				_draw_reverse_visualization(MARGIN, viz_y, left_w - MARGIN * 2, h - viz_y - MARGIN * 4)
 
 		# ── 右侧：步骤日志 + 解码结果 ──
-		_draw_step_log(right_x, y, right_w, h - y - MARGIN * 2)
+		# 完整结果和日志由右侧原生 RichTextLabel 负责选择、换行及滚动。
 
 	# ══════════════════════════════════════════
 	#  凯撒密码可视化：旋转字母环
@@ -913,7 +990,7 @@ class _DecodeCanvas extends Control:
 		# ── 当前字符转换展示 ──
 		if current_step != null and CipherDecoder.ALPHABET_UPPER.find(current_step.source_char.to_upper()) >= 0:
 			var demo_y: float = shift_y + 40
-			var arrow_text: String = "'%s'  ──[偏移%d]──►  '%s'" % [current_step.source_char, shift, current_step.result_char]
+			var arrow_text: String = "'%s' [偏移%d] → '%s'" % [current_step.source_char, shift, current_step.result_char]
 			draw_string(_font, Vector2(vx, demo_y + _font_size),
 				arrow_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _font_size, col)
 
@@ -1367,93 +1444,7 @@ class _DecodeCanvas extends Control:
 				output_text[i], HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, wc)
 
 	# ══════════════════════════════════════════
-	#  步骤日志（右侧面板）
-	# ══════════════════════════════════════════
-	func _draw_step_log(rx: float, ry: float, rw: float, rh: float) -> void:
-		var col: Color = viewer.draw_color
-		var dim: Color = viewer.draw_color_dim
-		var wc: Color = viewer.warning_color
-		var result: CipherDecoder.DecodeResult = viewer.current_result
-		if result == null:
-			return
-
-		var y: float = ry
-
-		# 原文
-		draw_string(_font, Vector2(rx, y + _tiny_font_size),
-			"INPUT:", HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, dim)
-		y += _tiny_font_size + 2
-		var input_display: String = _truncate(result.input_text, int(rw / (_tiny_font_size * 0.6)))
-		draw_string(_font, Vector2(rx, y + _tiny_font_size),
-			input_display, HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, col * 0.7)
-		y += _tiny_font_size + 8
-
-		# 解码结果（动态更新）
-		draw_string(_font, Vector2(rx, y + _tiny_font_size),
-			"OUTPUT:", HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, dim)
-		y += _tiny_font_size + 2
-
-		var decoded_display: String = viewer._anim_decoded_so_far
-		if decoded_display.length() > int(rw / (_tiny_font_size * 0.6)):
-			decoded_display = "..." + decoded_display.right(int(rw / (_tiny_font_size * 0.6)) - 3)
-		draw_string(_font, Vector2(rx, y + _small_font_size),
-			decoded_display, HORIZONTAL_ALIGNMENT_LEFT, -1, _small_font_size, col)
-		y += _small_font_size + 8
-
-		draw_line(Vector2(rx, y), Vector2(rx + rw, y), viewer.grid_color, 1.0)
-		y += 4
-
-		# 步骤标题
-		draw_string(_font, Vector2(rx, y + _tiny_font_size),
-			"STEPS: %d / %d" % [viewer._anim_step_index, result.steps.size()],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, dim)
-		if viewer.view_mode == ViewMode.ANIMATING:
-			var speed_text: String = "SPEED: %.0fms" % (viewer._anim_speed * 1000)
-			var speed_w: float = _font.get_string_size(speed_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size).x
-			draw_string(_font, Vector2(rx + rw - speed_w, y + _tiny_font_size),
-				speed_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, dim)
-		y += _tiny_font_size + 4
-
-		# 步骤列表
-		var log_area_h: float = rh - (y - ry)
-		draw_rect(Rect2(rx, y, rw, log_area_h), Color(viewer.grid_color.r, viewer.grid_color.g, viewer.grid_color.b, 0.1))
-
-		var line_h: float = _tiny_font_size + 3
-		var visible_count: int = int(log_area_h / line_h)
-		var scroll_offset: int = viewer._log_scroll
-		var log_y: float = y + 2
-
-		for i in range(visible_count):
-			var step_idx: int = scroll_offset + i
-			if step_idx >= viewer._anim_step_index:
-				break
-			if step_idx >= result.steps.size():
-				break
-
-			var step: CipherDecoder.DecodeStep = result.steps[step_idx] as CipherDecoder.DecodeStep
-			var is_current: bool = (step_idx == viewer._anim_step_index - 1)
-
-			var line_col: Color = col if is_current else dim * 0.7
-			if is_current:
-				draw_rect(Rect2(rx, log_y - 1, rw, line_h), viewer.highlight_color * 0.5)
-
-			var step_num: String = "%03d" % step_idx
-			var step_text: String = step_num + " " + _truncate(step.description, int(rw / (_tiny_font_size * 0.55)) - 5)
-
-			draw_string(_font, Vector2(rx + 2, log_y + _tiny_font_size),
-				step_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _tiny_font_size, line_col)
-			log_y += line_h
-
-		# 滚动指示
-		var total_lines: int = viewer._anim_step_index
-		if total_lines > visible_count:
-			var scroll_ratio: float = float(scroll_offset) / float(maxi(total_lines - visible_count, 1))
-			var bar_h: float = maxf(log_area_h * (float(visible_count) / float(total_lines)), 10.0)
-			var bar_y_pos: float = y + scroll_ratio * (log_area_h - bar_h)
-			draw_rect(Rect2(rx + rw - 3, bar_y_pos, 3, bar_h), dim)
-
-	# ══════════════════════════════════════════
-	#  工具
+	#  可视化文本截断工具
 	# ══════════════════════════════════════════
 	func _truncate(text: String, max_len: int) -> String:
 		if text.length() <= max_len:

@@ -41,6 +41,45 @@ const SAVE_SECTION: String = "comm_completed"
 
 # ── 教程串联队列 ──
 var _dialogue_queue: Array[String] = []      # 连续触发的对话 ID 队列
+var _incoming_queue: Array[Dictionary] = []
+var _next_call_at_msec: int = 0
+var _last_call_gap_seconds: float = 0.0
+
+func reset_call_queue() -> void:
+	_incoming_queue.clear()
+	_next_call_at_msec = 0
+	_last_call_gap_seconds = 0.0
+
+func _record_call_end() -> void:
+	_last_call_gap_seconds = randf_range(30.0, 60.0)
+	_next_call_at_msec = Time.get_ticks_msec() + int(ceil(_last_call_gap_seconds * 1000.0))
+
+## 所有独立来电统一排队；分支续播不经过这里。
+func request_call(dialogue_id: String, mode: CallHandler.CallMode, consequence: String = "", caller: String = "") -> void:
+	if not _dialogues.has(dialogue_id):
+		return
+	if (is_active and _player.current_dialogue_id == dialogue_id) or (_call_handler and _call_handler.get_pending_dialogue_id() == dialogue_id):
+		return
+	for pending in _incoming_queue:
+		if str(pending.id) == dialogue_id:
+			return
+	_incoming_queue.append({"id": dialogue_id, "mode": mode, "consequence": consequence, "caller": caller})
+	_process_incoming_queue()
+
+func _process_incoming_queue() -> void:
+	if _incoming_queue.is_empty() or _call_handler == null or is_active or is_call_ringing() or has_pending_call_answer():
+		return
+	if Time.get_ticks_msec() < _next_call_at_msec:
+		return
+	if _main:
+		if _main.is_terminal_covered() or _main._command_running or (_main.dial_mgr and _main.dial_mgr.is_active()):
+			return
+		if _main.mail_sys and _main.mail_sys._mail_busy:
+			return
+	var pending: Dictionary = _incoming_queue.pop_front()
+	if not _dialogues.has(str(pending.id)):
+		return
+	_call_handler.initiate_call(str(pending.id), pending.mode, str(pending.consequence), str(pending.caller))
 
 # ══════════════════════════════════════════
 #  初始化
@@ -120,7 +159,7 @@ func save_voice_presets() -> Error:
 	if not OS.has_feature("editor"):
 		return ERR_UNAUTHORIZED
 	var presets: Dictionary = {}
-	for cid in VoiceTuner.CHARACTER_IDS:
+	for cid in _registry._characters.keys():
 		var character: CommCharacter = _registry.get_character(cid)
 		if character:
 			presets[cid] = character.voice_config.duplicate(true)
@@ -195,8 +234,7 @@ func load_from_manifest(manifest: Dictionary) -> void:
 		_registry.register_character(char_id, char_config, CharacterRegistry.CharacterSource.BUILTIN)
 
 	# 如果没有角色，创建默认角色
-	if _registry.is_empty():
-		_create_default_character()
+	# Content packages supply characters; an empty registry is valid.
 
 	# 加载对话
 	var dialogues: Dictionary = manifest.get("comm_dialogues", {}) as Dictionary
@@ -236,13 +274,12 @@ func _load_tutorial_json() -> void:
 			print("[CommManager] 已加载教程角色: %s" % char_id)
 
 	# 为内置角色设置素材
-	_registry.setup_ava()
-	_registry.setup_rei()
-	_registry.setup_nanami()
-	_registry.setup_researcher()
+	pass
+	pass
+	pass
+	pass
 
-	# 加载 AVA 常态对话
-	_load_ava_dialogues()
+	pass
 
 	# 加载教程对话
 	var dialogues: Dictionary = data.get("comm_dialogues", {}) as Dictionary
@@ -255,36 +292,9 @@ func _load_tutorial_json() -> void:
 func setup_layered_character(char_id: String, sprite_dir: String, config: Dictionary) -> void:
 	_registry.setup_layered_character(char_id, sprite_dir, config)
 
-## 加载 AVA 联络员常态对话
-func _load_ava_dialogues() -> void:
-	var path: String = "res://data/ava_dialogues.json"
-	if not FileAccess.file_exists(path):
-		return
-	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null:
-		return
-	var json := JSON.new()
-	if json.parse(file.get_as_text()) != OK:
-		file.close()
-		return
-	file.close()
-	var data: Dictionary = json.data as Dictionary
-	if data == null:
-		return
-	var dialogues: Dictionary = data.get("comm_dialogues", {}) as Dictionary
-	for dlg_id in dialogues.keys():
-		if not _dialogues.has(dlg_id):
-			_dialogues[dlg_id] = dialogues[dlg_id]
-			print("[CommManager] 已加载AVA对话: %s" % dlg_id)
-
-
-## 创建内置默认角色
-func _create_default_character() -> void:
-	_registry.create_default_character()
-
-## ★ 设置默认角色的静态头像（给只有一张图的情况）
 func set_default_portrait(texture: ImageTexture) -> void:
-	var ch: CommCharacter = _registry.get_character("op7")
+	var ids: Array[String] = _registry.get_character_ids()
+	var ch: CommCharacter = _registry.get_character(ids[0]) if not ids.is_empty() else null
 	if ch:
 		ch.static_portrait = texture
 		ch.sprite_mode = CommCharacter.SpriteMode.STATIC
@@ -311,7 +321,7 @@ func trigger_dialogue(dialogue_id: String, skip_call_mode: bool = false) -> bool
 			if call_mode != CallHandler.CallMode.SILENT:
 				var caller_name: String = _get_caller_name_for_dialogue(dialogue_id)
 				var reject_consequence: String = str(dlg_data.get("reject_consequence", ""))
-				_call_handler.initiate_call(dialogue_id, call_mode, reject_consequence, caller_name)
+				request_call(dialogue_id, call_mode, reject_consequence, caller_name)
 				return true
 
 	# 记录 UI 是否已经在展开状态
@@ -327,6 +337,11 @@ func trigger_dialogue(dialogue_id: String, skip_call_mode: bool = false) -> bool
 		_pending_choice_id = ""
 
 	var dialogue_data: Dictionary = _dialogues[dialogue_id]
+
+	if _main and _main.daily_dialogue_mgr:
+		var flags_set: Dictionary = dialogue_data.get("flags_set", {})
+		for flag_name in flags_set:
+			_main.daily_dialogue_mgr.set_flag(str(flag_name), flags_set[flag_name])
 
 	# ★ 剧情变量累加（flags_add: {"flag_name": delta}）
 	var flags_add = dialogue_data.get("flags_add")
@@ -351,7 +366,7 @@ func trigger_dialogue(dialogue_id: String, skip_call_mode: bool = false) -> bool
 	if lines.size() > 0:
 		first_line = lines[0] as Dictionary
 
-	var first_char_id: String = str(first_line.get("character", "op7"))
+	var first_char_id: String = str(first_line.get("character", ""))
 	print("[CommManager] 首行角色: ", first_char_id, " 角色库: ", _registry.get_character_ids())
 	_set_active_character(first_char_id)
 
@@ -414,6 +429,9 @@ func trigger_dialogue_sequence(dialogue_ids: Array) -> bool:
 
 ## 停止对话（主动中断，如 ESC）
 func stop_dialogue() -> void:
+	if is_active and _player.current_dialogue_id != VOICE_DEMO_ID:
+		_record_call_end()
+
 	if _ui:
 		_ui.flush_history_to_disk()
 	_player.stop_dialogue(true)
@@ -432,6 +450,14 @@ func handle_input(event: InputEvent) -> bool:
 		return false
 
 	if event is InputEventKey and event.pressed:
+		# 选择行从显示开始就禁止 Esc 跳过，避免绕过尚未出现的选项。
+		if event.keycode == KEY_ESCAPE:
+			if not _pending_choice_id.is_empty():
+				return true
+			if _player.current_line_index >= 0 and _player.current_line_index < _player.current_lines.size():
+				var line: Dictionary = _player.current_lines[_player.current_line_index]
+				if str(line.get("wait_for", "")).begins_with("choice:") or not line.get("choice", []).is_empty():
+					return true
 		# ESC 跳过（如果允许）
 		if event.keycode == KEY_ESCAPE and _player.is_skippable:
 			_dialogue_queue.clear()
@@ -518,14 +544,6 @@ func _handle_tutorial_choice(choice_num: int) -> void:
 
 ## 处理通用对话选项（非教程）
 func _handle_generic_choice(choice_id: String, choice_num: int) -> void:
-	_player.stop_dialogue(true)
-	if _active_character:
-		_active_character.stop_speaking()
-	_pending_choice_id = ""
-
-	# ★ 记录剧情选择（story_choices，如 d0_qte）
-	if _main and _main.get("daily_dialogue_mgr"):
-		_main.daily_dialogue_mgr.record_choice(choice_id, str(choice_num))
 
 	var base_id: String = choice_id
 	var q_pos: int = choice_id.rfind("_q")
@@ -543,23 +561,25 @@ func _handle_generic_choice(choice_id: String, choice_num: int) -> void:
 
 	for candidate in candidates:
 		if _dialogues.has(candidate):
+			_mark_dialogue_completed(_player.current_dialogue_id)
+			_player.stop_dialogue(true)
+			if _active_character:
+				_active_character.stop_speaking()
+			_pending_choice_id = ""
+			if _main and _main.daily_dialogue_mgr:
+				_main.daily_dialogue_mgr.record_choice(choice_id, str(choice_num))
 			trigger_dialogue(candidate, true)  # skip_call_mode: 选项分支续播
 			return
 
-	if _main:
-		var muted: String = _main.theme_manager.muted_hex if _main.theme_manager else "#888888"
-		_main.append_output("[color=" + muted + "]（选择了选项 " + str(choice_num) + "，但没有对应的分支对话）[/color]\n", false)
+	# 无效数字不结束当前对话，仍允许选择画面上列出的分支。
+	_pending_choice_id = choice_id
 
 # ══════════════════════════════════════════
 #  角色控制（内部，供 dialogue_player 调用）
 # ══════════════════════════════════════════
 func _set_active_character(char_id: String) -> void:
 	if not _registry.has_character(char_id):
-		if _registry.has_character("op7"):
-			char_id = "op7"
-		elif _registry.has_character("ava"):
-			char_id = "ava"
-		elif _registry.size() > 0:
+		if _registry.size() > 0:
 			char_id = _registry.get_character_ids()[0]
 		else:
 			return
@@ -579,7 +599,7 @@ func _play_action(action_id: String) -> void:
 		_active_character.play_action(action_id)
 
 func _start_speaking() -> void:
-	if _active_character:
+	if _active_character and not _active_character.is_speaking:
 		_active_character.start_speaking()
 
 func _stop_speaking() -> void:
@@ -587,6 +607,12 @@ func _stop_speaking() -> void:
 		_active_character.stop_speaking()
 
 func _speak_char(ch: String) -> void:
+	if ch.strip_edges().is_empty() or CommVoice.PUNCTUATION.contains(ch):
+		_stop_speaking()
+		if _voice:
+			_voice.stop()
+		return
+	_start_speaking()
 	if _voice:
 		_voice.speak_char(ch)
 
@@ -644,7 +670,10 @@ func set_meeting_char(char_id: String, slot: String) -> void:
 	var character: CommCharacter = _registry.get_character(char_id)
 	if character == null:
 		return
-	_ui.ensure_meeting_char(character, slot)
+	var resolved_slot: String = slot
+	if resolved_slot.is_empty():
+		resolved_slot = str(_ui._meeting_chars.get(char_id, {}).get("slot", "center"))
+	_ui.ensure_meeting_char(character, resolved_slot)
 
 ## 播放 meeting 模式动画
 func play_meeting_anim(char_id: String, anim: String) -> void:
@@ -714,11 +743,23 @@ func process(delta: float) -> void:
 		_ui.process(delta)
 	if _call_handler:
 		_call_handler.process(delta)
+	_process_incoming_queue()
 	if not is_active:
 		return
 	_player.process(delta)
+	var animated: Array[CommCharacter] = []
 	if _active_character:
-		_active_character.process(delta)
+		animated.append(_active_character)
+	if _ui:
+		var portraits: Dictionary = _ui._portrait_cards if _ui._display_mode == "card" else _ui._meeting_chars
+		for cid in portraits:
+			var data: Dictionary = portraits[cid]
+			var node: Control = data.get("card") if _ui._display_mode == "card" else data.get("container")
+			var character: CommCharacter = _ui._get_character_by_id(str(cid))
+			if node and node.is_visible_in_tree() and character and character not in animated:
+				animated.append(character)
+	for character in animated:
+		character.process(delta)
 	_ui.update_text(_player.get_displayed_text())
 
 
@@ -732,6 +773,7 @@ func _on_call_accepted(dialogue_id: String) -> void:
 	trigger_dialogue(dialogue_id, true)  # skip_call_mode: 已经过 call_handler
 
 func _on_call_rejected(dialogue_id: String, consequence: String) -> void:
+	_record_call_end()
 	if not consequence.is_empty():
 		if consequence.begins_with("comm:") and handle_trigger_action(consequence):
 			pass  # 已通过 comm 路由处理
@@ -763,54 +805,49 @@ func _on_dialogue_finished(dialogue_id: String) -> void:
 		is_active = false
 		return
 	_ui.flush_history_to_disk()
-	_ui.clear_cards()
-
-	var is_dial_call: bool = _main.dial_mgr != null and _main.dial_mgr.is_active()
-
-	# 清除角色动画状态
 	if _active_character:
 		_active_character.clear_all_overrides()
-
-	_ui.hide()
-	is_active = false
 	_mark_dialogue_completed(dialogue_id)
-	comm_finished.emit(dialogue_id)
 
-	if is_dial_call:
-		if _main and _main.get_tree():
-			_main.get_tree().create_timer(1.0).timeout.connect(func():
-				if _main.dial_mgr and _main.dial_mgr.is_active():
-					_main.dial_mgr.on_voice_call_ended()
-			)
+	var finished_dlg: Dictionary = _dialogues.get(dialogue_id, {})
+	var daily = _main.daily_dialogue_mgr if _main else null
+	if daily:
+		for flag_name in finished_dlg.get("flags_on_finish", {}):
+			daily.set_flag(str(flag_name), finished_dlg["flags_on_finish"][flag_name])
+		var mail_delivery = finished_dlg.get("deliver_mail", [])
+		if mail_delivery is String:
+			mail_delivery = [mail_delivery]
+		if mail_delivery is Array:
+			for mail_id in mail_delivery:
+				daily.deliver_scene_mail(str(mail_id))
+		var followup: Dictionary = finished_dlg.get("followup_call", {})
+		if not followup.is_empty():
+			daily.schedule_dialogue(str(followup.get("dialogue", "")), float(followup.get("real_seconds", 0.0)))
 
-	# ★ 对话级收尾处理（场景内邮件投递 + 自带续播链）
-	if _dialogues.has(dialogue_id):
-		var finished_dlg: Dictionary = _dialogues[dialogue_id] as Dictionary
-		# 场景内邮件投递（deliver_mail 字段）
-		var dm = finished_dlg.get("deliver_mail")
-		if dm is String and not str(dm).is_empty():
-			if _main and _main.get("daily_dialogue_mgr"):
-				_main.daily_dialogue_mgr.deliver_scene_mail(str(dm))
-		elif dm is Array:
-			for mid in dm:
-				if _main and _main.get("daily_dialogue_mgr"):
-					_main.daily_dialogue_mgr.deliver_scene_mail(str(mid))
-		# 对话自带的续播链（next 字段）
-		if _dialogue_queue.is_empty():
-			var next_list = finished_dlg.get("next", [])
-			if next_list is Array:
-				for nid in next_list:
-					_dialogue_queue.append(str(nid))
-
+	if _dialogue_queue.is_empty():
+		for next_id in finished_dlg.get("next", []):
+			_dialogue_queue.append(str(next_id))
 	if not _dialogue_queue.is_empty():
 		var next_id: String = _dialogue_queue.pop_front()
-		if _main:
-			_main.get_tree().create_timer(0.3).timeout.connect(func():
-				# next 目标若声明 call_mode（forced/answerable）则走来电流程（响铃），否则静默续播
-				var next_dlg: Dictionary = _dialogues.get(next_id, {})
-				var next_call_mode: String = str(next_dlg.get("call_mode", "silent"))
-				trigger_dialogue(next_id, next_call_mode == "silent")
-			)
+		var next_dlg: Dictionary = _dialogues.get(next_id, {})
+		if str(next_dlg.get("call_mode", "silent")) == "silent":
+			# 同一次通话内续播：保持 UI 和拨号连接，直到整条序列结束。
+			if trigger_dialogue(next_id, true):
+				return
+		elif daily:
+			# 独立来电先归入队列，当前通话结束且界面空闲后再响铃。
+			daily.schedule_dialogue(next_id, 0.3)
+
+	var is_dial_call: bool = _main.dial_mgr != null and _main.dial_mgr.is_active()
+	_ui.clear_cards()
+	_ui.hide_presentation_slide("instant")
+	_ui.clear_meeting_chars()
+	_ui.hide()
+	is_active = false
+	_record_call_end()
+	comm_finished.emit(dialogue_id)
+	if is_dial_call:
+		_main.dial_mgr.on_voice_call_ended()
 
 
 func _on_line_started(_line_index: int) -> void:
@@ -833,7 +870,7 @@ func _on_line_finished(_line_index: int) -> void:
 func _on_waiting_for_condition(condition: String) -> void:
 	if condition.begins_with("choice:"):
 		_pending_choice_id = condition.substr(7)
-		_ui.show_wait_prompt_custom("按数字键选择 | ESC 跳过")
+		_ui.show_wait_prompt_custom("按数字键选择")
 		return
 
 	if condition.begins_with("command:") or condition.begins_with("open_file:") or condition.begins_with("enter_dir:"):
@@ -875,7 +912,9 @@ func _get_save_path() -> String:
 	if _main and _main.user_mgr and _main.user_mgr.is_logged_in:
 		var username: String = _main.user_mgr.get_username()
 		var base_dir: String = ""
-		if OS.has_feature("editor"):
+		if _main.save_mgr:
+			base_dir = _main.save_mgr.get_game_root_dir()
+		elif OS.has_feature("editor"):
 			base_dir = ProjectSettings.globalize_path("res://")
 		else:
 			base_dir = OS.get_executable_path().get_base_dir()
@@ -958,37 +997,7 @@ var current_dialogue_id: String:
 # ══════════════════════════════════════════
 func try_trigger_tutorial() -> void:
 	reload_user_data()
-	# ★ Day0 教程日由 DailyDialogueManager 驱动（data/main/manifest.json 的 day 0 配置）
-	if _main and _main.get("daily_dialogue_mgr") and _main.daily_dialogue_mgr.has_day_config(0):
-		return
-	var tutorial_done: bool = is_dialogue_completed("tutorial_main") or \
-							  is_dialogue_completed("tutorial_skip")
-	if not tutorial_done:
-		if not _dialogues.has("tutorial_ask"):
-			push_warning("[CommManager] tutorial_ask 对话不存在！检查 tutorial.json")
-			return
-		if _main:
-			_main.get_tree().create_timer(1.5).timeout.connect(func():
-				trigger_dialogue("tutorial_ask", true)
-			)
-	else:
-		_try_ava_login_welcome()
-
-func _try_ava_login_welcome() -> void:
-	if not _dialogues.has("ava_login_welcome"):
-		return
-	if _main:
-		_main.get_tree().create_timer(2.0).timeout.connect(func():
-			if not is_active:
-				trigger_dialogue("ava_login_welcome")
-		)
-
-
-
-
-# ══════════════════════════════════════════
-#  触发系统集成
-# ══════════════════════════════════════════
+	# No built-in narrative tutorial is installed.
 
 func handle_trigger_action(action: String) -> bool:
 	if not action.begins_with("comm:"):
@@ -1001,7 +1010,7 @@ func handle_trigger_action(action: String) -> bool:
 		var call_mode: CallHandler.CallMode = CallHandler.parse_call_mode(call_mode_str)
 		if call_mode != CallHandler.CallMode.SILENT and _call_handler:
 			var caller_name: String = _get_caller_name_for_dialogue(dialogue_id)
-			_call_handler.initiate_call(dialogue_id, call_mode, "", caller_name)
+			request_call(dialogue_id, call_mode, "", caller_name)
 			return true
 	return trigger_dialogue(dialogue_id)
 
@@ -1012,7 +1021,7 @@ func _get_caller_name_for_dialogue(dialogue_id: String) -> String:
 	var dlg: Dictionary = _dialogues[dialogue_id] as Dictionary
 	var lines: Array = dlg.get("lines", []) as Array
 	if lines.size() > 0:
-		var first_char_id: String = str((lines[0] as Dictionary).get("character", "op7"))
+		var first_char_id: String = str((lines[0] as Dictionary).get("character", ""))
 		var ch: CommCharacter = _registry.get_character(first_char_id)
 		if ch:
 			return ch.display_name
@@ -1042,7 +1051,7 @@ func _initiate_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
 	var lines: Array = dlg_data.get("lines", []) as Array
 	var caller_name: String = "UNKNOWN"
 	if lines.size() > 0:
-		var first_char_id: String = str(lines[0].get("character", "op7"))
+		var first_char_id: String = str(lines[0].get("character", ""))
 		var ch: CommCharacter = _registry.get_character(first_char_id)
 		if ch:
 			caller_name = ch.display_name
@@ -1053,7 +1062,7 @@ func _initiate_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
 	var reject_consequence: String = str(dlg_data.get("reject_consequence", ""))
 
 	if _call_handler:
-		_call_handler.initiate_call(dialogue_id, call_mode, reject_consequence, caller_name)
+		request_call(dialogue_id, call_mode, reject_consequence, caller_name)
 	else:
 		# 降级：直接显示旧式提示
 		_show_incoming_call_legacy(dialogue_id, caller_name)
@@ -1061,12 +1070,7 @@ func _initiate_incoming_call(dialogue_id: String, dlg_data: Dictionary) -> void:
 ## 旧式来电提示（无 CallHandler 时的兼容路径）
 func _show_incoming_call_legacy(dialogue_id: String, caller_name: String) -> void:
 	_pending_incoming_call = dialogue_id
-	var c_hex: String = _T.warning_hex if _T else "#ffff00"
-	var m_hex: String = _T.muted_hex if _T else "#888888"
-	_main.append_output("\n[color=" + c_hex + "]╔══════════════════════════════════╗[/color]\n", false)
-	_main.append_output("[color=" + c_hex + "]║  INCOMING COMM -- " + caller_name + "[/color]\n", false)
-	_main.append_output("[color=" + m_hex + "]║  输入 [color=" + c_hex + "]comm answer[/color] 接听通讯[/color]\n", false)
-	_main.append_output("[color=" + c_hex + "]╚══════════════════════════════════╝[/color]\n\n", false)
+	_main.append_output(CallHandler.format_answer_prompt(caller_name, _T), false)
 
 var _pending_incoming_call: String = ""
 
@@ -1325,6 +1329,7 @@ func start_dialogue_from_dial(character_id: String, dialed_number: String = "") 
 	var target_dlg_id: String = ""
 	var is_video: bool = _pending_video_dial
 	_pending_video_dial = false
+	# Dialogue selection is supplied by the loaded content package.
 
 	# ★ 视频呼叫时按 video_number 精确匹配
 	if is_video and not dialed_number.is_empty():
@@ -1451,6 +1456,7 @@ func cleanup() -> void:
 		_voice_tuner.cleanup()
 		_voice_tuner = null
 	stop_dialogue()
+	reset_call_queue()
 	_dialogue_queue.clear()
 	_pending_choice_id = ""
 	_pending_incoming_call = ""
@@ -1464,3 +1470,13 @@ func cleanup() -> void:
 		_registry.cleanup()
 	_active_character = null
 	_dialogues.clear()
+
+## 场景永久退出时解除对子对象的强引用；logout 的 cleanup 仍保留可复用实例。
+func dispose() -> void:
+	cleanup()
+	_player = null
+	_call_handler = null
+	_ui = null
+	_voice = null
+	_registry = null
+	_main = null

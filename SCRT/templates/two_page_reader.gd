@@ -4,6 +4,7 @@ class_name TwoPageReader
 extends RefCounted
 
 # 引用
+var _inline_images: Array[Dictionary] = []
 var main: Control = null
 var fs: FileSystem = null
 var T: Variant = null
@@ -169,6 +170,7 @@ func _create_page_rtl() -> RichTextLabel:
 	rtl.scroll_active = true
 	rtl.scroll_following = false
 	rtl.selection_enabled = true
+	UIManager.setup_text_selection(rtl)
 	rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rtl.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -204,6 +206,7 @@ func _align_overlay_to_output_area() -> void:
 # 开关
 # ─────────────────────────────────────────
 func open(p_type: String, p_pages: Array[Dictionary], p_title: String = "", p_on_exit: Callable = Callable()) -> void:
+	_inline_images = main.crtml.get_inline_images() if main.crtml != null else []
 	if p_pages.is_empty():
 		return
 	_ensure_overlay()
@@ -226,7 +229,7 @@ func open(p_type: String, p_pages: Array[Dictionary], p_title: String = "", p_on
 	_cached_output_text = main.output_text.text
 	main.output_text.text = ""
 
-	main.path_label.text = "DOCUMENT VIEWER | " + p_title + " | Q/Esc 退出"
+	main.path_label.text = "DOCUMENT VIEWER | " + p_title + (" | Q/Esc 返回收件箱 | Alt+←→ 上一封/下一封" if main.mail_sys != null and main.mail_sys._reading_mail else " | Q/Esc 退出")
 	
 	var root_control: Control = main as Control
 	root_control.move_child(overlay, root_control.get_child_count() - 1)
@@ -527,7 +530,7 @@ func _append_line_with_images(rtl: RichTextLabel, line: String) -> void:
 	if crtml_ref == null:
 		rtl.append_text(line)
 		return
-	var images: Array[Dictionary] = crtml_ref.get_inline_images()
+	var images: Array[Dictionary] = _inline_images
 	var remaining: String = line
 	while true:
 		var start_pos: int = remaining.find("\u0001IMG:")

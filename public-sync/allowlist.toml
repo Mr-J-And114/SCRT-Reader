@@ -1,0 +1,967 @@
+version = 1
+maintained = [
+  ".gitattributes",
+  ".gitignore",
+  "LICENSE",
+  "README.md",
+  "SCRT/tests/public_core_regression.gd",
+  "THIRD_PARTY_NOTICES.md",
+  "docs/VALIDATION.md",
+  "docs/PUBLISHING.md",
+  "docs/content-pack.md",
+  "public-sync/README.md",
+  "public-sync/allowlist.toml",
+  "public-sync/checks/audit.py",
+  "public-sync/checks/engine.py",
+  "public-sync/checks/test_sync.py",
+  "public-sync/checks/test_git.py",
+  "public-sync/exclusions.toml",
+  "public-sync/overrides/SCRT/boot_config.json",
+  "public-sync/overrides/SCRT/comm_system/character_asset_library.gd",
+  "public-sync/overrides/SCRT/comm_system/character_registry.gd",
+  "public-sync/overrides/SCRT/comm_system/comm_manager.gd",
+  "public-sync/overrides/SCRT/comm_system/voice_presets.json",
+  "public-sync/overrides/SCRT/comm_system/voice_tuner.gd",
+  "public-sync/overrides/SCRT/data/dial_directory.json",
+  "public-sync/overrides/SCRT/data/env_config.json",
+  "public-sync/overrides/SCRT/data/env_observation.json",
+  "public-sync/overrides/SCRT/data/main/manifest.json",
+  "public-sync/overrides/SCRT/data/tutorial.json",
+  "public-sync/overrides/SCRT/env_system/env_observation.gd",
+  "public-sync/overrides/SCRT/env_system/env_task_manager.gd",
+  "public-sync/overrides/SCRT/fonts/OFL.txt",
+  "public-sync/overrides/SCRT/icon.svg",
+  "public-sync/overrides/SCRT/images/core-background.svg",
+  "public-sync/overrides/SCRT/images/core-mark.svg",
+  "public-sync/overrides/SCRT/preview/cover_intro.json",
+  "public-sync/overrides/SCRT/preview/cover_layout.json",
+  "public-sync/overrides/SCRT/preview/cover_morse.gd",
+  "public-sync/overrides/SCRT/preview/cover_preview.gd",
+  "public-sync/overrides/SCRT/preview/cover_preview.tscn",
+  "public-sync/overrides/SCRT/project.godot",
+  "public-sync/overrides/SCRT/radio/speech_effects.json",
+  "public-sync/overrides/SCRT/radio/weather_broadcast.gd",
+  "public-sync/overrides/SCRT/radio/weather_broadcast.json",
+  "public-sync/overrides/SCRT/scenes/main.tscn",
+  "public-sync/overrides/SCRT/scenes/startup.tscn",
+  "public-sync/overrides/SCRT/scripts/audio_manager.gd",
+  "public-sync/overrides/SCRT/scripts/command_handler.gd",
+  "public-sync/overrides/SCRT/scripts/daily_dialogue_manager.gd",
+  "public-sync/overrides/SCRT/scripts/disc_manager.gd",
+  "public-sync/overrides/SCRT/scripts/effect_system.gd",
+  "public-sync/overrides/SCRT/scripts/file_system.gd",
+  "public-sync/overrides/SCRT/scripts/mail_system.gd",
+  "public-sync/overrides/SCRT/scripts/main.gd",
+  "public-sync/overrides/SCRT/scripts/performance_manager.gd",
+  "public-sync/overrides/SCRT/scripts/profile_builder.gd",
+  "public-sync/overrides/SCRT/scripts/user_manager.gd",
+  "public-sync/overrides/SCRT/scripts/vdisc_task_manager.gd",
+  "public-sync/sync_public.py",
+]
+optional_reference = [
+  "SCRT/camera_system/camera_viewer.gd:2397c54aa27d95382d45ec06c485cad44fb0c2bd1412a39b78eb2e75df43e8ba",
+  "SCRT/scripts/boot_sequence.gd:cd47fbf6c1b345c21da8f421252d82282ede8697314561c08ba69b9460ab04c6",
+  "SCRT/scripts/boot_sequence.gd:eff992250839d358f4aec887515d8df69da51f79c1549822bb50809f7aa76e5e",
+  "SCRT/scripts/boot_sequence.gd:f7619ce6675882cffaf81e1ec0a9da54a3d438c6dface582319fad071ba90d82",
+  "SCRT/scripts/mail_system.gd:74779628a1a74a06f8dd53352502f3a3d805c01d39f3d7848ebde491ad8316ce",
+  "SCRT/scripts/mail_system.gd:838caed33dbd918ab6e28a0ae783b5c3a6feded3ba95cae47d8f14e3be38879f",
+  "SCRT/scripts/story_loader.gd:d5e8ca8f0a4ff2b37827f8ad09545e880f7ae33c02eae2999b33c5f555054615",
+  "SCRT/scripts/ui_manager.gd:5af26f248104bf19579e5bb609daa1cf6eee8fcbcdbb15336f5d8fee1faaa7fe",
+  "SCRT/scripts/ui_manager.gd:6388f3e31f69d2f98093824bf3119103c20c6712196f5cec2688202ffa44e9bd",
+  "SCRT/tests/public_core_regression.gd:b0d17696356b54d9a91da1e966048d549a86a392d1971fb0f2b2ff373429cfee",
+]
+
+[[files]]
+path = "SCRT/camera_system/camera_effect.gdshader"
+source = "SCRT/camera_system/camera_effect.gdshader"
+
+[[files]]
+path = "SCRT/camera_system/camera_feed.gd"
+source = "SCRT/camera_system/camera_feed.gd"
+
+[[files]]
+path = "SCRT/camera_system/camera_manager.gd"
+source = "SCRT/camera_system/camera_manager.gd"
+
+[[files]]
+path = "SCRT/camera_system/camera_viewer.gd"
+source = "SCRT/camera_system/camera_viewer.gd"
+
+[[files]]
+path = "SCRT/comm_system/call_handler.gd"
+source = "SCRT/comm_system/call_handler.gd"
+
+[[files]]
+path = "SCRT/comm_system/character_animator.gd"
+source = "SCRT/comm_system/character_animator.gd"
+
+[[files]]
+path = "SCRT/comm_system/character_asset_library.gd"
+source = "SCRT/comm_system/character_asset_library.gd"
+override = "overrides/SCRT/comm_system/character_asset_library.gd"
+source_sha256 = "b0930dd48885131509bfef276e8718544f6cc644dd83612e3ebb435a09bb5685"
+locations = "L41-L41,L413-L568"
+
+[[files]]
+path = "SCRT/comm_system/character_registry.gd"
+source = "SCRT/comm_system/character_registry.gd"
+override = "overrides/SCRT/comm_system/character_registry.gd"
+source_sha256 = "a2fb560cbafa42532201d81bcb5ea4c8d9e794ee9a0fac5edd21b833f1446790"
+locations = "L90-L153"
+
+[[files]]
+path = "SCRT/comm_system/comm_character.gd"
+source = "SCRT/comm_system/comm_character.gd"
+
+[[files]]
+path = "SCRT/comm_system/comm_dialogue_player.gd"
+source = "SCRT/comm_system/comm_dialogue_player.gd"
+
+[[files]]
+path = "SCRT/comm_system/comm_manager.gd"
+source = "SCRT/comm_system/comm_manager.gd"
+override = "overrides/SCRT/comm_system/comm_manager.gd"
+source_sha256 = "04d6a432a54a21448f83a5630b8559c0603171432dd2608d429937577bd74bce"
+locations = "L162-L162,L237-L238,L278-L284,L297-L324,L326-L326,L369-L370,L399-L399,L464-L466,L579-L581,L616-L620,L1038-L1068,L1092-L1092,L1122-L1122,L1400-L1405"
+
+[[files]]
+path = "SCRT/comm_system/comm_sprite_renderer.gd"
+source = "SCRT/comm_system/comm_sprite_renderer.gd"
+
+[[files]]
+path = "SCRT/comm_system/comm_ui.gd"
+source = "SCRT/comm_system/comm_ui.gd"
+
+[[files]]
+path = "SCRT/comm_system/comm_voice.gd"
+source = "SCRT/comm_system/comm_voice.gd"
+
+[[files]]
+path = "SCRT/comm_system/dial_manager.gd"
+source = "SCRT/comm_system/dial_manager.gd"
+
+[[files]]
+path = "SCRT/comm_system/dial_tone_generator.gd"
+source = "SCRT/comm_system/dial_tone_generator.gd"
+
+[[files]]
+path = "SCRT/comm_system/presentation_overlay.gd"
+source = "SCRT/comm_system/presentation_overlay.gd"
+
+[[files]]
+path = "SCRT/comm_system/voice_tuner.gd"
+source = "SCRT/comm_system/voice_tuner.gd"
+override = "overrides/SCRT/comm_system/voice_tuner.gd"
+source_sha256 = "97570c7a21e00c9492f4287b0a7a9b41a3f93553737024aaddc1ed6bf876a0e1"
+locations = "L4-L4,L18-L18,L24-L24"
+
+[[files]]
+path = "SCRT/env_system/env_map_canvas.gd"
+source = "SCRT/env_system/env_map_canvas.gd"
+
+[[files]]
+path = "SCRT/env_system/env_monitor.gd"
+source = "SCRT/env_system/env_monitor.gd"
+
+[[files]]
+path = "SCRT/env_system/env_observation.gd"
+source = "SCRT/env_system/env_observation.gd"
+override = "overrides/SCRT/env_system/env_observation.gd"
+source_sha256 = "6e0c545312e07acd435052c4652ea48ae384662ec61b5cd9327fa21c82374074"
+locations = "L91-L91,L417-L432"
+
+[[files]]
+path = "SCRT/env_system/env_task_manager.gd"
+source = "SCRT/env_system/env_task_manager.gd"
+override = "overrides/SCRT/env_system/env_task_manager.gd"
+source_sha256 = "6270287acf7f7a43ae5cd41f7dcc81b775f16e1ba52c671afc91942314335493"
+locations = "L200-L200,L724-L724"
+
+[[files]]
+path = "SCRT/env_system/env_viewer.gd"
+source = "SCRT/env_system/env_viewer.gd"
+
+[[files]]
+path = "SCRT/modder/mod_api.gd"
+source = "SCRT/modder/mod_api.gd"
+
+[[files]]
+path = "SCRT/modder/mod_base.gd"
+source = "SCRT/modder/mod_base.gd"
+
+[[files]]
+path = "SCRT/preview/cover_atmosphere.gd"
+source = "SCRT/preview/cover_atmosphere.gd"
+
+[[files]]
+path = "SCRT/preview/cover_intro.gd"
+source = "SCRT/preview/cover_intro.gd"
+
+[[files]]
+path = "SCRT/preview/cover_logo.gdshader"
+source = "SCRT/preview/cover_logo.gdshader"
+
+[[files]]
+path = "SCRT/preview/cover_morse.gd"
+source = "SCRT/preview/cover_morse.gd"
+override = "overrides/SCRT/preview/cover_morse.gd"
+source_sha256 = "aa9196fd0ed6424eaeb74b6f4134f34dac686acea13da56b897b894d3972b700"
+locations = "L6-L6"
+
+[[files]]
+path = "SCRT/preview/cover_preview.gd"
+source = "SCRT/preview/cover_preview.gd"
+override = "overrides/SCRT/preview/cover_preview.gd"
+source_sha256 = "0629ca1cb5c65f7fee213686ff4aa0a0a092f72496dccdae6187608e27b61a97"
+locations = "L10-L10,L25-L25"
+
+[[files]]
+path = "SCRT/preview/startup.gd"
+source = "SCRT/preview/startup.gd"
+
+[[files]]
+path = "SCRT/radio/radio_audio_generator.gd"
+source = "SCRT/radio/radio_audio_generator.gd"
+
+[[files]]
+path = "SCRT/radio/radio_config_parser.gd"
+source = "SCRT/radio/radio_config_parser.gd"
+
+[[files]]
+path = "SCRT/radio/radio_data_manager.gd"
+source = "SCRT/radio/radio_data_manager.gd"
+
+[[files]]
+path = "SCRT/radio/radio_file_receiver.gd"
+source = "SCRT/radio/radio_file_receiver.gd"
+
+[[files]]
+path = "SCRT/radio/radio_receiver.gd"
+source = "SCRT/radio/radio_receiver.gd"
+
+[[files]]
+path = "SCRT/radio/radio_signal_manager.gd"
+source = "SCRT/radio/radio_signal_manager.gd"
+
+[[files]]
+path = "SCRT/radio/radio_spectrum_pattern.gd"
+source = "SCRT/radio/radio_spectrum_pattern.gd"
+
+[[files]]
+path = "SCRT/radio/radio_speech_builder.gd"
+source = "SCRT/radio/radio_speech_builder.gd"
+
+[[files]]
+path = "SCRT/radio/radio_voice_effects.gd"
+source = "SCRT/radio/radio_voice_effects.gd"
+
+[[files]]
+path = "SCRT/radio/weather_broadcast.gd"
+source = "SCRT/radio/weather_broadcast.gd"
+override = "overrides/SCRT/radio/weather_broadcast.gd"
+source_sha256 = "ee324b9a357941f5f00fbdbf11dcdc32a254699e64c8d9ba0668aac3b670b278"
+locations = "L15-L15,L17-L17,L54-L54,L63-L63,L90-L90,L101-L101"
+
+[[files]]
+path = "SCRT/scenes/main.tscn"
+source = "SCRT/scenes/main.tscn"
+override = "overrides/SCRT/scenes/main.tscn"
+source_sha256 = "e0682d0c175bea1f0ec5158c3af3dcef6c761deabdbcded732156420bdf08c20"
+locations = "L1-L11"
+
+[[files]]
+path = "SCRT/scenes/startup.tscn"
+source = "SCRT/scenes/startup.tscn"
+override = "overrides/SCRT/scenes/startup.tscn"
+source_sha256 = "c7d0cee885d3b1aea27d3ea6e9e9660d28d9e15d5675b0949b073efa1ce7a2e8"
+locations = "L1-L1,L4-L4"
+
+[[files]]
+path = "SCRT/scripts/audio_manager.gd"
+source = "SCRT/scripts/audio_manager.gd"
+override = "overrides/SCRT/scripts/audio_manager.gd"
+source_sha256 = "a6e0c092a6451622f901eb9d5ea9058efabfed6b8d356e7eda50a95c1bee1b6a"
+locations = "L117-L124"
+
+[[files]]
+path = "SCRT/scripts/boot_logo_transition.gd"
+source = "SCRT/scripts/boot_logo_transition.gd"
+
+[[files]]
+path = "SCRT/scripts/boot_sequence.gd"
+source = "SCRT/scripts/boot_sequence.gd"
+
+[[files]]
+path = "SCRT/scripts/cipher_decoder.gd"
+source = "SCRT/scripts/cipher_decoder.gd"
+
+[[files]]
+path = "SCRT/scripts/command_handler.gd"
+source = "SCRT/scripts/command_handler.gd"
+override = "overrides/SCRT/scripts/command_handler.gd"
+source_sha256 = "a594b4f96102fbdac7b3260a05460d38b20f0ba66f1cde1f7794a5d855de763a"
+locations = "L1107-L1178,L2470-L3662"
+
+[[files]]
+path = "SCRT/scripts/crt_shader.gd"
+source = "SCRT/scripts/crt_shader.gd"
+
+[[files]]
+path = "SCRT/scripts/crtml_parser.gd"
+source = "SCRT/scripts/crtml_parser.gd"
+
+[[files]]
+path = "SCRT/scripts/daily_dialogue_manager.gd"
+source = "SCRT/scripts/daily_dialogue_manager.gd"
+override = "overrides/SCRT/scripts/daily_dialogue_manager.gd"
+source_sha256 = "56a3dd915da1067c543bea3d8a069babac3422701ad7ef2ff54813cf8916d408"
+locations = "L173-L179,L185-L198,L206-L206,L573-L604,L682-L682,L684-L687,L690-L746,L748-L786,L789-L796"
+
+[[files]]
+path = "SCRT/scripts/decode_viewer.gd"
+source = "SCRT/scripts/decode_viewer.gd"
+
+[[files]]
+path = "SCRT/scripts/disc_manager.gd"
+source = "SCRT/scripts/disc_manager.gd"
+override = "overrides/SCRT/scripts/disc_manager.gd"
+source_sha256 = "c426e7b957024bfece83c7c25d79addf332ea40f3f1690d4eaf6d73ee690d04f"
+locations = "L731-L731"
+
+[[files]]
+path = "SCRT/scripts/document_viewer.gd"
+source = "SCRT/scripts/document_viewer.gd"
+
+[[files]]
+path = "SCRT/scripts/effect_settings.gd"
+source = "SCRT/scripts/effect_settings.gd"
+
+[[files]]
+path = "SCRT/scripts/effect_system.gd"
+source = "SCRT/scripts/effect_system.gd"
+override = "overrides/SCRT/scripts/effect_system.gd"
+source_sha256 = "1930af5b325b46c6bbc64c04f1ce8e10685fbbfa662962171508567a029aeee3"
+locations = "L14-L14"
+
+[[files]]
+path = "SCRT/scripts/explore_viewer.gd"
+source = "SCRT/scripts/explore_viewer.gd"
+
+[[files]]
+path = "SCRT/scripts/file_system.gd"
+source = "SCRT/scripts/file_system.gd"
+override = "overrides/SCRT/scripts/file_system.gd"
+source_sha256 = "65b91922e27690099813587936d0407b14da0db053d437f45715edf7ad21e4df"
+locations = "L496-L510"
+
+[[files]]
+path = "SCRT/scripts/header_parser.gd"
+source = "SCRT/scripts/header_parser.gd"
+
+[[files]]
+path = "SCRT/scripts/image_viewer.gd"
+source = "SCRT/scripts/image_viewer.gd"
+
+[[files]]
+path = "SCRT/scripts/latex_renderer.gd"
+source = "SCRT/scripts/latex_renderer.gd"
+
+[[files]]
+path = "SCRT/scripts/loading_screen.gd"
+source = "SCRT/scripts/loading_screen.gd"
+
+[[files]]
+path = "SCRT/scripts/mail_inbox_viewer.gd"
+source = "SCRT/scripts/mail_inbox_viewer.gd"
+
+[[files]]
+path = "SCRT/scripts/mail_system.gd"
+source = "SCRT/scripts/mail_system.gd"
+override = "overrides/SCRT/scripts/mail_system.gd"
+source_sha256 = "69d05daaf0ac77a1071d025895103ad762c43fdff77f041e7f30bb2fcec144f3"
+locations = "L672-L672"
+
+[[files]]
+path = "SCRT/scripts/main.gd"
+source = "SCRT/scripts/main.gd"
+override = "overrides/SCRT/scripts/main.gd"
+source_sha256 = "3b099467c2ab91b6ce06dc5c8009e01410d8870b08abf940e7d30ec1162703a8"
+locations = "L260-L261,L522-L523,L568-L568,L651-L651,L1909-L1926,L2669-L2669,L2675-L2684,L2783-L2814,L2817-L2840,L2859-L2860"
+
+[[files]]
+path = "SCRT/scripts/morse_engine.gd"
+source = "SCRT/scripts/morse_engine.gd"
+
+[[files]]
+path = "SCRT/scripts/oscilloscope.gd"
+source = "SCRT/scripts/oscilloscope.gd"
+
+[[files]]
+path = "SCRT/scripts/package_manager.gd"
+source = "SCRT/scripts/package_manager.gd"
+
+[[files]]
+path = "SCRT/scripts/performance_manager.gd"
+source = "SCRT/scripts/performance_manager.gd"
+override = "overrides/SCRT/scripts/performance_manager.gd"
+source_sha256 = "a085f5a9e203b8262521d9c99691ec7a0d1d83c9f9c6a15e29dcdb5ce3f1242a"
+locations = "L199-L199,L202-L202,L205-L205,L236-L236"
+
+[[files]]
+path = "SCRT/scripts/profile_builder.gd"
+source = "SCRT/scripts/profile_builder.gd"
+override = "overrides/SCRT/scripts/profile_builder.gd"
+source_sha256 = "6099f6f6c19d32feb3089867d69721470f3417457c0992b9418650e2a9ef663b"
+locations = "L237-L237"
+
+[[files]]
+path = "SCRT/scripts/save_manager.gd"
+source = "SCRT/scripts/save_manager.gd"
+
+[[files]]
+path = "SCRT/scripts/sstv_decoder.gd"
+source = "SCRT/scripts/sstv_decoder.gd"
+
+[[files]]
+path = "SCRT/scripts/story_loader.gd"
+source = "SCRT/scripts/story_loader.gd"
+
+[[files]]
+path = "SCRT/scripts/theme_manager.gd"
+source = "SCRT/scripts/theme_manager.gd"
+
+[[files]]
+path = "SCRT/scripts/trigger_system.gd"
+source = "SCRT/scripts/trigger_system.gd"
+
+[[files]]
+path = "SCRT/scripts/typewriter.gd"
+source = "SCRT/scripts/typewriter.gd"
+
+[[files]]
+path = "SCRT/scripts/ui_manager.gd"
+source = "SCRT/scripts/ui_manager.gd"
+
+[[files]]
+path = "SCRT/scripts/ui_sound.gd"
+source = "SCRT/scripts/ui_sound.gd"
+
+[[files]]
+path = "SCRT/scripts/user_manager.gd"
+source = "SCRT/scripts/user_manager.gd"
+override = "overrides/SCRT/scripts/user_manager.gd"
+source_sha256 = "d2bb1c4ec436597577ab0ccce7615c4704c6f178cad2676d43557fb58cc1e015"
+locations = "L16-L16,L85-L109"
+
+[[files]]
+path = "SCRT/scripts/vdisc_task_manager.gd"
+source = "SCRT/scripts/vdisc_task_manager.gd"
+override = "overrides/SCRT/scripts/vdisc_task_manager.gd"
+source_sha256 = "d8f361ec2cbbe3688a4cac00d335a98c4f1144f81568678046fd4344724c405e"
+locations = "L1008-L1013"
+
+[[files]]
+path = "SCRT/scripts/video_player.gd"
+source = "SCRT/scripts/video_player.gd"
+
+[[files]]
+path = "SCRT/settings/settings_manager.gd"
+source = "SCRT/settings/settings_manager.gd"
+
+[[files]]
+path = "SCRT/settings/settings_registry.gd"
+source = "SCRT/settings/settings_registry.gd"
+
+[[files]]
+path = "SCRT/settings/settings_storage.gd"
+source = "SCRT/settings/settings_storage.gd"
+
+[[files]]
+path = "SCRT/settings/startup_settings.gd"
+source = "SCRT/settings/startup_settings.gd"
+
+[[files]]
+path = "SCRT/shaders/background_logo.gdshader"
+source = "SCRT/shaders/background_logo.gdshader"
+
+[[files]]
+path = "SCRT/shaders/background_vignette.gdshader"
+source = "SCRT/shaders/background_vignette.gdshader"
+
+[[files]]
+path = "SCRT/shaders/crt_effect.gdshader"
+source = "SCRT/shaders/crt_effect.gdshader"
+
+[[files]]
+path = "SCRT/templates/article_viewer.gd"
+source = "SCRT/templates/article_viewer.gd"
+
+[[files]]
+path = "SCRT/templates/chat_viewer.gd"
+source = "SCRT/templates/chat_viewer.gd"
+
+[[files]]
+path = "SCRT/templates/email_viewer.gd"
+source = "SCRT/templates/email_viewer.gd"
+
+[[files]]
+path = "SCRT/templates/two_page_reader.gd"
+source = "SCRT/templates/two_page_reader.gd"
+
+[[files]]
+path = "SCRT/preview/cover_preview.tscn"
+source = "SCRT/preview/cover_preview.tscn"
+override = "overrides/SCRT/preview/cover_preview.tscn"
+source_sha256 = "e4459854dfbe54abbb404c4e9c5c39aa1c0429370acb4b8f02cbcd7563196e54"
+locations = "L4-L11"
+
+[[files]]
+path = "SCRT/project.godot"
+source = "SCRT/project.godot"
+override = "overrides/SCRT/project.godot"
+source_sha256 = "8819d9d34c4b26d85e1af007a54b65542e4a1fcae4d5a94d725541dd72fbf746"
+locations = "L13-L13,L24-L24"
+
+[[files]]
+path = "SCRT/fonts/SarasaMonoSC-Regular.ttf"
+source = "SCRT/fonts/SarasaMonoSC-Regular.ttf"
+source_sha256 = "d604b02e7fa3c2d21cdf0cc122656b6f843fe8e520d8934bed44760854577473"
+locations = "licensed unmodified font binary"
+
+[[files]]
+path = "SCRT/fonts/SarasaMonoSC-SemiBold.ttf"
+source = "SCRT/fonts/SarasaMonoSC-SemiBold.ttf"
+source_sha256 = "2f0ba41656a36cb0919faef23f43f894e6406bc67602e47666749da37ecafb8c"
+locations = "licensed unmodified font binary"
+
+[[files]]
+path = "SCRT/fonts/SarasaMonoSC-Italic.ttf"
+source = "SCRT/fonts/SarasaMonoSC-Italic.ttf"
+source_sha256 = "0ab02cff412bbdebceed678388370a2f351941f6fd4811adb12037e824716f76"
+locations = "licensed unmodified font binary"
+
+[[files]]
+path = "SCRT/fonts/SarasaMonoSC-SemiBoldItalic.ttf"
+source = "SCRT/fonts/SarasaMonoSC-SemiBoldItalic.ttf"
+source_sha256 = "a580d0c6cdbcc4fd0f2ddfcbe6da98ae2c02f2ad72d1fd1f7dc56181753b598f"
+locations = "licensed unmodified font binary"
+
+[[files]]
+path = "SCRT/camera_system/camera_effect.gdshader.uid"
+source = "SCRT/camera_system/camera_effect.gdshader.uid"
+
+[[files]]
+path = "SCRT/camera_system/camera_feed.gd.uid"
+source = "SCRT/camera_system/camera_feed.gd.uid"
+
+[[files]]
+path = "SCRT/camera_system/camera_manager.gd.uid"
+source = "SCRT/camera_system/camera_manager.gd.uid"
+
+[[files]]
+path = "SCRT/camera_system/camera_viewer.gd.uid"
+source = "SCRT/camera_system/camera_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/call_handler.gd.uid"
+source = "SCRT/comm_system/call_handler.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/character_animator.gd.uid"
+source = "SCRT/comm_system/character_animator.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/character_asset_library.gd.uid"
+source = "SCRT/comm_system/character_asset_library.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/character_registry.gd.uid"
+source = "SCRT/comm_system/character_registry.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/comm_character.gd.uid"
+source = "SCRT/comm_system/comm_character.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/comm_dialogue_player.gd.uid"
+source = "SCRT/comm_system/comm_dialogue_player.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/comm_manager.gd.uid"
+source = "SCRT/comm_system/comm_manager.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/comm_sprite_renderer.gd.uid"
+source = "SCRT/comm_system/comm_sprite_renderer.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/comm_ui.gd.uid"
+source = "SCRT/comm_system/comm_ui.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/comm_voice.gd.uid"
+source = "SCRT/comm_system/comm_voice.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/dial_manager.gd.uid"
+source = "SCRT/comm_system/dial_manager.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/dial_tone_generator.gd.uid"
+source = "SCRT/comm_system/dial_tone_generator.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/presentation_overlay.gd.uid"
+source = "SCRT/comm_system/presentation_overlay.gd.uid"
+
+[[files]]
+path = "SCRT/comm_system/voice_tuner.gd.uid"
+source = "SCRT/comm_system/voice_tuner.gd.uid"
+
+[[files]]
+path = "SCRT/env_system/env_map_canvas.gd.uid"
+source = "SCRT/env_system/env_map_canvas.gd.uid"
+
+[[files]]
+path = "SCRT/env_system/env_monitor.gd.uid"
+source = "SCRT/env_system/env_monitor.gd.uid"
+
+[[files]]
+path = "SCRT/env_system/env_observation.gd.uid"
+source = "SCRT/env_system/env_observation.gd.uid"
+
+[[files]]
+path = "SCRT/env_system/env_task_manager.gd.uid"
+source = "SCRT/env_system/env_task_manager.gd.uid"
+
+[[files]]
+path = "SCRT/env_system/env_viewer.gd.uid"
+source = "SCRT/env_system/env_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/modder/mod_api.gd.uid"
+source = "SCRT/modder/mod_api.gd.uid"
+
+[[files]]
+path = "SCRT/modder/mod_base.gd.uid"
+source = "SCRT/modder/mod_base.gd.uid"
+
+[[files]]
+path = "SCRT/preview/cover_atmosphere.gd.uid"
+source = "SCRT/preview/cover_atmosphere.gd.uid"
+
+[[files]]
+path = "SCRT/preview/cover_intro.gd.uid"
+source = "SCRT/preview/cover_intro.gd.uid"
+
+[[files]]
+path = "SCRT/preview/cover_logo.gdshader.uid"
+source = "SCRT/preview/cover_logo.gdshader.uid"
+
+[[files]]
+path = "SCRT/preview/cover_morse.gd.uid"
+source = "SCRT/preview/cover_morse.gd.uid"
+
+[[files]]
+path = "SCRT/preview/cover_preview.gd.uid"
+source = "SCRT/preview/cover_preview.gd.uid"
+
+[[files]]
+path = "SCRT/preview/startup.gd.uid"
+source = "SCRT/preview/startup.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_audio_generator.gd.uid"
+source = "SCRT/radio/radio_audio_generator.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_config_parser.gd.uid"
+source = "SCRT/radio/radio_config_parser.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_data_manager.gd.uid"
+source = "SCRT/radio/radio_data_manager.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_file_receiver.gd.uid"
+source = "SCRT/radio/radio_file_receiver.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_receiver.gd.uid"
+source = "SCRT/radio/radio_receiver.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_signal_manager.gd.uid"
+source = "SCRT/radio/radio_signal_manager.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_spectrum_pattern.gd.uid"
+source = "SCRT/radio/radio_spectrum_pattern.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_speech_builder.gd.uid"
+source = "SCRT/radio/radio_speech_builder.gd.uid"
+
+[[files]]
+path = "SCRT/radio/radio_voice_effects.gd.uid"
+source = "SCRT/radio/radio_voice_effects.gd.uid"
+
+[[files]]
+path = "SCRT/radio/weather_broadcast.gd.uid"
+source = "SCRT/radio/weather_broadcast.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/audio_manager.gd.uid"
+source = "SCRT/scripts/audio_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/boot_logo_transition.gd.uid"
+source = "SCRT/scripts/boot_logo_transition.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/boot_sequence.gd.uid"
+source = "SCRT/scripts/boot_sequence.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/cipher_decoder.gd.uid"
+source = "SCRT/scripts/cipher_decoder.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/command_handler.gd.uid"
+source = "SCRT/scripts/command_handler.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/crt_shader.gd.uid"
+source = "SCRT/scripts/crt_shader.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/crtml_parser.gd.uid"
+source = "SCRT/scripts/crtml_parser.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/daily_dialogue_manager.gd.uid"
+source = "SCRT/scripts/daily_dialogue_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/decode_viewer.gd.uid"
+source = "SCRT/scripts/decode_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/disc_manager.gd.uid"
+source = "SCRT/scripts/disc_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/document_viewer.gd.uid"
+source = "SCRT/scripts/document_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/effect_settings.gd.uid"
+source = "SCRT/scripts/effect_settings.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/effect_system.gd.uid"
+source = "SCRT/scripts/effect_system.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/explore_viewer.gd.uid"
+source = "SCRT/scripts/explore_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/file_system.gd.uid"
+source = "SCRT/scripts/file_system.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/header_parser.gd.uid"
+source = "SCRT/scripts/header_parser.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/image_viewer.gd.uid"
+source = "SCRT/scripts/image_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/latex_renderer.gd.uid"
+source = "SCRT/scripts/latex_renderer.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/loading_screen.gd.uid"
+source = "SCRT/scripts/loading_screen.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/mail_inbox_viewer.gd.uid"
+source = "SCRT/scripts/mail_inbox_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/mail_system.gd.uid"
+source = "SCRT/scripts/mail_system.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/main.gd.uid"
+source = "SCRT/scripts/main.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/morse_engine.gd.uid"
+source = "SCRT/scripts/morse_engine.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/oscilloscope.gd.uid"
+source = "SCRT/scripts/oscilloscope.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/package_manager.gd.uid"
+source = "SCRT/scripts/package_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/performance_manager.gd.uid"
+source = "SCRT/scripts/performance_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/profile_builder.gd.uid"
+source = "SCRT/scripts/profile_builder.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/save_manager.gd.uid"
+source = "SCRT/scripts/save_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/sstv_decoder.gd.uid"
+source = "SCRT/scripts/sstv_decoder.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/story_loader.gd.uid"
+source = "SCRT/scripts/story_loader.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/theme_manager.gd.uid"
+source = "SCRT/scripts/theme_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/trigger_system.gd.uid"
+source = "SCRT/scripts/trigger_system.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/typewriter.gd.uid"
+source = "SCRT/scripts/typewriter.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/ui_manager.gd.uid"
+source = "SCRT/scripts/ui_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/ui_sound.gd.uid"
+source = "SCRT/scripts/ui_sound.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/user_manager.gd.uid"
+source = "SCRT/scripts/user_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/vdisc_task_manager.gd.uid"
+source = "SCRT/scripts/vdisc_task_manager.gd.uid"
+
+[[files]]
+path = "SCRT/scripts/video_player.gd.uid"
+source = "SCRT/scripts/video_player.gd.uid"
+
+[[files]]
+path = "SCRT/settings/settings_manager.gd.uid"
+source = "SCRT/settings/settings_manager.gd.uid"
+
+[[files]]
+path = "SCRT/settings/settings_registry.gd.uid"
+source = "SCRT/settings/settings_registry.gd.uid"
+
+[[files]]
+path = "SCRT/settings/settings_storage.gd.uid"
+source = "SCRT/settings/settings_storage.gd.uid"
+
+[[files]]
+path = "SCRT/settings/startup_settings.gd.uid"
+source = "SCRT/settings/startup_settings.gd.uid"
+
+[[files]]
+path = "SCRT/shaders/background_logo.gdshader.uid"
+source = "SCRT/shaders/background_logo.gdshader.uid"
+
+[[files]]
+path = "SCRT/shaders/background_vignette.gdshader.uid"
+source = "SCRT/shaders/background_vignette.gdshader.uid"
+
+[[files]]
+path = "SCRT/shaders/crt_effect.gdshader.uid"
+source = "SCRT/shaders/crt_effect.gdshader.uid"
+
+[[files]]
+path = "SCRT/templates/article_viewer.gd.uid"
+source = "SCRT/templates/article_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/templates/chat_viewer.gd.uid"
+source = "SCRT/templates/chat_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/templates/email_viewer.gd.uid"
+source = "SCRT/templates/email_viewer.gd.uid"
+
+[[files]]
+path = "SCRT/templates/two_page_reader.gd.uid"
+source = "SCRT/templates/two_page_reader.gd.uid"
+
+[[files]]
+path = "SCRT/boot_config.json"
+override = "overrides/SCRT/boot_config.json"
+
+[[files]]
+path = "SCRT/comm_system/voice_presets.json"
+override = "overrides/SCRT/comm_system/voice_presets.json"
+
+[[files]]
+path = "SCRT/data/dial_directory.json"
+override = "overrides/SCRT/data/dial_directory.json"
+
+[[files]]
+path = "SCRT/data/env_config.json"
+override = "overrides/SCRT/data/env_config.json"
+
+[[files]]
+path = "SCRT/data/env_observation.json"
+override = "overrides/SCRT/data/env_observation.json"
+
+[[files]]
+path = "SCRT/data/main/manifest.json"
+override = "overrides/SCRT/data/main/manifest.json"
+
+[[files]]
+path = "SCRT/data/tutorial.json"
+override = "overrides/SCRT/data/tutorial.json"
+
+[[files]]
+path = "SCRT/fonts/OFL.txt"
+override = "overrides/SCRT/fonts/OFL.txt"
+
+[[files]]
+path = "SCRT/icon.svg"
+override = "overrides/SCRT/icon.svg"
+
+[[files]]
+path = "SCRT/images/core-background.svg"
+override = "overrides/SCRT/images/core-background.svg"
+
+[[files]]
+path = "SCRT/images/core-mark.svg"
+override = "overrides/SCRT/images/core-mark.svg"
+
+[[files]]
+path = "SCRT/preview/cover_intro.json"
+override = "overrides/SCRT/preview/cover_intro.json"
+
+[[files]]
+path = "SCRT/preview/cover_layout.json"
+override = "overrides/SCRT/preview/cover_layout.json"
+
+[[files]]
+path = "SCRT/radio/speech_effects.json"
+override = "overrides/SCRT/radio/speech_effects.json"
+
+[[files]]
+path = "SCRT/radio/weather_broadcast.json"
+override = "overrides/SCRT/radio/weather_broadcast.json"

@@ -20,6 +20,7 @@ extends RefCounted
 var _main: Control = null
 var _root: Control = null
 var _slide_container: Control = null   # 展示区域容器 (clip + 定位)
+var _slide_background: ColorRect = null
 var _slide_rect: TextureRect = null    # 图片节点 (在容器内)
 var _slide_tween: Tween = null
 var _current_slide_path: String = ""
@@ -53,6 +54,8 @@ func show_slide(config: Dictionary) -> void:
 	_current_slide_path = image_path
 	_current_config = config.duplicate()
 	_slide_rect.texture = texture
+	# Only the configured presentation area receives a darker backing.
+	_slide_background.color = Color(ThemeManager.current.bg, clampf(float(config.get("background_alpha", 0.0)), 0.0, 0.7))
 
 	# 适配模式
 	var fit: String = str(config.get("fit", "contain"))
@@ -88,6 +91,7 @@ func cleanup() -> void:
 		_slide_container.queue_free()
 		_slide_container = null
 		_slide_rect = null  # 子节点随容器释放
+		_slide_background = null
 	_is_active = false
 	_current_slide_path = ""
 	_current_config = {}
@@ -111,6 +115,13 @@ func _ensure_slide_nodes() -> void:
 	_slide_container.clip_contents = true
 	_slide_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_slide_container.visible = false
+
+	_slide_background = ColorRect.new()
+	_slide_background.name = "PresentationBackground"
+	_slide_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_slide_background.color = Color.TRANSPARENT
+	_slide_container.add_child(_slide_background)
+	_slide_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	# 图片节点
 	_slide_rect = TextureRect.new()

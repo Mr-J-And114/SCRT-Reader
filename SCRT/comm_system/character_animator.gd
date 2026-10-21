@@ -115,8 +115,9 @@ func set_expression(expr_id: String) -> void:
 func start_speaking() -> void:
 	is_speaking = true
 	_mouth_timer = 0.0
-	_mouth_index = 0
-	current_mouth = _mouth_sequence[0]
+	# 首个正文字符立即张嘴；闭嘴起步会吞掉不足一个动画间隔的短句。
+	_mouth_index = 1
+	current_mouth = _mouth_sequence[_mouth_index]
 
 ## 停止说话
 func stop_speaking() -> void:

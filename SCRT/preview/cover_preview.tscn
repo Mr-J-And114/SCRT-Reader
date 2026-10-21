@@ -1,0 +1,144 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://preview/cover_preview.gd" id="1_0wfyh"]
+[ext_resource type="FontFile" path="res://fonts/SarasaMonoSC-Regular.ttf" id="1_o5qli"]
+[ext_resource type="Shader" path="res://shaders/background_vignette.gdshader" id="2_tbgi4"]
+[ext_resource type="Shader" path="res://shaders/crt_effect.gdshader" id="3_sugp2"]
+[ext_resource type="Texture2D" path="res://images/core-background.svg" id="3_tefeu"]
+[ext_resource type="Script" path="res://scripts/crt_shader.gd" id="4_jyhfs"]
+[ext_resource type="Texture2D" path="res://images/core-mark.svg" id="4_o6xl0"]
+[ext_resource type="Shader" path="res://shaders/background_logo.gdshader" id="4_tipki"]
+[ext_resource type="Script" path="res://scripts/audio_manager.gd" id="9_85g3d"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tefeu"]
+shader = ExtResource("2_tbgi4")
+shader_parameter/vignette_strength = 1.442000068495
+shader_parameter/vignette_radius = 0.77100003336262
+shader_parameter/glow_strength = 0.0
+shader_parameter/glow_radius = 0.46700001892262
+shader_parameter/brightness = 0.68800003268
+shader_parameter/tint_color = Color(0.1, 0.3, 0.1, 0.15)
+shader_parameter/alpha = 0.50000002375
+shader_parameter/hue_shift = 0.0
+shader_parameter/saturation = 1.0
+shader_parameter/contrast = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_85g3d"]
+shader = ExtResource("4_tipki")
+shader_parameter/vignette_strength = 0.0
+shader_parameter/vignette_radius = 0.10000000149012
+shader_parameter/glow_strength = 0.0
+shader_parameter/glow_radius = 0.10000000149012
+shader_parameter/brightness = 0.0
+shader_parameter/tint_color = Color(0.1, 0.3, 0.1, 0.15)
+shader_parameter/alpha = 0.400000019
+shader_parameter/hue_shift = 0.0
+shader_parameter/saturation = 1.0
+shader_parameter/contrast = 0.7290000346275
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_o5qli"]
+bg_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0wfyh"]
+bg_color = Color(0, 0, 0, 0)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jyhfs"]
+shader = ExtResource("3_sugp2")
+shader_parameter/scanline_intensity = 0.15
+shader_parameter/scanline_frequency = 300.0
+shader_parameter/scanline_speed = 1.0
+shader_parameter/curvature = 1.0000000475
+shader_parameter/chromatic_aberration = 0.3
+shader_parameter/vignette_intensity = 0.4
+shader_parameter/vignette_size = 0.6
+shader_parameter/flicker_intensity = 0.03
+shader_parameter/flicker_speed = 8.0
+shader_parameter/noise_intensity = 0.04
+shader_parameter/tear_strength = 0.0
+shader_parameter/tear_speed = 3.0
+shader_parameter/tear_count = 3.0
+shader_parameter/glow_intensity = 0.9
+shader_parameter/bloom_spread = 0.800000038
+shader_parameter/bloom_intensity = 0.4
+shader_parameter/phosphor_color = Color(0.1, 1, 0.2, 1)
+shader_parameter/phosphor_boost = 0.2
+shader_parameter/brightness = 1.20000003325
+shader_parameter/contrast = 1.1
+shader_parameter/max_brightness = 1.0
+shader_parameter/tonemap_compensation = 1.6
+shader_parameter/glitch_intensity = 0.0
+shader_parameter/glitch_line_speed = 8.0
+shader_parameter/glitch_line_density = 10.0
+shader_parameter/glitch_color_drift = 0.0
+shader_parameter/noise_burst = 0.0
+shader_parameter/shake_offset = Vector2(0, 0)
+shader_parameter/screen_height_ratio = 1.0
+shader_parameter/boot_glow = 0.0
+
+[node name="CoverPreview" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_0wfyh")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 1)
+
+[node name="Backgrund" type="TextureRect" parent="Background"]
+material = SubResource("ShaderMaterial_tefeu")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -3.0517578e-05
+offset_top = -1.5258789e-05
+offset_right = 1727.9998
+offset_bottom = 971.99976
+grow_horizontal = 2
+grow_vertical = 2
+scale = Vector2(0.4, 0.4)
+mouse_filter = 2
+texture = ExtResource("3_tefeu")
+stretch_mode = 6
+
+[node name="CenterContainer" type="CenterContainer" parent="Background"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BackgroundLogo" type="TextureRect" parent="Background/CenterContainer"]
+visible = false
+material = SubResource("ShaderMaterial_85g3d")
+custom_minimum_size = Vector2(600, 600)
+layout_mode = 2
+texture = ExtResource("4_o6xl0")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="AudioManager" type="Node" parent="."]
+script = ExtResource("9_85g3d")
+
+[node name="CRTEffect" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="CRTShader" type="ColorRect" parent="CRTEffect"]
+material = SubResource("ShaderMaterial_jyhfs")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_jyhfs")

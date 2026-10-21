@@ -234,7 +234,7 @@ func _build_page3(data: Dictionary) -> String:
 	lines.append("")
 	lines.append("")
 	lines.append("[color=" + m + "]" + "═".repeat(36) + "[/color]")
-	lines.append("[color=" + m + "]  SECURE · CONTAIN · PROTECT[/color]")
+	lines.append("[color=" + m + "]  TERMINAL · READER · FRAMEWORK[/color]")
 	lines.append("[color=" + m + "]" + "═".repeat(36) + "[/color]")
 
 	return "\n".join(lines)

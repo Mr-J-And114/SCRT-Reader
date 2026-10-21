@@ -47,6 +47,18 @@ var _input_capture: Dictionary = {}
 var _event_subscribers: Dictionary = {}
 ## ★ NEW: 模组 UI 容器节点 { "mod_id": Control }
 var _mod_containers: Dictionary = {}
+var _terminal_cover_owners: Dictionary = {}
+
+func _api_set_terminal_covered(mod_id: String, covered: bool) -> void:
+	if covered:
+		_terminal_cover_owners[mod_id] = true
+	else:
+		_terminal_cover_owners.erase(mod_id)
+	if main and main.has_method("_sync_terminal_visibility"):
+		main._sync_terminal_visibility()
+
+func has_terminal_cover() -> bool:
+	return not _terminal_cover_owners.is_empty()
 
 ## 需要每帧更新的模组 ID 列表
 var _process_mods: Array[String] = []
@@ -575,12 +587,16 @@ func _get_or_create_mod_container(mod_id: String) -> Control:
 	container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	main.add_child(container)
+	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if ThemeManager.current != null:
+		UIManager.apply_terminal_theme(container)
 	_mod_containers[mod_id] = container
 	print("[PackageManager] 已创建 UI 容器: %s" % mod_id)
 	return container
 
 ## 销毁模组 UI 容器及所有子节点
 func _destroy_mod_container(mod_id: String) -> void:
+	_api_set_terminal_covered(mod_id, false)
 	if _mod_containers.has(mod_id):
 		var container: Control = _mod_containers[mod_id] as Control
 		if is_instance_valid(container):

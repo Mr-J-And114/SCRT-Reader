@@ -58,10 +58,10 @@ func _ensure_panel() -> void:
 	panel.name = "ExploreViewerPanel"
 	panel.visible = false
 
-	# 半透明深色背景
+	# 共享终端背景，边界仅用细线。
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.02, 0.04, 0.02, 0.92)
-	style.border_color = Color(0.2, 0.6, 0.2, 0.5)
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = T.border
 	style.set_border_width_all(1)
 	panel.add_theme_stylebox_override("panel", style)
 
@@ -90,6 +90,7 @@ func _ensure_panel() -> void:
 	content_rtl.scroll_active = true
 	content_rtl.scroll_following = false
 	content_rtl.selection_enabled = true
+	UIManager.setup_text_selection(content_rtl)
 	content_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_rtl.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -285,10 +286,7 @@ func _render() -> void:
 		content_rtl.append_text("[color=" + m + "]Folders: [/color][color=" + s + "]" + str(stats["visited_folders"]) + "[/color][color=" + m + "] / " + str(stats["total_folders"]) + "  (" + str(folder_pct) + "%)[/color]\n")
 
 	# 进度条
-	var bar_width: int = 30
-	var filled: int = int(float(file_pct) / 100.0 * float(bar_width))
-	var bar: String = "#".repeat(filled) + "-".repeat(bar_width - filled)
-	content_rtl.append_text("[color=" + p + "][" + bar + "][/color]\n")
+	content_rtl.append_text(Typewriter.progress_bbcode(float(file_pct) / 100.0, "阅读进度", p, m) + "\n")
 
 	_render_nav()
 

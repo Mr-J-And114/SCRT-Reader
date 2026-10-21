@@ -36,12 +36,11 @@ var overlay: Panel = null
 var video_player: VideoStreamPlayer = null
 var controls_label: RichTextLabel = null
 var info_label: RichTextLabel = null
-var progress_bar_bg: Panel = null
-var progress_bar_fill: Panel = null
+var progress_label: Label = null
 
 const SEEK_STEP: float = 5.0
 const VOLUME_STEP: float = 0.1
-const PROGRESS_BAR_HEIGHT: int = 6
+const PROGRESS_BAR_HEIGHT: int = 32
 
 # ★ 支持的视频扩展名（分两类）
 const NATIVE_VIDEO_EXT: Array[String] = [".ogv"]
@@ -117,9 +116,9 @@ func _ensure_overlay() -> void:
 	overlay.visible = false
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 
-	# ★ 修复：使用不透明黑色背景，防止终端内容透出
+	# 终端正文由 Main 隐藏；播放器外围保留共享背景。
 	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.0, 0.0, 0.0, 1.0)
+	bg_style.bg_color = Color.TRANSPARENT
 	overlay.add_theme_stylebox_override("panel", bg_style)
 
 	root_control.add_child(overlay)
@@ -181,43 +180,23 @@ func _ensure_overlay() -> void:
 
 	# ── 进度条区域 ──
 	var progress_container := Control.new()
-	progress_container.custom_minimum_size = Vector2(0, PROGRESS_BAR_HEIGHT + 12)
+	progress_container.custom_minimum_size = Vector2(0, PROGRESS_BAR_HEIGHT)
 	progress_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_child(progress_container)
 
-	progress_bar_bg = Panel.new()
-	progress_bar_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	progress_bar_bg.offset_left = 20
-	progress_bar_bg.offset_right = -20
-	progress_bar_bg.offset_top = 4
-	progress_bar_bg.offset_bottom = -4
-	var bg_bar_style := StyleBoxFlat.new()
-	bg_bar_style.bg_color = Color(0.15, 0.15, 0.15, 1.0)
-	bg_bar_style.corner_radius_top_left = 2
-	bg_bar_style.corner_radius_top_right = 2
-	bg_bar_style.corner_radius_bottom_left = 2
-	bg_bar_style.corner_radius_bottom_right = 2
-	progress_bar_bg.add_theme_stylebox_override("panel", bg_bar_style)
-	progress_container.add_child(progress_bar_bg)
-
-	progress_bar_fill = Panel.new()
-	progress_bar_fill.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	progress_bar_fill.anchor_right = 0.0
-	progress_bar_fill.offset_left = 0
-	progress_bar_fill.offset_top = 0
-	progress_bar_fill.offset_right = 0
-	progress_bar_fill.offset_bottom = 0
-	var fill_style := StyleBoxFlat.new()
-	if T:
-		fill_style.bg_color = T.primary
-	else:
-		fill_style.bg_color = Color(0.1, 1.0, 0.2, 1.0)
-	fill_style.corner_radius_top_left = 2
-	fill_style.corner_radius_top_right = 2
-	fill_style.corner_radius_bottom_left = 2
-	fill_style.corner_radius_bottom_right = 2
-	progress_bar_fill.add_theme_stylebox_override("panel", fill_style)
-	progress_bar_bg.add_child(progress_bar_fill)
+	progress_label = Label.new()
+	progress_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	progress_label.offset_left = 20
+	progress_label.offset_right = -20
+	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	progress_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	progress_label.add_theme_font_override("font", preload("res://fonts/SarasaMonoSC-Regular.ttf"))
+	progress_label.add_theme_font_size_override("font_size", 18)
+	progress_label.add_theme_color_override("font_color", T.primary if T else Color(0.1, 1.0, 0.2))
+	progress_label.text = Typewriter.progress_cells(0.0)
+	progress_container.add_child(progress_label)
 
 	# ── 底部控制栏 ──
 	controls_label = RichTextLabel.new()
@@ -567,14 +546,8 @@ func _update_colors() -> void:
 	T = ThemeManager.current
 
 	# ★ 修复：同步更新进度条填充色
-	if progress_bar_fill and is_instance_valid(progress_bar_fill) and T:
-		var fill_style := StyleBoxFlat.new()
-		fill_style.bg_color = T.primary
-		fill_style.corner_radius_top_left = 2
-		fill_style.corner_radius_top_right = 2
-		fill_style.corner_radius_bottom_left = 2
-		fill_style.corner_radius_bottom_right = 2
-		progress_bar_fill.add_theme_stylebox_override("panel", fill_style)
+	if progress_label and is_instance_valid(progress_label) and T:
+		progress_label.add_theme_color_override("font_color", T.primary)
 
 func _update_info_display() -> void:
 	if info_label == null or not is_instance_valid(info_label):
@@ -647,49 +620,15 @@ func _update_controls_display() -> void:
 	)
 
 func _update_progress_bar() -> void:
-	if progress_bar_bg == null or not is_instance_valid(progress_bar_bg):
+	if not is_instance_valid(progress_label):
 		return
-	if progress_bar_fill == null or not is_instance_valid(progress_bar_fill):
-		return
-
-	var bar_width: float = progress_bar_bg.size.x
-	if bar_width <= 0:
-		return
-
-	var current_pos: float = 0.0
-	if video_player and is_instance_valid(video_player):
-		current_pos = video_player.stream_position
-
-	# 固定 anchor 设置
-	progress_bar_fill.anchor_left = 0.0
-	progress_bar_fill.anchor_top = 0.0
-	progress_bar_fill.anchor_bottom = 1.0
-	progress_bar_fill.anchor_right = 0.0
-	progress_bar_fill.offset_top = 0
-	progress_bar_fill.offset_bottom = 0
-
-	if _video_ended:
-		# ★ 播放结束：填满进度条
-		progress_bar_fill.offset_left = 0
-		progress_bar_fill.offset_right = bar_width
-	elif _known_length > 0.1:
-		# ★ 已知时长（第二次播放或之后）：显示真实进度
-		var progress: float = clampf(current_pos / _known_length, 0.0, 1.0)
-		progress_bar_fill.offset_left = 0
-		progress_bar_fill.offset_right = bar_width * progress
-	else:
-		# ★ 未知时长（第一次播放）：来回跳动的指示器
-		if _is_paused:
-			progress_bar_fill.offset_left = 0
-			progress_bar_fill.offset_right = 0
-		else:
-			var indicator_width: float = maxf(bar_width * 0.08, 6.0)
-			# ★ 修复：用 sin 函数做平滑来回运动（原代码乘号被损坏）
-			var cycle: float = sin(current_pos * 0.5) * 0.5 + 0.5
-			var x_pos: float = (bar_width - indicator_width) * cycle
-			progress_bar_fill.offset_left = x_pos
-			progress_bar_fill.offset_right = x_pos + indicator_width
-
+	var current_pos: float = video_player.stream_position if is_instance_valid(video_player) else 0.0
+	var progress: float = 1.0 if _video_ended else (clampf(current_pos / _known_length, 0.0, 1.0) if _known_length > 0.1 else -1.0)
+	progress_label.text = Typewriter.progress_cells(progress, current_pos * 0.5)
+	var font: Font = progress_label.get_theme_font("font")
+	var font_size: int = maxi(12, main.input_field.get_theme_font_size("font_size"))
+	progress_label.add_theme_font_size_override("font_size", font_size)
+	progress_label.get_parent().custom_minimum_size.y = maxf(PROGRESS_BAR_HEIGHT, font.get_height(font_size) * progress_label.get_line_count() + 8)
 # ══════════════════════════════════════════
 #  工具方法
 # ══════════════════════════════════════════

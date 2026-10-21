@@ -59,6 +59,8 @@ var info_label: RichTextLabel = null    # 顶部信息栏
 var _cached_input_visible: bool = true
 var _cached_prompt_visible: bool = true
 var _cached_output_text: String = ""
+var _parent_document = null
+var _cached_path_label: String = ""
 
 # ══════════════════════════════════════════
 #  绘制参数
@@ -66,7 +68,7 @@ var _cached_output_text: String = ""
 var draw_color: Color = Color(0.2, 1.0, 0.3, 1.0)
 var draw_color_dim: Color = Color(0.1, 0.5, 0.15, 0.6)
 var grid_color: Color = Color(0.1, 0.3, 0.1, 0.15)
-var background_color: Color = Color(0.0, 0.02, 0.0, 0.95)
+var background_color: Color = Color.TRANSPARENT
 var scan_line_color: Color = Color(0.3, 1.0, 0.4, 0.8)
 
 # ══════════════════════════════════════════
@@ -94,7 +96,7 @@ func _update_colors() -> void:
 	grid_color = T.primary
 	grid_color.a = 0.1
 	background_color = T.bg
-	background_color.a = 0.95
+	background_color.a = 0.0
 	scan_line_color = T.primary
 	scan_line_color.a = 0.8
 	scan_line_color = scan_line_color.lightened(0.3)
@@ -239,6 +241,14 @@ func open_with_file(file_path: String, file_name: String, data: PackedByteArray)
 		main.append_output("[color=" + T.error_hex + "]无法加载图片: " + file_name + "[/color]\n", false)
 		return
 
+	_parent_document = null
+	for name in ["article_viewer", "email_viewer", "chat_viewer", "two_page_viewer", "doc_viewer", "radio_receiver"]:
+		var viewer = main.get(name)
+		if viewer != null and viewer.is_active:
+			_parent_document = viewer
+			viewer.overlay.hide()
+			break
+	_cached_path_label = main.path_label.text
 	current_file_path = file_path
 	current_file_name = file_name
 	is_active = true
@@ -263,8 +273,13 @@ func open_with_file(file_path: String, file_name: String, data: PackedByteArray)
 	main.output_text.text = ""
 
 	# 更新状态栏
-	main.path_label.text = "IMAGE VIEWER | " + file_name + " | Q/Esc 退出"
+	var return_label: String = "返回接收机" if _parent_document == main.get("radio_receiver") and _parent_document != null else "返回文档"
+	main.path_label.text = "IMAGE VIEWER | " + file_name + (" | Q/Esc " + return_label if _parent_document != null else " | Q/Esc 退出")
 
+	# 重复打开时也把图片层放到正文之上，CRT 继续位于最上层。
+	main.move_child(overlay, main.get_child_count() - 1)
+	var crt: Node = main.get_node_or_null("CRTEffect")
+	if crt != null: main.move_child(crt, main.get_child_count() - 1)
 	# 显示
 	overlay.visible = true
 	image_canvas.set_process(true)
@@ -293,9 +308,14 @@ func close() -> void:
 	_cached_output_text = ""
 	main.input_field.visible = _cached_input_visible
 	main.prompt_label.visible = _cached_prompt_visible
-	main._update_status_bar()
-
-	main._refocus_input.call_deferred()
+	if _parent_document != null and _parent_document.is_active:
+		_parent_document.overlay.show()
+		main.path_label.text = _cached_path_label
+	else:
+		main._update_status_bar()
+		main._refocus_input.call_deferred()
+	_parent_document = null
+	_cached_path_label = ""
 
 	# 通知 main
 	if main.has_method("_on_image_viewer_closed"):
@@ -312,6 +332,7 @@ func handle_input(event: InputEvent) -> bool:
 	if event is InputEventKey and event.pressed:
 		match event.keycode:
 			KEY_Q, KEY_ESCAPE:
+				if event.echo: return true
 				close()
 				return true
 			KEY_EQUAL, KEY_KP_ADD:  # + 放大

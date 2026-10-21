@@ -1,0 +1,56 @@
+{
+  "location": {
+    "name": "示例观测台",
+    "code": "CORE",
+    "latitude": 0.0,
+    "longitude": 0.0,
+    "altitude_m": 0,
+    "timezone_offset": 0,
+    "description": "虚构的通用观测配置"
+  },
+  "time": {
+    "use_system_clock": true,
+    "update_interval_seconds": 5.0,
+    "weather_shift_interval_minutes": 45.0,
+    "fictional_year": 2026,
+    "fictional_start_month": 1,
+    "fictional_start_day": 1,
+    "timezone_display": "UTC"
+  },
+  "sensors": {
+    "air_temp": {
+      "name": "气温",
+      "name_en": "Air temperature",
+      "unit": "°C",
+      "precision": 1,
+      "range": [
+        -40.0,
+        50.0
+      ],
+      "calibration_drift_max": 0.0,
+      "failure_rate": 0.0,
+      "category": "atmosphere",
+      "description": "示例温度传感器"
+    }
+  },
+  "baselines": {
+    "air_temp": 15.0
+  },
+  "variation": {},
+  "weather_patterns": {
+    "clear": {
+      "name": "晴朗",
+      "probability": 1.0,
+      "weight": 1.0,
+      "modifiers": {}
+    }
+  },
+  "anomaly_types": {},
+  "events": {},
+  "tasks": {},
+  "scan_sectors": {},
+  "scan_modes": {},
+  "anomaly_evolution": {},
+  "anomaly_story_links": {},
+  "sensor_states": {}
+}

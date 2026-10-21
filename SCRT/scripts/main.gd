@@ -4,6 +4,47 @@ extends Control
 #  模块引用
 # ══════════════════════════════════════════
 var fs: FileSystem = FileSystem.new()
+var _window_close_pending: bool = false
+var _previous_auto_accept_quit: bool = true
+
+func _on_window_close_requested() -> void:
+	if _window_close_pending:
+		return
+	_window_close_pending = true
+	set_process(false)
+	set_process_input(false)
+	if disc_mgr and user_mgr and user_mgr.is_logged_in:
+		disc_mgr._auto_save()
+	var tree := get_tree()
+	# 先释放会话与纹理，再让引擎关闭渲染器。回调属于 SceneTree，不依赖将被释放的 Main。
+	tree.create_timer(0.1).timeout.connect(tree.quit)
+	queue_free()
+
+func _exit_tree() -> void:
+	get_tree().auto_accept_quit = _previous_auto_accept_quit
+	# 富文本的已排版图片也持有纹理引用，必须在渲染器仍可用时清空。
+	for label in find_children("*", "RichTextLabel", true, false):
+		label.clear()
+	# 阅读器订阅了 SceneTree 的逐帧信号；场景退出时解除，避免其缓存活到渲染器销毁后。
+	for viewer in [email_viewer, article_viewer, chat_viewer, two_page_viewer]:
+		if viewer == null:
+			continue
+		for connection in get_tree().process_frame.get_connections():
+			var callback: Callable = connection["callable"]
+			if callback.get_object() == viewer:
+				get_tree().process_frame.disconnect(callback)
+	if comm_mgr:
+		comm_mgr.dispose()
+	if dial_mgr:
+		dial_mgr.cleanup()
+		dial_mgr.comm_mgr = null
+	if crtml:
+		crtml.clear_inline_image_cache()
+	if trigger_sys:
+		trigger_sys.set_mail_system(null)
+	if mail_sys:
+		mail_sys.trigger_system = null
+	LatexRenderer.clear_global_cache()
 var save_mgr: SaveManager = SaveManager.new()
 var tw: Typewriter = null
 var T = null
@@ -70,6 +111,19 @@ var _file_password_mode: bool = false
 var _file_password_target: String = ""
 var _file_password_filename: String = ""
 var _command_running: bool = false
+var _returning_to_cover: bool = false
+var _hot_rebooting: bool = false
+var _logging_out: bool = false
+var _history_draft := ""
+var _history_browsing := false
+var _follow_terminal := true
+var _completion_options: Array[String] = []
+var _completion_index := -1
+var _completion_expected := ""
+var _completion_suffix := ""
+var _completion_hint: Label
+var _completion_mask: ColorRect
+var _silent_debug_depth: int = 0
 var _deferred_terminal_output: Array[String] = []
 # 滚动控制（用帧计数代替 await，避免协程堆积）
 var _scroll_pending_frames: int = 0
@@ -133,6 +187,9 @@ var explore_viewer: ExploreViewer = null
 #  初始化
 # ══════════════════════════════════════════
 func _ready() -> void:
+	_previous_auto_accept_quit = get_tree().auto_accept_quit
+	get_tree().auto_accept_quit = false
+	get_tree().root.close_requested.connect(_on_window_close_requested)
 	# ★ 窗口关闭时自动保存
 	get_tree().auto_accept_quit = false
 	# 初始化主题（先设置存储路径，确保主题配置存入 saves/ 目录）
@@ -200,9 +257,8 @@ func _ready() -> void:
 	dial_mgr = DialManager.new()
 	dial_mgr.setup(self, comm_mgr, audio_manager, T)
 	# 注册系统内置号码
-	dial_mgr.register_system_voice("1001-0001", "ava", "Ava Lacant（O5 秘书长）")
-	dial_mgr.register_system_voice("1001-0002", "kanda", "神田玲（操作指导员）")
-	dial_mgr.register_system_voice("1003-0001", "nanami", "初级研究员（七海灯子）")
+	# Packages may register their own contacts.
+
 
 	# ★ 触发器系统
 	trigger_sys = TriggerSystem.new()
@@ -257,9 +313,16 @@ func _ready() -> void:
 	effect_settings = EffectSettings.new()
 	effect_settings.setup_save_root(save_mgr.get_game_root_dir() + "saves/")
 	effect_settings.load_settings()
+	effect_settings.settings_changed.connect(func() -> void:
+		if crt_shader:
+			crt_shader.apply_effect_settings(effect_settings)
+	)
 	# 初始化操作音效系统
 	ui_sound = UiSound.new()
 	ui_sound.setup(get_tree())
+	settings_mgr.apply_runtime_settings()
+	if crt_shader:
+		crt_shader.apply_effect_settings(effect_settings)
 	boot_sequence = BootSequence.new()
 	boot_sequence.setup(self, audio_manager, crt_shader)
 	# 初始化效果编排系统
@@ -299,6 +362,8 @@ func _ready() -> void:
 	# 输入框设置
 	input_field.context_menu_enabled = false
 	input_field.focus_mode = Control.FOCUS_ALL
+	# 终端连续接收输入；Enter提交后不能留下“有焦点但未编辑”的状态。
+	input_field.keep_editing_on_text_submit = true
 	input_field.focus_next = input_field.get_path()
 	input_field.focus_previous = input_field.get_path()
 	input_field.caret_blink = true
@@ -310,6 +375,10 @@ func _ready() -> void:
 	output_text.meta_clicked.connect(_on_meta_clicked)
 	input_field.focus_entered.connect(_on_input_focus_entered)
 	input_field.focus_exited.connect(_on_input_focus_exited)
+	mail_icon.mouse_filter = Control.MOUSE_FILTER_STOP
+	mail_icon.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	mail_icon.gui_input.connect(_on_mail_icon_gui_input)
+	scroll_container.get_v_scroll_bar().gui_input.connect(_on_terminal_scrollbar_input)
 	# 初始 placeholder
 	input_field.placeholder_text = ""
 	mail_icon.text = "[Mail]"
@@ -450,8 +519,8 @@ func _show_login_prompt() -> void:
 		_update_status_bar_login()
 		return
 	var login_box: String = fs.build_box([
-		"SCP FOUNDATION SECURE TERMINAL",
-        "SECURE · CONTAIN · PROTECT"
+		"SCRT-READER CORE",
+        "TERMINAL · READER · FRAMEWORK"
 	] as Array[String], p)
 	output_text.append_text(login_box + "\n\n")
 	output_text.append_text("[color=" + m + "]身份验证系统 v2.0[/color]\n")
@@ -496,13 +565,13 @@ func _start_register_flow(is_wizard: bool = false) -> void:
 			"新操作员注册引导"
 		] as Array[String], p)
 		output_text.append_text("\n" + wizard_box + "\n\n")
-		output_text.append_text("[color=" + m + "]欢迎来到 SCP 基金会安全终端。[/color]\n")
+		output_text.append_text("[color=" + m + "]欢迎使用 SCRT-Reader Core。[/color]\n")
 		output_text.append_text("[color=" + m + "]系统检测到尚无已注册操作员，请完成注册引导以建立您的档案。[/color]\n\n")
 		output_text.append_text("[color=" + w + "]注册流程: 代号 → 密码 → 个人信息[/color]\n")
 		output_text.append_text("[color=" + m + "]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/color]\n\n")
 	else:
 		output_text.append_text("\n[color=" + m + "]━━━ 新操作员注册 ━━━[/color]\n\n")
-	output_text.append_text("[color=" + m + "]用户名规则: " + str(UserManager.MIN_USERNAME_LENGTH) + "-" + str(UserManager.MAX_USERNAME_LENGTH) + " 字符，不含特殊字符和空格[/color]\n")
+	output_text.append_text("[color=" + m + "]用户名规则: " + str(UserManager.MIN_USERNAME_LENGTH) + "-" + str(UserManager.MAX_USERNAME_LENGTH) + " 字符，支持中英文、数字、空格和常见标点；不支持 Emoji 和路径特殊字符[/color]\n")
 	if not is_wizard:
 		output_text.append_text("[color=" + m + "]输入 cancel 可取消注册。[/color]\n\n")
 	else:
@@ -559,6 +628,8 @@ func _enter_desktop_after_login(message: String) -> void:
 		pkg_mgr.load_installed_mods()
 	if vdisc_task_mgr:
 		vdisc_task_mgr.load_player_state()
+	if radio_receiver:
+		radio_receiver.load_player_state()
 	disc_mgr.scan_stories(true)
 	_update_status_bar()
 	disc_mgr.show_desktop_welcome(true)
@@ -577,7 +648,6 @@ func _enter_desktop_after_login(message: String) -> void:
 			env_task_mgr.save_story_version = _sv
 		if perf_mgr:
 			perf_mgr.save_story_version = _sv
-	# ★ 教程入口（Day0 由 DailyDialogueManager 驱动，须在主线配置加载后判断）
 	if comm_mgr:
 		comm_mgr.try_trigger_tutorial()
 	# ★ 确保 COMM UI 已构建
@@ -591,31 +661,33 @@ func _enter_desktop_after_login(message: String) -> void:
 	# ★ 加载玩家专属环境监测进度（覆盖 _ready 中的 start_new_game 初始状态）
 	if env_monitor:
 		if not env_monitor.load_env_progress():
+			env_monitor.start_new_game()
 			env_monitor.save_env_progress()  # 新玩家：写入初始存档
 	# ★ 加载绩效数据
 	if perf_mgr:
 		perf_mgr.load_progress()
+		if daily_dialogue_mgr and env_monitor:
+			daily_dialogue_mgr._apply_day_performance_config(env_monitor.current_day)
+		perf_mgr.restore_warning_mails()
+		if perf_mgr.failed:
+			_show_performance_failure()
+			return
+	var archive_recovery: Dictionary = vdisc_task_mgr.recover_archives() if vdisc_task_mgr else {"ok": true}
+	if not bool(archive_recovery.ok):
+		output_text.append_text("归档仍待恢复：" + str(archive_recovery.pending) + "；相关任务暂不能重新领取。\n")
 	if env_task_mgr:
 		if not env_task_mgr.load_task_progress():
 			env_task_mgr.reset_for_new_day(false)  # 清除前一账号的历史，加载当前玩家数据
 			env_task_mgr.save_task_progress()
 		else:
 			env_observation.migrate_legacy()
-			if (env_task_mgr.can_advance_day() or env_monitor.current_day == 0) and env_monitor:
-				# 上次会话任务已全部完成，结算绩效后推进到下一天
-				# ★ Day0 教程日：无论任务是否完成都强制推进至 Day1（未完成=绩效缺口）
-				if perf_mgr:
-					perf_mgr.settle_day(env_monitor.current_day)
-					perf_mgr.save_progress()
-				env_monitor.advance_day()
-				env_task_mgr.reset_for_new_day()
-				env_monitor.save_env_progress()
-				env_task_mgr.save_task_progress()
-				print("[Main] 自动推进至第 %d 天" % env_monitor.current_day)
+			if bool(archive_recovery.ok):
+				_advance_completed_day()
 	if env_observation:
 		env_observation.suspended = false
 	if daily_dialogue_mgr and env_monitor:
 		daily_dialogue_mgr.trigger_day_start(env_monitor.current_day)
+		daily_dialogue_mgr.save_story_save()
 	# ★ 登录后加载主线剧情摄像头（只加载一次，不受故事包影响）
 	if camera_mgr:
 		camera_mgr.load_main_storyline_cameras()
@@ -628,6 +700,8 @@ func _enter_desktop_after_login(message: String) -> void:
 # ══════════════════════════════════════════
 var _last_input_length: int = 0  # 追踪输入长度变化方向
 func _on_input_text_changed(new_text: String) -> void:
+	_clear_completion()
+	_history_browsing = false
 	if ui_sound == null:
 		return
 	var new_len: int = new_text.length()
@@ -645,6 +719,7 @@ func _on_input_text_changed(new_text: String) -> void:
 func _on_input_focus_entered() -> void:
 	input_field.placeholder_text = ""
 func _on_input_focus_exited() -> void:
+	_clear_completion()
 	input_field.placeholder_text = _get_default_placeholder()
 func _get_default_placeholder() -> String:
 	if _login_mode:
@@ -680,6 +755,9 @@ func _get_default_placeholder() -> String:
 #  回车提交
 # ══════════════════════════════════════════
 func _on_input_submitted(_text: String) -> void:
+	if _returning_to_cover or _hot_rebooting or _logging_out:
+		return
+	UIManager.sync_ime(input_field)
 	if _env_viewer_mode and env_viewer and env_viewer.is_active:
 		if is_terminal_covered(true):
 			return
@@ -688,7 +766,19 @@ func _on_input_submitted(_text: String) -> void:
 		return
 	if is_terminal_covered():
 		return
+	if input_field.has_ime_text():
+		return
+	# 忙碌或跳过输出时保留草稿，下一次回车才真正提交。
+	if tw.is_typing:
+		tw.skip()
+		return
+	if _command_running:
+		return
 	var raw: String = input_field.text.strip_edges()
+	_clear_completion()
+	_history_browsing = false
+	_history_draft = ""
+	_follow_terminal = true
 	input_field.text = ""
 	input_field.clear()
 	_last_input_length = 0  # 重置长度追踪，避免下次输入触发误判
@@ -741,11 +831,6 @@ func _on_input_submitted(_text: String) -> void:
 				return
 		else:
 			return
-	if _command_running:
-		return
-	if tw.is_typing:
-		tw.skip()
-		return
 	# 登录模式
 	if _login_mode:
 		_handle_login_input(raw)
@@ -820,8 +905,9 @@ func _on_input_submitted(_text: String) -> void:
 	if trigger_sys:
 		trigger_sys.reset_idle()
 	# 正常命令执行
-	append_output("> " + raw + "\n", false)
-	_request_scroll()
+	if not CommandHandler.parse_debug_input(raw).get("silent", false):
+		append_output("> " + raw + "\n", false)
+		_request_scroll()
 	if user_mgr.is_logged_in:
 		user_mgr.increment_command_count()
 	_run_command(raw)
@@ -893,13 +979,14 @@ func _handle_register_input(raw: String) -> void:
 	match _register_step:
 		0:  # 用户名
 			output_text.append_text(raw + "\n")
-			if user_mgr.user_exists(raw):
-				output_text.append_text("[color=" + e + "]用户名已存在，请选择其它名称。[/color]\n")
+			var name_check: Dictionary = user_mgr._validate_username(raw)
+			if not name_check["valid"]:
+				output_text.append_text("[color=" + e + "]" + str(name_check["message"]) + "[/color]\n")
 				output_text.append_text("[color=" + p + "]请输入新操作员代号: [/color]")
 				_request_scroll()
 				return
-			if raw.length() < UserManager.MIN_USERNAME_LENGTH or raw.length() > UserManager.MAX_USERNAME_LENGTH:
-				output_text.append_text("[color=" + e + "]用户名长度需在 " + str(UserManager.MIN_USERNAME_LENGTH) + "-" + str(UserManager.MAX_USERNAME_LENGTH) + " 字符之间。[/color]\n")
+			if user_mgr.user_exists(raw):
+				output_text.append_text("[color=" + e + "]用户名已存在，请选择其它名称。[/color]\n")
 				output_text.append_text("[color=" + p + "]请输入新操作员代号: [/color]")
 				_request_scroll()
 				return
@@ -1013,8 +1100,8 @@ func _finish_register() -> void:
 	if not _register_birthday_input.is_empty():
 		extra["birthday"] = _register_birthday_input
 	var result: Dictionary = user_mgr.register(_register_username_input, _register_password_input, extra)
-	_register_mode = false
 	if result["success"]:
+		_register_mode = false
 		if _register_is_wizard:
 			output_text.append_text("[color=" + m + "]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/color]\n")
 			output_text.append_text("[color=" + p + "]" + str(result["message"]) + "[/color]\n")
@@ -1024,7 +1111,15 @@ func _finish_register() -> void:
 		_enter_desktop_after_login(str(result["message"]))
 	else:
 		output_text.append_text("\n[color=" + e + "]" + str(result["message"]) + "[/color]\n\n")
-		_start_login_flow()
+		# 最终提交失败也留在注册界面，不再重新播放开机。
+		_register_mode = true
+		_register_step = 0
+		_register_username_input = ""
+		_register_password_input = ""
+		input_field.secret = false
+		output_text.append_text("[color=" + p + "]请输入新操作员代号: [/color]")
+		_request_scroll()
+		return
 	_register_is_wizard = false
 	_request_scroll()
 # ══════════════════════════════════════════
@@ -1124,12 +1219,20 @@ func start_delete_user_flow(username: String) -> void:
 ## 窗口关闭事件 —— 直接关窗口时也保存进度
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		if disc_mgr:
-			disc_mgr._auto_save()
-		get_tree().quit()
+		_on_window_close_requested()
 
 ## 统一关机流程（登录界面和桌面命令都可调用）
 func _perform_shutdown() -> void:
+	if _returning_to_cover:
+		return
+	_returning_to_cover = true
+	input_field.editable = false
+	_clear_completion()
+	if radio_receiver:
+		radio_receiver.close()
+	if audio_manager:
+		audio_manager.stop_media()
+		audio_manager.stop_ambient(0.3)
 	# ★ 关机前保存所有进度（必须在 logout 前执行）
 	if disc_mgr:
 		disc_mgr._auto_save()
@@ -1150,12 +1253,27 @@ func _perform_shutdown() -> void:
 	if boot_sequence:
 		await get_tree().create_timer(0.3).timeout
 		output_text.text = ""
+		boot_sequence.quit_on_shutdown = false
+		boot_sequence.shutdown_completed.connect(_return_to_startup, CONNECT_ONE_SHOT)
 		boot_sequence.play_shutdown()
 	else:
 		await get_tree().create_timer(0.5).timeout
-		get_tree().quit()
+		_return_to_startup()
+
+func _return_to_startup() -> void:
+	# 场景切换释放本会话的节点与音频；由新封面执行淡入。
+	var tree := get_tree()
+	tree.set_meta("scrt_cover_fade_in", true)
+	var error := tree.change_scene_to_file("res://scenes/startup.tscn")
+	if error != OK:
+		tree.remove_meta("scrt_cover_fade_in")
+		push_error("[Main] 返回封面失败: " + str(error))
 
 func perform_logout() -> void:
+	if _logging_out or not user_mgr or not user_mgr.is_logged_in:
+		return
+	_logging_out = true
+	input_field.editable = false
 	var m: String = T.muted_hex
 	# ★ 注销前保存玩家进度（必须在 logout 前执行）
 	if disc_mgr:
@@ -1163,9 +1281,14 @@ func perform_logout() -> void:
 	# ★ NEW: 分发用户注销钩子
 	if pkg_mgr and user_mgr.is_logged_in:
 		pkg_mgr.dispatch_user_logout(user_mgr.get_username())
+	# 外部盘先结束自己的生命周期；内部模组仍可在关闭钩子中读取旧盘。
+	if disc_mgr:
+		disc_mgr.prepare_for_logout()
 	# ★ 注销前关闭所有模组
 	if pkg_mgr:
 		pkg_mgr._shutdown_all_mods()
+	if disc_mgr:
+		disc_mgr.reset_all()
 	# ★ 注销前清理通讯系统
 	if comm_mgr:
 		comm_mgr.cleanup()
@@ -1176,16 +1299,24 @@ func perform_logout() -> void:
 	if settings_mgr:
 		settings_mgr.on_user_logout()
 	user_mgr.logout()
+	if perf_mgr:
+		perf_mgr.reset_player_progress()
+	# 子系统关闭可能恢复输入；交接完成前继续禁止输入。
+	input_field.editable = false
 	output_text.append_text("[color=" + m + "]正在注销当前会话...[/color]\n")
 	_request_scroll()
 	await get_tree().create_timer(0.5).timeout
 	output_text.text = ""
 	_desktop_mode = true
+	_logging_out = false
+	input_field.editable = true
 	_start_login_flow()
 # ══════════════════════════════════════════
 #  命令执行
 # ══════════════════════════════════════════
 func _run_command(raw: String) -> void:
+	if _logging_out:
+		return
 	_command_running = true
 	# ★ NEW: 提取命令名和参数，分发前置钩子
 	var parts: PackedStringArray = raw.strip_edges().split(" ", false)
@@ -1215,13 +1346,52 @@ func _run_command(raw: String) -> void:
 	_refocus_input.call_deferred()
 
 func _refocus_input() -> void:
+	if _logging_out:
+		return
 	_sync_terminal_visibility()
 	if not input_field.is_visible_in_tree() or is_terminal_covered(_env_viewer_mode):
 		return
 	input_field.grab_focus()
+	input_field.edit()
+
+## 界面退出或Esc取消编辑后，空闲终端恢复输入，不占用其他界面的焦点。
+func _restore_idle_input() -> void:
+	if not input_field.is_visible_in_tree() or not input_field.editable or is_terminal_covered():
+		return
+	if _returning_to_cover or _hot_rebooting or _logging_out or _command_running:
+		return
+	if boot_sequence and boot_sequence.is_active():
+		return
+	if disc_mgr and disc_mgr.loading_screen and disc_mgr.loading_screen.is_active():
+		return
+	if mail_sys and mail_sys._mail_busy:
+		return
+	if pkg_mgr and not pkg_mgr._input_capture.is_empty():
+		return
+	if comm_mgr and (comm_mgr.is_call_ringing() or (comm_mgr.is_active and not comm_mgr.is_waiting_for_command())):
+		return
+	if dial_mgr and dial_mgr.is_active():
+		return
+	if not get_window().has_focus() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return
+	var owner: Control = get_viewport().gui_get_focus_owner()
+	if owner != null and owner != input_field:
+		# 终端正文的选择仍可复制；其他GUI控件保留自己的焦点。
+		if owner != output_text or not output_text.get_selected_text().is_empty():
+			return
+	if not input_field.has_focus():
+		input_field.grab_focus()
+	if not input_field.is_editing():
+		input_field.edit()
 
 ## 普通终端和全屏界面共用此判定，新增覆盖界面须登记在这里。
 func is_terminal_covered(ignore_env: bool = false) -> bool:
+	if pkg_mgr and pkg_mgr.has_terminal_cover():
+		return true
+	if comm_mgr and comm_mgr._ui and comm_mgr._ui._meeting_transition and comm_mgr._ui._meeting_transition.visible:
+		return true
+	if mail_sys != null and mail_sys.inbox_viewer != null and mail_sys.inbox_viewer.is_active:
+		return true
 	if vdisc_task_mgr and vdisc_task_mgr.is_download_open():
 		return true
 	if comm_mgr and comm_mgr.is_voice_tuner_open():
@@ -1235,8 +1405,23 @@ func is_terminal_covered(ignore_env: bool = false) -> bool:
 			return true
 	return _oscilloscope_mode
 
+var _mod_terminal_hidden: bool = false
+var _mod_terminal_was_visible: bool = true
+
 func _sync_terminal_visibility() -> void:
+	var mod_covered: bool = pkg_mgr != null and pkg_mgr.has_terminal_cover()
+	var terminal: Control = $MainContent
+	if mod_covered and not _mod_terminal_hidden:
+		_mod_terminal_was_visible = terminal.visible
+		_mod_terminal_hidden = true
+		terminal.hide()
+	elif not mod_covered and _mod_terminal_hidden:
+		_mod_terminal_hidden = false
+		terminal.visible = _mod_terminal_was_visible
 	var covered: bool = is_terminal_covered()
+	# 透明课堂图保持共同背景；暂隐终端历史，避免文字穿过流程图。
+	if comm_mgr and comm_mgr.is_active and comm_mgr._ui and comm_mgr._ui._display_mode == "presentation":
+		covered = true
 	output_text.visible = not covered
 	if covered:
 		if not (_env_viewer_mode and env_viewer and env_viewer.is_active and not is_terminal_covered(true)):
@@ -1251,6 +1436,10 @@ func _sync_terminal_visibility() -> void:
 #  输入事件处理
 # ══════════════════════════════════════════
 func _input(event: InputEvent) -> void:
+	if _returning_to_cover or _hot_rebooting or _logging_out:
+		get_viewport().set_input_as_handled()
+		return
+	UIManager.sync_ime(input_field)
 	if vdisc_task_mgr and vdisc_task_mgr.is_download_open():
 		if event is InputEventKey:
 			vdisc_task_mgr.handle_download_input(event)
@@ -1262,9 +1451,9 @@ func _input(event: InputEvent) -> void:
 			comm_mgr.close_voice_tuner()
 			get_viewport().set_input_as_handled()
 		return
-	# 编辑器内测试快捷键：开机动画期间按 F12 强制跳过（包括首次开机）
+	# 开机动画期间 F12 强制跳过（包括首次开机），编辑器与导出一致。
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F12:
-		if OS.has_feature("editor") and boot_sequence and boot_sequence.is_active():
+		if boot_sequence and boot_sequence.is_booting():
 			boot_sequence.skip(true)
 			get_viewport().set_input_as_handled()
 			return
@@ -1288,6 +1477,16 @@ func _input(event: InputEvent) -> void:
 			return
 	
 	# 示波器模式优先处理输入
+	if mail_sys != null and mail_sys.inbox_viewer != null and mail_sys.inbox_viewer.is_active:
+		if mail_sys.inbox_viewer.handle_input(event):
+			get_viewport().set_input_as_handled()
+		return
+	# 邮件正文中 Alt+左右切换邮件，不占用模板自身翻页／滚动键。
+	if event is InputEventKey and event.pressed and event.alt_pressed and event.keycode in [KEY_LEFT, KEY_RIGHT] and not _image_viewer_mode:
+		if mail_sys != null and mail_sys._reading_mail and mail_sys._any_mail_viewer_active():
+			mail_sys.adjacent_mail(-1 if event.keycode == KEY_LEFT else 1)
+			get_viewport().set_input_as_handled()
+			return
 	if _oscilloscope_mode and oscilloscope and oscilloscope.is_active:
 		if oscilloscope.handle_input(event):
 			get_viewport().set_input_as_handled()
@@ -1296,7 +1495,7 @@ func _input(event: InputEvent) -> void:
 	if _image_viewer_mode and image_viewer and image_viewer.is_active:
 		if image_viewer.handle_input(event):
 			get_viewport().set_input_as_handled()
-			return
+		return # 大图期间不能把未使用的按键传给底下接收机或阅读器。
 	# 视频播放器模式优先处理输入
 	if _video_player_mode and video_player_viewer and video_player_viewer.is_active:
 		if video_player_viewer.handle_input(event):
@@ -1363,11 +1562,13 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
+				_follow_terminal = false
 				scroll_container.scroll_vertical -= 60
 				get_viewport().set_input_as_handled()
 				return
 			MOUSE_BUTTON_WHEEL_DOWN:
 				scroll_container.scroll_vertical += 60
+				_update_terminal_follow()
 				get_viewport().set_input_as_handled()
 				return
 			MOUSE_BUTTON_RIGHT:
@@ -1382,8 +1583,10 @@ func _input(event: InputEvent) -> void:
 			MOUSE_BUTTON_LEFT:
 				var mouse_pos: Vector2 = event.position
 				# ★ 检测邮件图标点击
-				if mail_icon != null and mail_icon.get_global_rect().has_point(mouse_pos):
+				if _mail_icon_contains_screen_point(mouse_pos):
 					if _is_mail_icon_clickable() and user_mgr != null and user_mgr.is_logged_in and mail_sys != null:
+						_clear_completion()
+						input_field.release_focus()
 						mail_sys.handle_mail_command([])
 					get_viewport().set_input_as_handled()
 					return
@@ -1395,6 +1598,9 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and not event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var mouse_pos: Vector2 = event.position
+			if _mail_icon_contains_screen_point(mouse_pos):
+				get_viewport().set_input_as_handled()
+				return
 			var output_rect: Rect2 = output_text.get_global_rect()
 			if not output_rect.has_point(mouse_pos):
 				input_field.grab_focus()
@@ -1404,6 +1610,13 @@ func _input(event: InputEvent) -> void:
 		return
 	if not input_field.has_focus():
 		input_field.grab_focus()
+	if input_field.editable and not input_field.is_editing():
+		input_field.edit()
+	# 中文输入法候选使用上下／空格／回车；交给 LineEdit 处理。
+	if input_field.has_ime_text():
+		return
+	if event.keycode != KEY_TAB:
+		_clear_completion()
 	# 开关机序列中：按任意键跳过
 	if boot_sequence and boot_sequence.is_active():
 		if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_ESCAPE]:
@@ -1417,27 +1630,45 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 	# 打字机播放中：空格或ESC跳过
-	if tw.is_typing and event.keycode in [KEY_SPACE, KEY_ESCAPE]:
+	if tw.is_typing and (event.keycode == KEY_ESCAPE or (event.keycode == KEY_SPACE and input_field.text.is_empty())):
 		tw.skip()
 		get_viewport().set_input_as_handled()
 		return
 	match event.keycode:
 		KEY_UP:
+			if _login_mode or _register_mode or _passwd_mode or _password_mode or _file_password_mode:
+				return
+			_clear_completion()
+			if not _history_browsing:
+				_history_draft = input_field.text
+				_history_browsing = true
+				cmd_handler.history_index = cmd_handler.command_history.size()
 			var prev_cmd: String = cmd_handler.history_up()
 			if not prev_cmd.is_empty():
 				input_field.text = prev_cmd
 				input_field.caret_column = input_field.text.length()
+				_last_input_length = input_field.text.length()
 			get_viewport().set_input_as_handled()
 		KEY_DOWN:
+			if _login_mode or _register_mode or _passwd_mode or _password_mode or _file_password_mode:
+				return
+			if not _history_browsing:
+				return
+			_clear_completion()
 			var next_cmd: String = cmd_handler.history_down()
-			input_field.text = next_cmd
+			input_field.text = _history_draft if cmd_handler.history_index >= cmd_handler.command_history.size() else next_cmd
+			if cmd_handler.history_index >= cmd_handler.command_history.size():
+				_history_browsing = false
 			input_field.caret_column = input_field.text.length()
+			_last_input_length = input_field.text.length()
 			get_viewport().set_input_as_handled()
 		KEY_PAGEUP:
+			_follow_terminal = false
 			scroll_container.scroll_vertical -= 100
 			get_viewport().set_input_as_handled()
 		KEY_PAGEDOWN:
 			scroll_container.scroll_vertical += 100
+			_update_terminal_follow()
 			get_viewport().set_input_as_handled()
 		KEY_TAB:
 			# ★ 磁盘模式下空输入 Tab 切换探索视图
@@ -1450,39 +1681,68 @@ func _input(event: InputEvent) -> void:
 			else:
 				if ui_sound:
 					ui_sound.play_click()
-				_handle_tab_complete()
+				_handle_tab_complete(event.shift_pressed)
 				get_viewport().set_input_as_handled()
 
 # ══════════════════════════════════════════
 #  Tab 自动补全
 # ══════════════════════════════════════════
-func _handle_tab_complete() -> void:
+func _handle_tab_complete(reverse: bool = false) -> void:
 	if _login_mode or _register_mode or _passwd_mode or _password_mode or _file_password_mode:
 		return
-	var current_text: String = input_field.text
-	if current_text.strip_edges().is_empty():
+	if _completion_options.is_empty() or input_field.text != _completion_expected:
+		_clear_completion()
+		var caret := input_field.caret_column
+		var prefix := input_field.text.left(caret)
+		if prefix.strip_edges().is_empty():
+			return
+		var token_end := caret
+		while token_end < input_field.text.length() and input_field.text[token_end] != " ":
+			token_end += 1
+		_completion_suffix = input_field.text.substr(token_end)
+		_completion_options = cmd_handler.get_completions(prefix)
+		_completion_options.sort()
+		_completion_index = 0 if reverse else -1
+	if _completion_options.is_empty():
 		return
-	var completions: Array[String] = cmd_handler.get_completions(current_text)
-	if completions.is_empty():
-		return
-	if completions.size() == 1:
-		input_field.text = completions[0] + " "
-		input_field.caret_column = input_field.text.length()
-	else:
-		var display_items: Array[String] = []
-		for c in completions:
-			var tab_parts: PackedStringArray = c.split(" ", false)
-			if tab_parts.size() > 0:
-				display_items.append(tab_parts[-1])
-			else:
-				display_items.append(c)
-		var hint_text: String = "\n[color=" + T.muted_hex + "]可选项: " + " | ".join(display_items) + "[/color]\n"
-		output_text.append_text(hint_text)
-		_request_scroll()
-		var common: String = _find_common_prefix(completions)
-		if common.length() > current_text.length():
-			input_field.text = common
-			input_field.caret_column = input_field.text.length()
+	_completion_index = posmod(_completion_index + (-1 if reverse else 1), _completion_options.size())
+	var completed := _completion_options[_completion_index]
+	var spacer := " " if _completion_suffix.is_empty() else ""
+	input_field.text = completed + spacer + _completion_suffix
+	_last_input_length = input_field.text.length()
+	input_field.caret_column = completed.length() + spacer.length()
+	_completion_expected = input_field.text
+	_history_browsing = false
+	if _completion_hint == null:
+		_completion_mask = ColorRect.new()
+		_completion_mask.color = Color.BLACK
+		_completion_mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_completion_mask)
+		_completion_hint = Label.new()
+		_completion_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_completion_hint.add_theme_font_size_override("font_size", 16)
+		_completion_hint.add_theme_color_override("font_color", T.muted)
+		_completion_hint.clip_text = true
+		add_child(_completion_hint)
+	_update_completion_layout()
+	_completion_mask.show()
+	_completion_hint.text = "Tab / Shift+Tab  %d/%d：%s" % [_completion_index + 1, _completion_options.size(), "  |  ".join(_completion_options)]
+	_completion_hint.show()
+
+func _update_completion_layout() -> void:
+	_completion_hint.position = input_field.global_position - global_position - Vector2(0, 26)
+	_completion_hint.size = Vector2(input_field.size.x, 24)
+	_completion_mask.position = _completion_hint.position - Vector2(4, 0)
+	_completion_mask.size = _completion_hint.size + Vector2(8, 0)
+
+func _clear_completion() -> void:
+	_completion_options.clear()
+	_completion_expected = ""
+	_completion_index = -1
+	if _completion_hint != null:
+		_completion_hint.hide()
+	if _completion_mask != null:
+		_completion_mask.hide()
 # ══════════════════════════════════════════
 #  复制提示
 # ══════════════════════════════════════════
@@ -1505,6 +1765,9 @@ func _find_common_prefix(strings: Array[String]) -> String:
 #  输出工具
 # ══════════════════════════════════════════
 func append_output(text: String, use_typewriter: bool = false, beep: bool = true) -> void:
+	# 静默调试的反馈既不显示，也不进入全屏界面的延迟输出队列。
+	if _silent_debug_depth > 0:
+		return
 	if is_terminal_covered():
 		output_text.hide()
 		_deferred_terminal_output.append(text)
@@ -1600,12 +1863,12 @@ func _on_typing_completed() -> void:
 ## 图片查看器关闭后的回调
 func _on_image_viewer_closed() -> void:
 	_image_viewer_mode = false
-	input_field.editable = true
+	input_field.editable = not (_radio_mode and radio_receiver and radio_receiver.is_active)
 ## 用图片文件打开图片查看器
 func open_image_viewer_with_file(file_path: String, file_name: String, data: PackedByteArray) -> void:
-	_image_viewer_mode = true
-	input_field.editable = false
 	image_viewer.open_with_file(file_path, file_name, data)
+	_image_viewer_mode = image_viewer.is_active
+	input_field.editable = not _image_viewer_mode
 ## 示波器关闭后的回调
 func _on_oscilloscope_closed() -> void:
 	_oscilloscope_mode = false
@@ -1642,24 +1905,8 @@ func open_radio_receiver() -> void:
 
 ## 绩效警告回调
 func _on_performance_warning(level: String, message: String) -> void:
-	match level:
-		"serious":
-			# 严重警告 → 尝试触发 AVA 强制来电
-			if comm_mgr and comm_mgr.has_method("trigger_call"):
-				comm_mgr.trigger_call("ava_perf_warning", "forced")
-			elif comm_mgr:
-				# 回退：输出终端警告
-				var w: String = T.warning_hex if T else "#FFFF80"
-				append_output("\n[color=" + w + "][HQ-CALL] AVA 紧急通讯：您的绩效表现需要立即改善。[/color]\n", false)
-		"termination":
-			# 解雇级警告
-			if daily_dialogue_mgr:
-				daily_dialogue_mgr.set_flag("termination_eligible", true)
-			var e: String = T.error_hex if T else "#FF6060"
-			append_output("\n[color=" + e + "][WARNING] 人事处已启动解雇审查程序。[/color]\n", false)
-	print("[Main] 绩效警告: level=%s msg=%s" % [level, message])
+	append_output("[WARN] " + message + "\n", false)
 
-## decode_viewer 关闭回调
 func _on_decode_viewer_closed() -> void:
 	_decode_mode = false
 	input_field.editable = true
@@ -1711,13 +1958,26 @@ func update_ambient_sound() -> void:
 #  滚动控制
 # ══════════════════════════════════════════
 func _request_scroll() -> void:
+	if not _follow_terminal:
+		return
 	_scroll_pending_frames = 3
 
 
 func _do_scroll_to_bottom() -> void:
+	if not _follow_terminal:
+		return
 	var v_scroll: VScrollBar = scroll_container.get_v_scroll_bar()
 	if v_scroll:
 		scroll_container.scroll_vertical = int(v_scroll.max_value)
+
+func _update_terminal_follow() -> void:
+	var bar := scroll_container.get_v_scroll_bar()
+	_follow_terminal = bar == null or bar.value >= bar.max_value - bar.page - 8.0
+
+func _on_terminal_scrollbar_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton or event is InputEventMouseMotion:
+		_follow_terminal = false
+		_update_terminal_follow.call_deferred()
 
 ## 通讯对话框文本滚动到底部（由 comm_ui 延迟调用）
 func _comm_scroll_to_bottom() -> void:
@@ -1731,7 +1991,26 @@ func _comm_scroll_to_bottom() -> void:
 #  每帧处理
 # ══════════════════════════════════════════
 func _process(delta: float) -> void:
+	if _hot_rebooting or _logging_out:
+		return
+	if user_mgr and user_mgr.is_logged_in and perf_mgr and perf_mgr.failed and not _returning_to_cover:
+		_sync_terminal_visibility()
+		tw.process_scroll()
+		if email_viewer and email_viewer.is_active:
+			email_viewer.process_typing(delta)
+		if _scroll_pending_frames > 0:
+			_scroll_pending_frames -= 1
+			if _scroll_pending_frames == 0:
+				_do_scroll_to_bottom()
+		_restore_idle_input()
+		return
+	if _returning_to_cover:
+		if boot_sequence and boot_sequence.is_active():
+			boot_sequence.process(delta)
+		return
 	_sync_terminal_visibility()
+	if _completion_hint != null and _completion_hint.visible:
+		_update_completion_layout()
 	# 下载弹窗期间暂停查看器、通讯等交互，网络请求和下载协程继续运行。
 	if vdisc_task_mgr and vdisc_task_mgr.is_download_open():
 		return
@@ -1751,7 +2030,7 @@ func _process(delta: float) -> void:
 		_scroll_pending_frames -= 1
 		if _scroll_pending_frames == 0:
 			_do_scroll_to_bottom()
-	if doc_viewer and doc_viewer.is_active:
+	if doc_viewer and doc_viewer.is_active and not _image_viewer_mode:
 		doc_viewer.process_typing(delta)
 	# ★ 修复：函数名一致
 	_update_inline_audio_status(delta)
@@ -1761,7 +2040,7 @@ func _process(delta: float) -> void:
 	# ★ 视频播放器状态栏进度更新
 	_update_inline_video_status(delta)
 	# ★ 双页模板更新
-	if two_page_viewer and two_page_viewer.is_active:
+	if two_page_viewer and two_page_viewer.is_active and not _image_viewer_mode:
 		two_page_viewer.process_typing(delta)
 	# 开关机序列驱动
 	if boot_sequence and boot_sequence.is_active():
@@ -1784,10 +2063,10 @@ func _process(delta: float) -> void:
 	if mail_sys:
 		mail_sys.process(delta)
 	# ★ 邮件模板更新
-	if email_viewer and email_viewer.is_active:
+	if email_viewer and email_viewer.is_active and not _image_viewer_mode:
 		email_viewer.process_typing(delta)
 	# ★ 环境监测系统每帧更新
-	if env_monitor:
+	if env_monitor and user_mgr and user_mgr.is_logged_in:
 		env_monitor.process(delta)
 	if env_observation:
 		env_observation.process(delta)
@@ -1800,12 +2079,33 @@ func _process(delta: float) -> void:
 		camera_mgr.process(delta)
 	if camera_viewer and camera_viewer.is_active:
 		camera_viewer.process(delta)
+	_restore_idle_input()
 
 # ══════════════════════════════════════════
 #  超链接处理
 # ══════════════════════════════════════════
 ## mail 按钮仅在无全屏覆盖层/通讯/拨号/加载动画时可用
+func _mail_icon_contains_screen_point(point: Vector2) -> bool:
+	if mail_icon == null or not mail_icon.is_visible_in_tree() or mail_icon.text.is_empty():
+		return false
+	var rect: Rect2 = mail_icon.get_global_rect().grow(4.0)
+	if rect.has_point(point):
+		return true
+	# CRT曲率移动了右上角的可见按钮；按着色器相同映射检测屏幕位置。
+	if not crt_shader or not crt_shader.visible or not crt_shader.material is ShaderMaterial:
+		return false
+	var viewport_size: Vector2 = get_viewport_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return false
+	var material: ShaderMaterial = crt_shader.material
+	var uv: Vector2 = point / viewport_size + Vector2(material.get_shader_parameter("shake_offset"))
+	var centered: Vector2 = uv * 2.0 - Vector2.ONE
+	centered *= 1.0 + centered.length_squared() * float(material.get_shader_parameter("curvature")) * 0.02
+	return rect.has_point((centered * 0.5 + Vector2.ONE * 0.5) * viewport_size)
+
 func _is_mail_icon_clickable() -> bool:
+	if mail_sys != null and mail_sys.inbox_viewer != null and mail_sys.inbox_viewer.is_active:
+		return false
 	if disc_mgr != null and disc_mgr.loading_screen != null and disc_mgr.loading_screen.is_active():
 		return false
 	if comm_mgr != null and comm_mgr.is_active:
@@ -1828,11 +2128,20 @@ func _is_mail_icon_clickable() -> bool:
 		return false
 	return true
 
+func _on_mail_icon_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if _is_mail_icon_clickable() and user_mgr != null and user_mgr.is_logged_in and mail_sys != null:
+			mail_sys.handle_mail_command([])
+		mail_icon.accept_event()
+
 func _on_meta_clicked(meta: Variant) -> void:
 	var meta_str: String = str(meta)
 	if vdisc_task_mgr and vdisc_task_mgr.is_download_open():
 		return
 	if meta_str.begins_with("vdisc://mail/"):
+		if perf_mgr and perf_mgr.failed:
+			append_output("游戏已失败，不能继续领取任务。\n", false)
+			return
 		if vdisc_task_mgr:
 			var result: Dictionary = await vdisc_task_mgr.download_mail_attachment(meta_str.substr(13).uri_decode())
 			append_output(str(result.get("message", "")) + "\n", false)
@@ -1855,6 +2164,8 @@ func _on_meta_clicked(meta: Variant) -> void:
 	if meta_str.begins_with("video://stop"):
 		_stop_inline_video()
 		return
+	if _try_open_document_image(meta_str):
+		return
 	# ★ 命令链接：执行前关闭活动 viewer（two_page/doc）
 	if meta_str.begins_with("cmd://"):
 		var cmd: String = meta_str.substr(6)
@@ -1868,6 +2179,8 @@ func _on_meta_clicked(meta: Variant) -> void:
 			doc_viewer.close()
 		if article_viewer and article_viewer.is_active:
 			article_viewer.close()
+		if mail_sys != null and mail_sys.inbox_viewer != null and mail_sys.inbox_viewer.is_active:
+			mail_sys.inbox_viewer.close()
 		output_text.append_text("\n> " + cmd + "\n")
 		_run_command(cmd)
 		return
@@ -1890,9 +2203,37 @@ func _on_meta_clicked(meta: Variant) -> void:
 			doc_viewer.close()
 		if article_viewer and article_viewer.is_active:
 			article_viewer.close()
+		if mail_sys != null and mail_sys.inbox_viewer != null and mail_sys.inbox_viewer.is_active:
+			mail_sys.inbox_viewer.close()
 		output_text.append_text("\n> open " + file_path + "\n")
 		_run_command("open " + file_path)
 		return
+
+## 文档图片作为临时覆盖层；普通文件／命令仍沿用原有退出路径。
+func _try_open_document_image(link: String) -> bool:
+	var target: String = ""
+	if link.begins_with("cmd://open "):
+		target = link.substr(11).strip_edges()
+	elif link.begins_with("file://"):
+		target = link.substr(7)
+	else:
+		return false
+	var parent = null
+	for viewer in [article_viewer, email_viewer, chat_viewer, two_page_viewer, doc_viewer]:
+		if viewer != null and viewer.is_active:
+			parent = viewer
+			break
+	if parent == null or target.get_extension().to_lower() not in ["png", "jpg", "jpeg", "bmp", "webp", "tga"]:
+		return false
+	var path: String = fs.normalize_path(target if target.begins_with("/") else fs.join_path(current_path, target))
+	var node = fs.get_node_at_path(path)
+	# 不绕过权限／隐藏目录／文件密码；受限文件继续由原命令处理。
+	if node == null or node.type != "file" or fs.is_hidden_path(path) or not fs.has_clearance(path):
+		return false
+	if not fs.get_file_password_key(path).is_empty() and not fs.is_file_password_unlocked(path):
+		return false
+	_run_command("open " + path)
+	return true
 
 # ============================================================
 # ★ 内联音频播放系统
@@ -2093,13 +2434,10 @@ func _update_inline_audio_status(delta: float) -> void:
 	var cur_str: String = _format_audio_time(current_pos)
 	var tot_str: String = _format_audio_time(total_len)
 	# 构建 ASCII 进度条
-	var bar_width: int = 20
 	var progress: float = 0.0
 	if total_len > 0:
 		progress = clampf(current_pos / total_len, 0.0, 1.0)
-	var filled: int = int(progress * bar_width)
-	var empty_count: int = bar_width - filled
-	var bar: String = "█".repeat(filled) + "░".repeat(empty_count)
+	var bar: String = Typewriter.progress_cells(progress if total_len > 0.0 else -1.0, current_pos)
 	var status_icon: String = "▶" if not is_paused else "⏸"
 	var file_name: String = _inline_audio_path.get_file()
 	# 更新状态栏
@@ -2129,13 +2467,10 @@ func _update_inline_video_status(delta: float) -> void:
 	var cur_str: String = _format_audio_time(current_pos)
 	var tot_str: String = _format_audio_time(total_len)
 	# 构建 ASCII 进度条
-	var bar_width: int = 20
 	var progress: float = 0.0
 	if total_len > 0:
 		progress = clampf(current_pos / total_len, 0.0, 1.0)
-	var filled: int = int(progress * bar_width)
-	var empty_count: int = bar_width - filled
-	var bar: String = "█".repeat(filled) + "░".repeat(empty_count)
+	var bar: String = Typewriter.progress_cells(progress if total_len > 0.0 else -1.0, current_pos)
 	var status_icon: String = "▶" if not is_paused else "⏸"
 	var file_name: String = _inline_video_path.get_file()
 	# 更新状态栏（视频播放器已经有自己的状态栏，这里更新 main 的）
@@ -2289,6 +2624,11 @@ func _show_welcome_message() -> void:
 # 触发器系统动作接口（由 trigger_system.gd / typewriter.gd 调用）
 # ★ 所有效果都经过 effect_settings 强度衰减
 # ============================================================
+func trigger_warning(duration: float = 5.0) -> void:
+	if crt_shader and crt_shader.has_method("play_warning"):
+		# 关闭动态效果／光敏模式仍保留警告信息，只取消闪烁；时长不缩短。
+		crt_shader.play_warning(duration, Color.RED, effect_settings)
+
 func trigger_glitch(intensity: float = 0.5, duration: float = 1.0, preset: String = "custom") -> void:
 	if effect_settings and effect_settings.is_off():
 		return
@@ -2306,21 +2646,162 @@ func trigger_screen_off(duration: float = 2.0) -> void:
 		duration = duration * 0.5  # 温和模式缩短黑屏
 	if crt_shader and crt_shader.has_method("play_blackout"):
 		crt_shader.play_blackout(duration)
+func _advance_completed_day() -> bool:
+	if perf_mgr and perf_mgr.failed:
+		return false
+	# 未确认的归档奖励必须留在原结算日，不能跨天后重新计分。
+	if vdisc_task_mgr and vdisc_task_mgr.has_pending_archives():
+		return false
+	if not user_mgr.is_logged_in or not env_monitor or not env_task_mgr or not env_task_mgr.can_advance_day():
+		return false
+	if perf_mgr:
+		var before: Dictionary = perf_mgr.get_save_data()
+		var settled_count: int = perf_mgr.score_history.size()
+		perf_mgr.settle_day(env_monitor.current_day, false)
+		var saved: Dictionary = perf_mgr.save_progress()
+		if saved.status != "saved":
+			perf_mgr.load_save_data(before)
+			append_output("绩效结算保存失败，本日尚未推进；请重试保存或重启。\n", false)
+			return false
+		if perf_mgr.score_history.size() > settled_count:
+			perf_mgr.publish_settlement(env_monitor.current_day)
+		if perf_mgr.failed:
+			_show_performance_failure()
+			return false
+	env_monitor.advance_day()
+	env_task_mgr.reset_for_new_day()
+	env_monitor.save_env_progress()
+	env_task_mgr.save_task_progress()
+	if daily_dialogue_mgr:
+		daily_dialogue_mgr._apply_day_performance_config(env_monitor.current_day)
+	print("[Main] 已推进至第 %d 天" % env_monitor.current_day)
+	return true
+
+func _show_performance_failure() -> void:
+	_stop_session_activity()
+	output_text.text = ""
+	append_output("[color=%s]游戏失败：累计绩效缺口 %d 分，超过10分，合同已终止。[/color]\n可用 perf 查看记录、mail 阅读通知，或 logout 后创建新账号重新开始。\n" % [T.error_hex, perf_mgr.get_gap()], false)
+
+func _stop_session_activity() -> void:
+	# 保留已加载磁盘、账号与管理器，只停止旧会话的临时活动。
+	tw.clear_queue()
+	_clear_completion()
+	if comm_mgr:
+		comm_mgr._dialogue_queue.clear()
+		comm_mgr.stop_dialogue()
+		comm_mgr.reset_call_queue()
+		comm_mgr._pending_incoming_call = ""
+		if comm_mgr._call_handler:
+			comm_mgr._call_handler.cleanup()
+	if dial_mgr and dial_mgr.is_active():
+		var voices := dial_mgr._story_voice_directory.duplicate(true)
+		var modems := dial_mgr._story_modem_directory.duplicate(true)
+		dial_mgr.cleanup()
+		dial_mgr._story_voice_directory = voices
+		dial_mgr._story_modem_directory = modems
+	if daily_dialogue_mgr:
+		daily_dialogue_mgr._pending_dialogues.clear()
+	if trigger_sys:
+		trigger_sys._delayed_queue.clear()
+	if env_observation:
+		env_observation.capture_remaining = 0.0
+		env_observation.clear_traffic()
+	if radio_receiver:
+		radio_receiver.close()
+	if audio_manager:
+		audio_manager.stop_media()
+		audio_manager.stop_ambient(0.3)
+
 func trigger_reboot() -> void:
-	if effect_settings and effect_settings.is_off():
-		output_text.text = ""
-		_show_welcome_message()
+	if _hot_rebooting or _returning_to_cover:
 		return
-	if crt_shader and crt_shader.has_method("play_reboot"):
-		output_text.text = ""
-		if not crt_shader.boot_completed.is_connected(_on_reboot_boot_done):
-			crt_shader.boot_completed.connect(_on_reboot_boot_done, CONNECT_ONE_SHOT)
-		crt_shader.play_reboot()
+	if not user_mgr.is_logged_in:
+		append_output("[color=%s]请先登录，再执行热重启。[/color]\n" % T.warning_hex, false)
+		return
+	_hot_rebooting = true
+	input_field.editable = false
+	disc_mgr._auto_save()
+	var pending_dialogues: Array = daily_dialogue_mgr._pending_dialogues.duplicate(true) if daily_dialogue_mgr else []
+	var delayed_actions: Array[Dictionary] = trigger_sys._delayed_queue.duplicate(true) if trigger_sys else []
+	_stop_session_activity()
+	cmd_handler.command_history.clear()
+	cmd_handler.history_index = -1
+	output_text.text = "[color=%s]SESSION RESTART\n正在保存并重启终端会话…[/color]\n" % T.muted_hex
+	await get_tree().create_timer(0.6).timeout
+	var advanced := _advance_completed_day()
+	if advanced and daily_dialogue_mgr:
+		daily_dialogue_mgr.trigger_day_start(env_monitor.current_day)
+	elif not advanced:
+		if daily_dialogue_mgr:
+			daily_dialogue_mgr._pending_dialogues = pending_dialogues
+		if trigger_sys:
+			trigger_sys._delayed_queue = delayed_actions
+	disc_mgr._auto_save()
+	_update_status_bar()
+	output_text.text = ""
+	if _desktop_mode:
+		disc_mgr.show_desktop_welcome()
 	else:
-		output_text.text = ""
 		_show_welcome_message()
-func _on_reboot_boot_done() -> void:
-	_show_welcome_message()
+	if perf_mgr and perf_mgr.failed:
+		_show_performance_failure()
+	var message := "热重启完成，已进入 Day%d。" % env_monitor.current_day if advanced else "热重启完成；本日未推进，仍为 Day%d。" % env_monitor.current_day
+	append_output("[color=%s]%s[/color]\n" % [T.muted_hex, message], false)
+	_hot_rebooting = false
+	input_field.editable = true
+	input_field.grab_focus()
+
+func debug_prepare_day1() -> void:
+	pass
+
+func debug_prepare_day2() -> void:
+	pass
+
+func debug_prepare_day_end(day: int) -> void:
+	_stop_session_activity()
+	env_monitor.current_day = day
+	env_monitor._sync_system_clock()
+	env_monitor._init_day()
+	env_task_mgr.reset_for_new_day()
+	if env_observation:
+		env_observation.set_preview("clear")
+		env_observation.suspended = false
+	for task_id in env_task_mgr.task_definitions:
+		env_task_mgr.task_status[task_id] = "completed"
+		env_task_mgr.task_results[task_id] = {"debug": true, "day": day}
+	env_task_mgr.report_submitted = true
+	env_task_mgr.day_complete = true
+	env_task_mgr.scan_phase = EnvTaskManager.ScanPhase.COMPLETE
+	env_task_mgr.observation_data = {"debug": true, "day": day, "collected": true, "submitted": true, "notify_pending": false}
+	if daily_dialogue_mgr:
+
+		daily_dialogue_mgr._story_day = day
+		daily_dialogue_mgr._triggered_today.clear()
+		daily_dialogue_mgr._apply_day_performance_config(day)
+		# 只跳过指定日已配置的通讯，不生成剧情选择或模拟历史日奖励。
+		for dialogue_id in daily_dialogue_mgr._dialogues:
+			var data: Dictionary = daily_dialogue_mgr._dialogues[dialogue_id]
+			if int(data.get("requires_day", -1)) != day and not str(dialogue_id).begins_with("d%d_" % day):
+				continue
+			if dialogue_id not in daily_dialogue_mgr._completed_dialogues:
+				daily_dialogue_mgr._completed_dialogues.append(str(dialogue_id))
+			if comm_mgr and dialogue_id not in comm_mgr._completed_dialogues:
+				comm_mgr._completed_dialogues[str(dialogue_id)] = true
+			for key in data.get("flags_on_finish", {}):
+				daily_dialogue_mgr._story_flags[key] = data["flags_on_finish"][key]
+			if mail_sys:
+				for mail_id in data.get("required_task_mails", []):
+					daily_dialogue_mgr.deliver_scene_mail(str(mail_id))
+					for mail in mail_sys._global_inbox:
+						if str(mail.get("id", "")) == str(mail_id):
+							mail["read"] = true
+		if comm_mgr:
+			comm_mgr._save_completed()
+		if mail_sys:
+			mail_sys._save_inbox_index()
+	disc_mgr._auto_save()
+	_update_status_bar()
+
 func trigger_shake(intensity: float = 0.01, duration: float = 0.5) -> void:
 	if effect_settings:
 		intensity = effect_settings.apply_shake_intensity(intensity)

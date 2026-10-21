@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "callsign": "CORE",
+  "label": "示例气象广播",
+  "frequency": 0.25,
+  "band": "LF"
+}

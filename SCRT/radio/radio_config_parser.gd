@@ -13,13 +13,14 @@ extends RefCounted
 class RadioSignal:
 	extends RefCounted
 	var id: String = ""
-	var type: String = "morse"            # "morse" | "sstv"
+	var type: String = "morse"            # morse | sstv | audio | data
 	var frequency: float = 14.300         # MHz
 	var band: String = "HF"              # LF | HF | VHF | UHF
 	var azimuth: float = 0                  # 0-359°
 	var elevation: float = 0                # 0-90°
 	var tolerance_freq: float = 0.05      # ±MHz
 	var tolerance_dir: int = 20           # ±度
+	var omnidirectional: bool = false    # 常驻参考台可仅调频；其他信号保持原方向逻辑
 	var content_file: String = ""         # 摩斯内容文件路径 / SSTV图片路径
 	var content_text: String = ""         # 加载后的文本内容（摩斯）
 	var content_image: PackedByteArray = PackedByteArray()  # 加载后的图片数据（SSTV）
@@ -45,6 +46,19 @@ class RadioSignal:
 	var hidden: bool = false              # 隐藏电台（不在雷达/刻度条/瀑布图上标注）
 	var content_audio: PackedByteArray = PackedByteArray()  # 加载后的音频数据（audio 类型）
 	var proximity_range: float = 0.0      # 渐进感知范围（MHz），0=使用 tolerance_freq
+	var content_data: PackedByteArray = PackedByteArray() # 本台发送的实际文件分段
+	var transfer: Dictionary = {} # 分段编号、任务、校验与下一台提示
+	var audio_role: String = "generic" # generic | music | speech；speech 支持文本拼词及专属效果总线
+	var audio_gain_db: float = 0.0
+	var repeat_delay: float = 25.0 # 音频报文轮间静默；显式 0 可定义连续音乐。
+	var speech_library: String = "res://audio/radio_voice/nato_v001/"
+	var speech_letter_gap: float = 0.75
+	var speech_word_gap: float = 1.5
+	var waterfall_text: String = ""
+	var spectrum_image_file: String = ""
+	var spectrum_image: PackedByteArray = PackedByteArray()
+	var spectrum_duration: float = 8.0
+	var spectrum_repeat_gap: float = 2.0
 
 # ══════════════════════════════════════════
 #  波段定义
@@ -152,6 +166,13 @@ static func parse_signals(fs) -> Array:
 		elif s.type == "audio":
 			if fs.has_method("get_binary_data"):
 				s.content_audio = fs.get_binary_data(content_path)
+		elif s.type == "data":
+			if fs.has_method("get_binary_data"):
+				s.content_data = fs.get_binary_data(content_path)
+	for sig_item in signals:
+		var s: RadioSignal = sig_item as RadioSignal
+		if not s.spectrum_image_file.is_empty() and fs.has_method("get_binary_data"):
+			s.spectrum_image = fs.get_binary_data(fs.normalize_path(_join_path(cfg_dir, s.spectrum_image_file)))
 
 
 
@@ -214,6 +235,20 @@ static func _apply_signal_property(sig: RadioSignal, key: String, value: String)
 			sig.hidden = value.to_lower() == "true"
 		"proximity_range":
 			sig.proximity_range = value.to_float()
+		"audio_role": sig.audio_role = value
+		"audio_gain_db": sig.audio_gain_db = clampf(value.to_float(), -40.0, 6.0)
+		"repeat_delay": sig.repeat_delay = maxf(value.to_float(), 0.0)
+		"speech_library": sig.speech_library = value
+		"speech_letter_gap": sig.speech_letter_gap = clampf(value.to_float(), 0.15, 3.0)
+		"speech_word_gap": sig.speech_word_gap = clampf(value.to_float(), sig.speech_letter_gap, 6.0)
+		"content_text": sig.content_text = value
+		"waterfall_text": sig.waterfall_text = value
+		"spectrum_image_file": sig.spectrum_image_file = value
+		"spectrum_duration": sig.spectrum_duration = clampf(value.to_float(), 1.0, 60.0)
+		"spectrum_repeat_gap": sig.spectrum_repeat_gap = maxf(value.to_float(), 0.0)
+		"transfer":
+			var parsed = JSON.parse_string(value)
+			if parsed is Dictionary: sig.transfer = parsed
 
 
 
@@ -281,6 +316,13 @@ static func parse_signals_from_manifest(manifest: Dictionary, fs) -> Array:
 		elif s.type == "audio":
 			if fs.has_method("get_binary_data"):
 				s.content_audio = fs.get_binary_data(content_path)
+		elif s.type == "data":
+			if fs.has_method("get_binary_data"):
+				s.content_data = fs.get_binary_data(content_path)
+	for sig_item in signals:
+		var s: RadioSignal = sig_item as RadioSignal
+		if not s.spectrum_image_file.is_empty() and fs.has_method("get_binary_data"):
+			s.spectrum_image = fs.get_binary_data(fs.normalize_path(_join_path("/", s.spectrum_image_file)))
 
 	print("[RadioConfigParser] 从 manifest 解析完成，共 ", signals.size(), " 个信号源")
 	return signals
@@ -295,8 +337,10 @@ static func _apply_manifest_entry(sig: RadioSignal, entry: Dictionary) -> void:
 	sig.elevation = float(entry.get("elevation", 0.0))
 	sig.tolerance_freq = float(entry.get("tolerance_freq", 0.05))
 	sig.tolerance_dir = int(entry.get("tolerance_dir", 20))
+	sig.omnidirectional = bool(entry.get("omnidirectional", false))
 	sig.content_file = str(entry.get("content_file", ""))
-	sig.loop = bool(entry.get("loop", false))
+	sig.content_text = str(entry.get("content_text", ""))
+	sig.loop = bool(entry.get("loop", sig.type == "audio"))
 	sig.speed_wpm = int(entry.get("speed_wpm", 15))
 	sig.label = str(entry.get("label", ""))
 	sig.hint = str(entry.get("hint", ""))
@@ -314,6 +358,17 @@ static func _apply_manifest_entry(sig: RadioSignal, entry: Dictionary) -> void:
 	sig.repeat_count = int(entry.get("repeat_count", 2))
 	sig.hidden = bool(entry.get("hidden", false))
 	sig.proximity_range = float(entry.get("proximity_range", 0.0))
+	sig.transfer = (entry.get("transfer", {}) as Dictionary).duplicate(true)
+	sig.audio_role = str(entry.get("audio_role", "generic"))
+	sig.audio_gain_db = clampf(float(entry.get("audio_gain_db", 0.0)), -40.0, 6.0)
+	sig.repeat_delay = maxf(float(entry.get("repeat_delay", 25.0)), 0.0)
+	sig.speech_library = str(entry.get("speech_library", "res://audio/radio_voice/nato_v001/"))
+	sig.speech_letter_gap = clampf(float(entry.get("speech_letter_gap", 0.75)), 0.15, 3.0)
+	sig.speech_word_gap = clampf(float(entry.get("speech_word_gap", 1.5)), sig.speech_letter_gap, 6.0)
+	sig.waterfall_text = str(entry.get("waterfall_text", ""))
+	sig.spectrum_image_file = str(entry.get("spectrum_image_file", ""))
+	sig.spectrum_duration = clampf(float(entry.get("spectrum_duration", 8.0)), 1.0, 60.0)
+	sig.spectrum_repeat_gap = maxf(float(entry.get("spectrum_repeat_gap", 2.0)), 0.0)
 
 
 	

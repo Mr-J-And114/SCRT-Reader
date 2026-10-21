@@ -354,6 +354,17 @@ static func get_pending_theme() -> String:
 # 刷新所有 UI + Shader
 # ============================================================
 static func _refresh_all_ui(main_node: Node) -> void:
+	var previous_palette: Dictionary = main_node.theme.get_meta("terminal_palette", {}) if main_node.theme != null else {}
+	UIManager.apply_terminal_theme(main_node, main_node.input_field.get_theme_font_size("font_size"))
+	UIManager.refresh_terminal_tree(main_node, previous_palette)
+	for name in ["doc_viewer", "article_viewer", "chat_viewer", "email_viewer", "two_page_viewer", "explore_viewer", "decode_viewer", "image_viewer", "video_player_viewer", "radio_receiver", "env_viewer", "camera_viewer", "oscilloscope"]:
+		if name in main_node and main_node.get(name) != null:
+			var viewer = main_node.get(name)
+			viewer.T = current
+			if viewer.has_method("_update_colors"):
+				viewer._update_colors()
+	if main_node.comm_mgr != null and main_node.comm_mgr._ui != null:
+		main_node.comm_mgr._ui._T = current
 	# 刷新各模块的 T 引用
 	if main_node.cmd_handler != null:
 		main_node.cmd_handler.T = current
@@ -363,6 +374,8 @@ static func _refresh_all_ui(main_node: Node) -> void:
 		main_node.user_mgr.T = current
 	if main_node.crtml != null:
 		main_node.crtml.T = current
+	if "latex_renderer" in main_node and main_node.latex_renderer != null:
+		main_node.latex_renderer.set_default_color(current.primary)
 	if main_node.tw != null:
 		main_node.tw.T = current
 	if main_node.decode_viewer != null:

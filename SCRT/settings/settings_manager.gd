@@ -5,6 +5,7 @@
 # ============================================================
 class_name SettingsManager
 extends RefCounted
+const StartupSettings := preload("res://settings/startup_settings.gd")
 
 # ============================================================
 # 信号
@@ -62,7 +63,7 @@ func setup(main_ref, fs: FileSystem, theme, save_root: String) -> void:
 		register_setting(def)
 
 	# 加载全局设置
-	_load_global_settings()
+	_load_global_settings(save_root)
 
 	_initialized = true
 	print("[SettingsManager] 初始化完成，已注册 %d 个分类，%d 个设置项" % [_categories.size(), _definitions.size()])
@@ -105,6 +106,11 @@ func register_setting(def: Dictionary) -> void:
 ## 注册 apply 回调（由各模块在初始化后调用）
 func register_apply(key: String, callback: Callable) -> void:
 	_apply_callbacks[key] = callback
+
+## 各模块就绪后应用已读设置；无需修改值或重新保存用户文件。
+func apply_runtime_settings() -> void:
+	for key in _apply_callbacks:
+		_apply_callbacks[key].call(get_value(key))
 
 # ============================================================
 # 值读取
@@ -275,6 +281,8 @@ func on_user_login(username: String) -> void:
 			_apply_callbacks[key].call(user_data[key])
 		applied_count += 1
 
+	# 封面没有账号管理器，用最后在游戏内生效的设置作为下次启动的副本。
+	_save_global_settings()
 	print("[SettingsManager] 已加载用户 %s 的设置 (%d 项)" % [username, applied_count])
 
 ## 用户注销时调用：回退 user_bound 项到全局默认
@@ -841,11 +849,12 @@ func _fuzzy_find_key(input: String) -> String:
 # ============================================================
 # 持久化
 # ============================================================
-func _load_global_settings() -> void:
+func _load_global_settings(save_root: String) -> void:
 	var data: Dictionary = _storage.load_global()
 	for key in data.keys():
 		if _definitions.has(str(key)):
 			_values[str(key)] = data[key]
+	_values.merge(StartupSettings.load_values(save_root), true)
 
 func _save_current() -> void:
 	# 保存全局设置（非 user_bound 项 + 所有项的默认副本）

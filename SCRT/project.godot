@@ -10,8 +10,10 @@ config_version=5
 
 [application]
 
-config/name="SCRT-Reader"
-run/main_scene="uid://uhsux752tkeg"
+config/name="SCRT-Reader Core"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="scrt-reader-core"
+run/main_scene="res://scenes/startup.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -21,7 +23,7 @@ window/stretch/mode="canvas_items"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/agent/plugin.cfg")
+enabled=PackedStringArray()
 
 [physics]
 

@@ -68,6 +68,13 @@ var reading_history: Dictionary = {}   # sensor_id -> Array[{hour, value}]
 var _pressure_history: Array[Dictionary] = []  # [{time_sec, value}]
 
 ## 天气
+var _sensor_rng := RandomNumberGenerator.new()
+var _event_checked_day: int = -1
+var reading_sequence: int = 0
+var weather_reference_metadata: Dictionary = {}
+var weather_reference: Dictionary = {} # 未叠加本站仪器误差的共同天气基准
+var _weather_pressure_history: Array[Dictionary] = []
+
 var current_weather: String = "partly_cloudy"
 var daily_weather_base: String = ""    # 当日基础天气（由种子决定）
 
@@ -185,7 +192,9 @@ func get_save_data() -> Dictionary:
 		"sensor_status": sensor_status.duplicate(),
 		"calibration_offsets": calibration_offsets.duplicate(),
 		"current_weather": current_weather,
+		"daily_weather_base": daily_weather_base,
 		"weather_timer": _weather_timer,
+		"event_checked_day": _event_checked_day,
 		"active_events": active_events.duplicate(true),
 		"detected_anomalies": detected_anomalies.duplicate(true),
 		"current_wind_dir": current_wind_dir,
@@ -201,8 +210,12 @@ func get_save_data() -> Dictionary:
 	}
 
 func load_save_data(data: Dictionary) -> void:
+	reset_session_state()
+	_pressure_history.clear()
+	_weather_pressure_history.clear()
 	master_seed = int(data.get("master_seed", 0))
 	current_day = int(data.get("current_day", 0))
+	_event_checked_day = int(data.get("event_checked_day", current_day))
 	if data.has("sensor_status"):
 		for k in data["sensor_status"]:
 			sensor_status[k] = data["sensor_status"][k]
@@ -210,9 +223,15 @@ func load_save_data(data: Dictionary) -> void:
 		for k in data["calibration_offsets"]:
 			calibration_offsets[k] = float(data["calibration_offsets"][k])
 	current_weather = str(data.get("current_weather", "partly_cloudy"))
+	daily_weather_base = str(data.get("daily_weather_base", current_weather))
+	if not weather_patterns.has(daily_weather_base):
+		daily_weather_base = current_weather
 	_weather_timer = float(data.get("weather_timer", 0.0))
 	if data.has("active_events"):
-		active_events = data["active_events"]
+		for eid in data["active_events"]:
+			var saved_event: Dictionary = data["active_events"][eid]
+			if bool(config.get("automatic_events_enabled", false)) or bool(saved_event.get("story_managed", false)):
+				active_events[eid] = saved_event
 	if data.has("detected_anomalies"):
 		detected_anomalies.clear()
 		for a in data["detected_anomalies"]:
@@ -234,6 +253,11 @@ func load_save_data(data: Dictionary) -> void:
 		scan_focused_sectors = data["scan_focused_sectors"]
 	if data.has("env_choices"):
 		env_choices = data["env_choices"]
+	if not bool(config.get("automatic_events_enabled", false)):
+		anomaly_levels.clear()
+		anomaly_consecutive_days.clear()
+		anomaly_suppressed.clear()
+	_sensor_rng.seed = _hash_seed(master_seed, current_day + 19731)
 	# 同步系统时钟 + 重新生成当前读数
 	_sync_system_clock()
 	_regenerate_readings()
@@ -242,6 +266,7 @@ func load_save_data(data: Dictionary) -> void:
 #  新游戏/新一天 初始化
 # ══════════════════════════════════════════
 func start_new_game(seed_value: int = 0) -> void:
+	reset_session_state()
 	if seed_value == 0:
 		_rng.randomize()
 		master_seed = _rng.randi()
@@ -252,10 +277,41 @@ func start_new_game(seed_value: int = 0) -> void:
 	_update_accumulator = 0.0
 	_weather_timer = 0.0
 	_pressure_history.clear()
+	_weather_pressure_history.clear()
 	detected_anomalies.clear()
 	pending_anomalies.clear()
 	active_events.clear()
 	_init_day()
+
+func reset_session_state() -> void:
+	current_readings.clear()
+	sensor_status.clear()
+	calibration_offsets.clear()
+	reading_history.clear()
+	_init_sensors()
+	reading_sequence = 0
+	_event_checked_day = -1
+	weather_reference.clear()
+	weather_reference_metadata.clear()
+	active_events.clear()
+	detected_anomalies.clear()
+	pending_anomalies.clear()
+	anomaly_levels.clear()
+	anomaly_consecutive_days.clear()
+	anomaly_suppressed.clear()
+	sensor_state_hours.clear()
+	sensor_calibrated_this_scan.clear()
+	sector_precision_modifiers.clear()
+	derived_readings.clear()
+	env_choices.clear()
+	scan_focused_sectors.clear()
+	current_scan_mode = 1
+	current_wind_dir = 0.0
+	target_wind_dir = 0.0
+	tide_phase = 0.0
+	_update_accumulator = 0.0
+	_pressure_history.clear()
+	_weather_pressure_history.clear()
 
 func advance_day() -> void:
 	current_day += 1
@@ -263,13 +319,17 @@ func advance_day() -> void:
 	_update_accumulator = 0.0
 	_weather_timer = 0.0
 	_pressure_history.clear()
+	_weather_pressure_history.clear()
 	pending_anomalies.clear()
 	_init_day()
 	day_changed.emit(current_day)
 
 func _init_day() -> void:
+	_weather_pressure_history.clear()
+	_pressure_history.clear()
 	# 用主种子 + 天数 生成当日种子
 	_day_rng.seed = _hash_seed(master_seed, current_day)
+	_sensor_rng.seed = _hash_seed(master_seed, current_day + 19731)
 	# 生成当日天气
 	_generate_daily_weather()
 	# 生成传感器校准漂移
@@ -355,7 +415,7 @@ func _generate_daily_weather() -> void:
 func _shift_weather() -> void:
 	# 天气切换：由气压趋势驱动方向，叠加随机
 	var old: String = current_weather
-	var tendency: String = get_pressure_tendency()
+	var tendency: String = get_weather_pressure_tendency()
 	# 气压下降 → 偏向恶劣天气；上升 → 偏向好天气
 	var bad_bias: float = 0.0
 	match tendency:
@@ -411,13 +471,9 @@ func _regenerate_readings() -> void:
 		wx_mod = weather_patterns[current_weather].get("modifiers", {})
 
 	# 获取事件修正
-	var evt_mods: Dictionary = _get_event_modifiers()
+	var evt_mods: Dictionary = _get_event_modifiers("weather")
 
 	for sid in sensors.keys():
-		if sensor_status.get(sid, "online") == "offline":
-			current_readings[sid] = NAN
-			continue
-
 		var base_arr = baselines.get(sid, [])
 		if base_arr is Array and base_arr.size() >= 12:
 			var base: float = float(base_arr[month_idx])
@@ -443,11 +499,6 @@ func _regenerate_readings() -> void:
 			base = _apply_weather_modifier(sid, base, wx_mod)
 			# 事件修正
 			base = _apply_event_modifier(sid, base, evt_mods)
-			# 校准偏移
-			base += calibration_offsets.get(sid, 0.0)
-			# 传感器退化加噪
-			if sensor_status.get(sid) == "degraded":
-				base += _rng.randf_range(-2.0, 2.0)
 			# 范围钳位
 			var cfg: Dictionary = sensors.get(sid, {})
 			var range_arr = cfg.get("range", [])
@@ -469,7 +520,29 @@ func _regenerate_readings() -> void:
 	# 风向
 	current_readings["wind_dir"] = current_wind_dir
 	# ── 传感器间物理关联 ──
-	_apply_cross_sensor_correlations()
+	_apply_cross_sensor_correlations(get_weather_pressure_tendency())
+	weather_reference = current_readings.duplicate(true)
+	weather_reference_metadata = {"day": current_day, "time": get_current_hour_display(), "weather": current_weather}
+	refresh_device_readings()
+
+func refresh_device_readings() -> void:
+	# 本站局部事件与仪器偏差只影响设备读数，不回写基准天气。
+	var local_mods: Dictionary = _get_event_modifiers("local")
+	for sid in sensors.keys():
+		if sensor_status.get(sid, "online") == "offline":
+			current_readings[sid] = NAN
+			continue
+		var observed: float = _apply_event_modifier(sid, float(weather_reference.get(sid, 0.0)), local_mods, _sensor_rng)
+		observed += float(calibration_offsets.get(sid, 0.0))
+		var status: String = str(sensor_status.get(sid, "online"))
+		if status in ["degraded", "malfunction"]:
+			var cfg: Dictionary = sensors.get(sid, {})
+			var step: float = pow(10.0, -int(cfg.get("precision", 1)))
+			var amplitude: float = maxf(step, float(cfg.get("degraded_noise", float(cfg.get("calibration_drift_max", step)) * 0.5)))
+			if status == "malfunction": amplitude *= 3.0
+			observed += _sensor_rng.randf_range(-amplitude, amplitude)
+		current_readings[sid] = _clamp_sensor(sid, observed)
+	reading_sequence += 1
 	# ── 派生参数计算 ──
 	_compute_derived_readings()
 
@@ -527,14 +600,15 @@ func _apply_weather_modifier(sid: String, base: float, wx_mod: Dictionary) -> fl
 		base += float(wx_mod["air_temp_add"])
 	return base
 
-func _apply_event_modifier(sid: String, base: float, evt_mods: Dictionary) -> float:
+func _apply_event_modifier(sid: String, base: float, evt_mods: Dictionary, generator: RandomNumberGenerator = null) -> float:
+	var event_rng: RandomNumberGenerator = generator if generator != null else _rng
 	# 事件加法
 	var add_key: String = sid + "_add"
 	if evt_mods.has(add_key):
 		var val = evt_mods[add_key]
 		if val is Array and val.size() >= 2:
 			# 范围随机
-			base += _rng.randf_range(float(val[0]), float(val[1]))
+			base += event_rng.randf_range(float(val[0]), float(val[1]))
 		else:
 			base += float(val)
 	# 事件乘法
@@ -543,9 +617,13 @@ func _apply_event_modifier(sid: String, base: float, evt_mods: Dictionary) -> fl
 		base *= float(evt_mods[mult_key])
 	return base
 
-func _get_event_modifiers() -> Dictionary:
+func _get_event_modifiers(scope: String = "all") -> Dictionary:
 	var combined: Dictionary = {}
 	for eid in active_events.keys():
+		# 旧版外置配置没有新字段，三个既有自然天气事件保持兼容。
+		var is_weather: bool = bool(event_defs.get(eid, {}).get("affects_weather", eid in ["typhoon_approach", "cold_snap", "dense_fog"]))
+		if (scope == "weather" and not is_weather) or (scope == "local" and is_weather):
+			continue
 		var evt: Dictionary = active_events[eid]
 		var effects: Dictionary = evt.get("effects", {})
 		for k in effects.keys():
@@ -642,6 +720,7 @@ func _generate_calibration_drift() -> void:
 
 func reset_calibration(sensor_id: String) -> void:
 	calibration_offsets[sensor_id] = 0.0
+	sensor_state_hours[sensor_id] = 0.0
 
 # ══════════════════════════════════════════
 #  传感器故障
@@ -664,9 +743,10 @@ func _check_sensor_failures() -> void:
 				sensor_status[sid] = "online"
 
 func repair_sensor(sensor_id: String) -> bool:
-	if sensor_status.get(sensor_id, "online") != "online":
+	if sensors.has(sensor_id) and sensor_status.get(sensor_id, "online") in ["offline", "degraded", "malfunction"]:
 		sensor_status[sensor_id] = "online"
 		calibration_offsets[sensor_id] = 0.0
+		sensor_state_hours[sensor_id] = 0.0
 		return true
 	return false
 
@@ -683,6 +763,12 @@ func _check_events() -> void:
 			event_ended.emit(eid)
 	for eid in to_remove:
 		active_events.erase(eid)
+	if not bool(config.get("automatic_events_enabled", false)):
+		return
+	# 每个游戏日只抽取一次，且持久化；帧率和读档次数不增加机会。
+	if _event_checked_day == current_day:
+		return
+	_event_checked_day = current_day
 	# 检查是否触发新事件
 	var month: int = _get_current_month()
 	for eid in event_defs.keys():
@@ -711,8 +797,9 @@ func _activate_event(eid: String, edef: Dictionary) -> void:
 	}
 	active_events[eid] = evt_data
 	event_started.emit(eid, evt_data)
-	# 触发邮件（通过直接注入 temp_inbox 实现，无需 mail 文件）
-	if edef.get("triggers_mail", false) and main and main.get("mail_sys"):
+	# 只投递当前剧情已启用的环境事件邮件。
+	if edef.get("triggers_mail", false) and main and main.get("mail_sys") \
+			and main.mail_sys.is_mail_enabled("env_event_" + eid + "_day" + str(current_day)):
 		var subject: String = str(edef.get("mail_subject", "环境事件通知: " + str(edef.get("name", eid))))
 		subject = subject.replace("{name}", str(edef.get("name", "")))
 		subject = subject.replace("{kp_index}", str(_day_rng.randi_range(4, 9)))
@@ -794,8 +881,8 @@ func _check_anomalies() -> void:
 		if triggered:
 			# 检查是否已经记录过（同一天同一异常只记一次）
 			var already: bool = false
-			for pa in pending_anomalies:
-				if pa.get("anomaly_id") == aid:
+			for pa in pending_anomalies + detected_anomalies:
+				if pa.get("anomaly_id") == aid and int(pa.get("day", -1)) == current_day:
 					already = true
 					break
 			if not already:
@@ -1119,6 +1206,7 @@ func get_sensor_trend(sensor_id: String) -> String:
 		return "unknown"
 	var recent: float = float(arr[arr.size() - 1].get("value", 0))
 	var older: float = float(arr[arr.size() - 3].get("value", 0))
+	if not is_finite(recent) or not is_finite(older): return "unknown"
 	var diff: float = recent - older
 	var cfg: Dictionary = sensors.get(sensor_id, {})
 	var threshold: float = float(cfg.get("calibration_drift_max", 1.0)) * 2.0
@@ -1185,6 +1273,14 @@ func clear_story_overrides() -> void:
 func get_reading(sensor_id: String) -> float:
 	return current_readings.get(sensor_id, NAN)
 
+func get_weather_reference() -> Dictionary:
+	return weather_reference.duplicate(true)
+
+func get_weather_reference_snapshot() -> Dictionary:
+	var result: Dictionary = weather_reference_metadata.duplicate(true)
+	result["readings"] = get_weather_reference()
+	return result
+
 func get_all_readings() -> Dictionary:
 	return current_readings.duplicate()
 
@@ -1204,7 +1300,8 @@ func get_weather_name() -> String:
 	return current_weather
 
 func get_wind_direction_name() -> String:
-	var dir: float = current_wind_dir
+	var dir: float = float(current_readings.get("wind_dir", NAN))
+	if not is_finite(dir): return "数据暂缺"
 	var dirs: Array = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"]
 	var idx: int = roundi(dir / 45.0) % 8
 	return dirs[idx]
@@ -1260,7 +1357,7 @@ func _sync_system_clock() -> void:
 # ══════════════════════════════════════════
 #  传感器间物理关联
 # ══════════════════════════════════════════
-func _apply_cross_sensor_correlations() -> void:
+func _apply_cross_sensor_correlations(tendency: String) -> void:
 	## 基于已生成的读数，应用交叉物理约束
 	var pressure: float = current_readings.get("pressure", 1013.0)
 	var humidity: float = current_readings.get("humidity", 70.0)
@@ -1270,7 +1367,6 @@ func _apply_cross_sensor_correlations() -> void:
 	var visibility: float = current_readings.get("visibility", 15.0)
 
 	# 1) 气压趋势影响风速：气压快速下降 → 风速增大
-	var tendency: String = get_pressure_tendency()
 	match tendency:
 		"falling_fast":
 			current_readings["wind_speed"] = _clamp_sensor("wind_speed", wind_speed * 1.3)
@@ -1313,12 +1409,13 @@ func _compute_derived_readings() -> void:
 	var rh: float = current_readings.get("humidity", 70.0)
 	var ws: float = current_readings.get("wind_speed", 5.0)
 
-	derived_readings["dew_point"] = _calc_dew_point(t, rh)
-	derived_readings["wind_chill"] = _calc_wind_chill(t, ws)
-	derived_readings["heat_index"] = _calc_heat_index(t, rh)
-	derived_readings["feels_like"] = _calc_feels_like(t, rh, ws)
+	derived_readings["dew_point"] = _calc_dew_point(t, rh) if is_finite(t) and is_finite(rh) else NAN
+	derived_readings["wind_chill"] = _calc_wind_chill(t, ws) if is_finite(t) and is_finite(ws) else NAN
+	derived_readings["heat_index"] = _calc_heat_index(t, rh) if is_finite(t) and is_finite(rh) else NAN
+	derived_readings["feels_like"] = _calc_feels_like(t, rh, ws) if is_finite(t) and is_finite(rh) and is_finite(ws) else NAN
 	derived_readings["beaufort"] = get_beaufort_scale()
 	derived_readings["pressure_tendency"] = get_pressure_tendency()
+	derived_readings["pressure_window_minutes"] = get_pressure_history_minutes()
 	derived_readings["weather_forecast"] = get_weather_forecast()
 
 func _calc_dew_point(t: float, rh: float) -> float:
@@ -1361,7 +1458,8 @@ func _calc_feels_like(t: float, rh: float, ws: float) -> float:
 
 func get_beaufort_scale() -> int:
 	## 蒲福风力等级 (0-12)
-	var ws: float = current_readings.get("wind_speed", 0.0)
+	var ws: float = current_readings.get("wind_speed", NAN)
+	if not is_finite(ws): return -1
 	var thresholds: Array[float] = [0.5, 1.5, 3.3, 5.5, 8.0, 10.8, 13.9, 17.2, 20.7, 24.5, 28.4, 32.6]
 	for i in range(thresholds.size()):
 		if ws < thresholds[i]:
@@ -1369,18 +1467,25 @@ func get_beaufort_scale() -> int:
 	return 12
 
 func get_pressure_tendency() -> String:
+	return _calculate_pressure_tendency(_pressure_history, float(current_readings.get("pressure", NAN)))
+
+func get_weather_pressure_tendency() -> String:
+	return _calculate_pressure_tendency(_weather_pressure_history, float(weather_reference.get("pressure", NAN)))
+
+func _calculate_pressure_tendency(history: Array[Dictionary], current_p: float) -> String:
+	if not is_finite(current_p):
+		return "unknown"
 	## 3 小时气压趋势：rising_fast / rising / steady / falling / falling_fast
-	if _pressure_history.size() < 2:
+	if history.size() < 2:
 		return "steady"
 	var now_sec: float = float(Time.get_unix_time_from_system())
 	# 找到 3 小时前最接近的记录
 	var target_sec: float = now_sec - 10800.0  # 3h = 10800s
-	var oldest_val: float = _pressure_history[0].get("value", 1013.0)
-	for entry in _pressure_history:
+	var oldest_val: float = history[0].get("value", 1013.0)
+	for entry in history:
 		if float(entry.get("time_sec", 0)) >= target_sec:
 			oldest_val = float(entry.get("value", 1013.0))
 			break
-	var current_p: float = current_readings.get("pressure", 1013.0)
 	var delta_p: float = current_p - oldest_val
 	if delta_p > 3.5:
 		return "rising_fast"
@@ -1391,6 +1496,10 @@ func get_pressure_tendency() -> String:
 	elif delta_p < -1.0:
 		return "falling"
 	return "steady"
+
+func get_pressure_history_minutes() -> float:
+	if _pressure_history.is_empty(): return 0.0
+	return maxf(0.0, (float(Time.get_unix_time_from_system()) - float(_pressure_history[0].get("time_sec", 0))) / 60.0)
 
 func get_pressure_change_3h() -> float:
 	## 返回 3 小时内气压变化量 (hPa)
@@ -1406,6 +1515,8 @@ func get_pressure_change_3h() -> float:
 	return current_readings.get("pressure", 1013.0) - oldest_val
 
 func get_weather_forecast() -> String:
+	if not is_finite(float(current_readings.get("pressure", NAN))):
+		return "气压数据暂缺，无法判断趋势"
 	## 基于气压趋势的简易天气预报
 	var tendency: String = get_pressure_tendency()
 	match tendency:
@@ -1424,6 +1535,12 @@ func get_derived_readings() -> Dictionary:
 
 func _record_pressure_history() -> void:
 	## 记录气压值到 3h 滑动窗口
+	var now_ref: float = float(Time.get_unix_time_from_system())
+	var ref_p: float = float(weather_reference.get("pressure", NAN))
+	if is_finite(ref_p):
+		_weather_pressure_history.append({"time_sec": now_ref, "value": ref_p})
+	while not _weather_pressure_history.is_empty() and float(_weather_pressure_history[0].time_sec) < now_ref - 12600.0:
+		_weather_pressure_history.pop_front()
 	var p: float = current_readings.get("pressure", 1013.0)
 	if is_nan(p):
 		return
@@ -1487,17 +1604,13 @@ func _get_env_progress_path() -> String:
 	var user_dir: String = main.save_mgr.get_game_root_dir() + "saves/" + main.user_mgr.get_username() + "/"
 	return user_dir + "env_progress.json"
 
-func save_env_progress() -> void:
+func save_env_progress() -> Dictionary:
+	if main == null or main.get("user_mgr") == null or main.get("save_mgr") == null:
+		return SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)
+	if not main.user_mgr.is_logged_in:
+		return SaveManager.save_result("skipped", "no_account")
 	var path: String = _get_env_progress_path()
-	if path.is_empty():
-		return
-	var dir_path: String = path.get_base_dir()
-	if not DirAccess.dir_exists_absolute(dir_path):
-		DirAccess.make_dir_recursive_absolute(dir_path)
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		file.store_string(JSON.stringify(get_save_data(), "\t"))
-		file.close()
+	return SaveManager.write_json_checked(path, get_save_data())
 
 func load_env_progress() -> bool:
 	var path: String = _get_env_progress_path()
@@ -1520,3 +1633,15 @@ func load_env_progress() -> bool:
 	load_save_data(json.data)
 	print("[EnvMonitor] 玩家进度已加载: 第 %d 天" % current_day)
 	return true
+
+func apply_story_events(event_ids: Array) -> void:
+	# 日剧情明确列出的事件才生效；不重启读档后仍在持续的事件。
+	for eid in active_events.keys():
+		if not event_ids.has(eid):
+			active_events.erase(eid)
+	for raw_id in event_ids:
+		var eid: String = str(raw_id)
+		if not active_events.has(eid) and event_defs.has(eid):
+			_activate_event(eid, event_defs[eid])
+			active_events[eid]["story_managed"] = true
+	_regenerate_readings()

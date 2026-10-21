@@ -1,7 +1,7 @@
 class_name VoiceTuner
 extends RefCounted
 ## 编辑器调音面板。修改立即作用于角色，试听使用独立播放通道。
-const CHARACTER_IDS: Array[String] = ["ava", "kanda", "nanami"]
+var CHARACTER_IDS: Array[String] = []
 const TONES: Array[String] = ["warm", "clear", "sharp", "chime", "sine", "square", "saw", "noise"]
 var _main: Control
 var _manager
@@ -15,12 +15,16 @@ var _status: Label
 var _sliders: Dictionary = {}
 var _spins: Dictionary = {}
 var _saved: Dictionary = {}
-var _selected_id: String = "ava"
+var _selected_id: String = ""
 var _preview_token: int = 0
 
 func open(main: Control, manager) -> void:
 	_main = main
 	_manager = manager
+	CHARACTER_IDS.assign(manager.get_registry()._characters.keys())
+	if CHARACTER_IDS.is_empty():
+		return
+	_selected_id = CHARACTER_IDS[0]
 	if _root == null:
 		_build()
 	for cid in CHARACTER_IDS:

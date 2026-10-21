@@ -11,7 +11,7 @@
 #     { "time": 0.3, "action": "sound", "params": { "path": "/sfx/scare.ogg", "volume": 0.0 } },
 #     { "time": 0.5, "action": "noise_burst", "params": { "intensity": 0.9, "duration": 0.4 } },
 #     { "time": 0.8, "action": "tear", "params": { "strength": 0.12, "duration": 0.5 } },
-#     { "time": 1.5, "action": "text", "params": { "content": "[警告] 未知实体已突破收容", "color": "error" } },
+#     { "time": 1.5, "action": "text", "params": { "content": "[警告] 示例设备状态变化", "color": "error" } },
 #     { "time": 2.0, "action": "blackout", "params": { "duration": 1.0 } },
 #     { "time": 3.5, "action": "reboot" }
 #   ]
@@ -187,6 +187,9 @@ func _execute_step(step: Dictionary) -> void:
 		params = step["params"] as Dictionary
 
 	match action:
+		"warning":
+			if main and main.has_method("trigger_warning"):
+				main.trigger_warning(float(params.get("duration", 5.0)))
 		"glitch":
 			_step_glitch(params)
 		"shake":

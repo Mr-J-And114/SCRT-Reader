@@ -59,6 +59,8 @@ var _wait_label: RichTextLabel = null
 
 # ── 状态 ──
 var is_visible: bool = false
+var _terminal_spacer: Control = null
+var _overlay_layer: CanvasLayer = null
 var _collapsed: bool = true
 var _auto_collapsed: bool = false
 var _built: bool = false
@@ -74,6 +76,8 @@ var _meeting_clip: Control = null                   # 会议立绘只显示在�
 var _meeting_slot_front: Dictionary = {}           # { slot_name: char_id } 每个位置最近发言的角色
 var _meeting_tween: Tween = null
 var _presentation: PresentationOverlay = null
+var _meeting_transition: ColorRect = null
+var _meeting_transition_label: RichTextLabel = null
 
 # ── 动态状态 ──
 var _current_bar_height: float = 100.0             # 对话栏当前实际高度
@@ -113,13 +117,29 @@ func _build_ui() -> void:
 
 	# ═══ 0. 裁剪根容器 ═══
 	# _root 的底部边界 = 输入框上沿 = 消失线
-	# 开启 clip_children 使对话栏滑出底部时被裁剪
+	# 矩形裁剪保留输入消失线，不使用父节点透明度作为头像蒙版。
 	_root = Control.new()
 	_root.name = "CommUIRoot"
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	_root.clip_contents = true
 	_root.z_index = 10
-	_main.add_child(_root)
+	# 裁剪控件内部的 z_index 无法可靠跨越其他画布；通讯独立于正文画布。
+	_overlay_layer = CanvasLayer.new()
+	_overlay_layer.name = "CommOverlayLayer"
+	var crt: CanvasLayer = _main.get_node_or_null("CRTEffect") as CanvasLayer
+	_overlay_layer.layer = crt.layer - 1 if crt else 9
+	_main.add_child(_overlay_layer)
+	_overlay_layer.add_child(_root)
+	UIManager.apply_terminal_theme(_root, _main.input_field.get_theme_font_size("font_size"))
+	# 透明对话栏保留背景；用布局空间避开旧终端文字，不以黑底遮盖。
+	var input_parent: Node = _main.input_frame.get_parent()
+	if input_parent is VBoxContainer:
+		_terminal_spacer = Control.new()
+		_terminal_spacer.name = "CommTerminalSpacer"
+		_terminal_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		input_parent.add_child(_terminal_spacer)
+		input_parent.move_child(_terminal_spacer, _main.input_frame.get_index())
+		_terminal_spacer.hide()
 
 	# ═══ 0.5 演示模式幻灯片叠加层 ═══
 	if _presentation:
@@ -129,7 +149,7 @@ func _build_ui() -> void:
 	_dialog_bar = PanelContainer.new()
 	_dialog_bar.name = "CommDialogBar"
 	var bar_style := StyleBoxFlat.new()
-	bar_style.bg_color = Color(0.02, 0.02, 0.02, 0.95)
+	bar_style.bg_color = Color(_T.primary, 0.08)
 	bar_style.border_color = _T.primary.darkened(0.4) if _T else Color(0.0, 0.4, 0.0, 0.4)
 	bar_style.border_width_top = 1
 	bar_style.border_width_bottom = 0
@@ -161,8 +181,8 @@ func _build_ui() -> void:
 	_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_name_label.custom_minimum_size.y = 20
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_name_label.add_theme_font_size_override("normal_font_size", 12)
-	_name_label.add_theme_font_size_override("bold_font_size", 13)
+	_name_label.add_theme_font_size_override("normal_font_size", _main.input_field.get_theme_font_size("font_size"))
+	_name_label.add_theme_font_size_override("bold_font_size", _main.input_field.get_theme_font_size("font_size"))
 	if _T:
 		_name_label.add_theme_color_override("default_color", _T.primary)
 	UIManager._apply_bold_font(_name_label)
@@ -176,9 +196,9 @@ func _build_ui() -> void:
 	_text_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_text_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_text_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_text_label.add_theme_font_size_override("normal_font_size", 13)
+	_text_label.add_theme_font_size_override("normal_font_size", _main.input_field.get_theme_font_size("font_size"))
 	if _T:
-		_text_label.add_theme_color_override("default_color", Color.WHITE)
+		_text_label.add_theme_color_override("default_color", _T.primary)
 	UIManager._apply_bold_font(_text_label)
 	vbox.add_child(_text_label)
 
@@ -186,7 +206,7 @@ func _build_ui() -> void:
 	_continue_label = Label.new()
 	_continue_label.text = "> 继续对话"
 	_continue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_continue_label.add_theme_font_size_override("font_size", 10)
+	_continue_label.add_theme_font_size_override("font_size", maxi(12, int(_main.input_field.get_theme_font_size("font_size") * 0.85)))
 	if _T:
 		_continue_label.add_theme_color_override("font_color", _T.muted)
 	_continue_label.visible = false
@@ -198,7 +218,7 @@ func _build_ui() -> void:
 	_wait_label.bbcode_enabled = true
 	_wait_label.fit_content = true
 	_wait_label.scroll_active = false
-	_wait_label.add_theme_font_size_override("normal_font_size", 10)
+	_wait_label.add_theme_font_size_override("normal_font_size", maxi(12, int(_main.input_field.get_theme_font_size("font_size") * 0.85)))
 	if _T:
 		_wait_label.add_theme_color_override("default_color", _T.warning)
 	_wait_label.visible = false
@@ -383,6 +403,8 @@ func hide() -> void:
 	_collapsed = true
 	_auto_collapsed = false
 	is_visible = false
+	if _terminal_spacer:
+		_terminal_spacer.hide()
 	if _dialog_bar:
 		_dialog_bar.visible = false
 
@@ -395,6 +417,8 @@ func auto_collapse() -> void:
 		return
 	_collapsed = true
 	_auto_collapsed = true
+	if _terminal_spacer:
+		_terminal_spacer.hide()
 	_slide_to_collapsed()
 
 func auto_expand() -> void:
@@ -541,17 +565,17 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 	card.custom_minimum_size = CARD_SIZE
 	card.size = CARD_SIZE
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	card.clip_contents = true
 
 	var card_style := StyleBoxFlat.new()
-	card_style.bg_color = Color(0.02, 0.02, 0.02, 0.95)
+	card_style.bg_color = Color(_T.primary, 0.08)
 	var name_col: Color = character.name_color if character.name_color != Color.WHITE else (_T.primary if _T else Color.GREEN)
 	card_style.border_color = name_col.darkened(0.3)
 	card_style.set_border_width_all(1)
 	# StyleBoxFlat 的边框默认占用卡片内部空间；扩展 StyleBox 绘制范围，让描边落在卡片外侧。
 	card_style.set_expand_margin_all(1.0)
-	card_style.corner_radius_top_left = 4
-	card_style.corner_radius_top_right = 4
+	card_style.corner_radius_top_left = 0
+	card_style.corner_radius_top_right = 0
 	card_style.corner_radius_bottom_left = 0
 	card_style.corner_radius_bottom_right = 0
 	card.add_theme_stylebox_override("panel", card_style)
@@ -590,9 +614,6 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			holder.add_child(rect)
 			layer_rects[layer_name] = rect
-			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			holder.add_child(rect)
-			layer_rects[layer_name] = rect
 	else:
 		# STATIC/MINIMAL 模式：单张纹理
 		var tex_rect := TextureRect.new()
@@ -619,6 +640,17 @@ func _ensure_portrait_card(character: CommCharacter) -> void:
 	# ★ 有人物素材时隐藏卡片底部名称（避免遮挡立绘）
 	if character.sprite_mode != CommCharacter.SpriteMode.MINIMAL:
 		name_lbl.visible = false
+
+	# 外扩描边会被矩形裁剪截掉；在头像图层上方、卡片内部单独绘制细框。
+	var frame := Panel.new()
+	frame.name = "PortraitFrame"
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.z_index = 1
+	var frame_style: StyleBoxFlat = card_style.duplicate()
+	frame_style.bg_color = Color.TRANSPARENT
+	frame_style.set_expand_margin_all(0.0)
+	frame.add_theme_stylebox_override("panel", frame_style)
+	card.add_child(frame)
 
 	_root.add_child(card)
 	# ★ 应用卡片亮度（调整 CARD_BRIGHTNESS 常量来改变）
@@ -652,6 +684,18 @@ func _update_portrait_texture(card_data: Dictionary, character: CommCharacter) -
 			pass  # MINIMAL 模式
 
 func _update_layered_portrait(layer_rects: Dictionary, character: CommCharacter) -> void:
+	_apply_layered_portrait_textures(layer_rects, character)
+	# 与会议模式一致：以共同画布高度缩放，较宽身体图层居中，避免横向压缩。
+	if _portrait_cards.has(character.id) and _portrait_cards[character.id].get("layer_rects") == layer_rects:
+		for rect: TextureRect in layer_rects.values():
+			if rect.texture == null:
+				continue
+			var holder: Control = rect.get_parent() as Control
+			var width: float = holder.size.y * rect.texture.get_width() / float(rect.texture.get_height())
+			rect.size = Vector2(width, holder.size.y)
+			rect.position = Vector2((holder.size.x - width) * 0.5, 0)
+
+func _apply_layered_portrait_textures(layer_rects: Dictionary, character: CommCharacter) -> void:
 	var state: Dictionary = character.get_render_state()
 	var layers: Dictionary = state.get("layer_textures", {})
 	var mtex: Dictionary = state.get("mouth_textures", {})
@@ -671,7 +715,7 @@ func _update_layered_portrait(layer_rects: Dictionary, character: CommCharacter)
 		if rect == null:
 			continue
 		# 优先使用 animator 的有效纹理（支持服装/覆盖）
-		if has_overrides and anim:
+		if anim:
 			var effective = anim.get_effective_layer_texture(layer_name)
 			if effective == null:
 				rect.visible = false  # 图层被隐藏
@@ -874,6 +918,7 @@ func _update_root_rect() -> void:
 	if _root == null or _main == null:
 		return
 	var input_top_y: float = _get_input_top_y()
+	if _overlay_layer: _overlay_layer.transform = _main.get_global_transform()
 	_root.position = Vector2(0, 0)
 	_root.size = Vector2(_main.size.x, input_top_y)
 
@@ -896,6 +941,9 @@ func _update_positions() -> void:
 	if not _collapsed and (_slide_tween == null or not _slide_tween.is_running()):
 		_dialog_bar.position = Vector2(0, bar_y)
 	_dialog_bar.size = Vector2(bar_width, _current_bar_height)   # ★ 用动态高度
+	if _terminal_spacer:
+		_terminal_spacer.visible = is_visible and _dialog_bar.visible and not _collapsed
+		_terminal_spacer.custom_minimum_size.y = _current_bar_height + 8 if _terminal_spacer.visible else 0
 	_update_meeting_clip_rect()
 
 func _update_meeting_clip_rect() -> void:
@@ -944,6 +992,41 @@ func process(delta: float) -> void:
 # ══════════════════════════════════════════
 #  Meeting 模式 — galgame 风格大图角色展示
 # ══════════════════════════════════════════
+
+## 与通讯 UI 共用 CRT 渲染层的短过渡页，不在独立窗口里显示。
+func begin_meeting_transition() -> void:
+	_build_ui()
+	if _meeting_transition == null:
+		_meeting_transition = ColorRect.new()
+		_meeting_transition.name = "MeetingConnectionTransition"
+		_meeting_transition.color = Color.TRANSPARENT
+		_meeting_transition.mouse_filter = Control.MOUSE_FILTER_STOP
+		_meeting_transition.z_index = 50
+		_root.add_child(_meeting_transition)
+		_meeting_transition.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_meeting_transition_label = RichTextLabel.new()
+		_meeting_transition_label.bbcode_enabled = true
+		_meeting_transition_label.scroll_active = false
+		_meeting_transition_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_meeting_transition_label.add_theme_font_size_override("normal_font_size", 16)
+		_meeting_transition_label.add_theme_color_override("default_color", _T.primary if _T else Color.GREEN)
+		UIManager._apply_bold_font(_meeting_transition_label)
+		_meeting_transition.add_child(_meeting_transition_label)
+		_meeting_transition_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_meeting_transition.visible = true
+	update_meeting_transition(0.0)
+
+func update_meeting_transition(progress: float) -> void:
+	if _meeting_transition_label == null:
+		return
+	_meeting_transition_label.offset_top = _root.size.y * 0.32
+	var stage: String = "同步参与者…" if progress < 0.65 else "会议线路已建立"
+	_meeting_transition_label.text = "[center]╔══════════════════════════════════╗\n║       MULTI-PARTY COMM LINK       ║\n╚══════════════════════════════════╝\n\n正在切换多人会议\n\n" \
+		+ Typewriter.format_progress_bar(progress, "连接中") + "\n\n" + stage + "[/center]"
+
+func end_meeting_transition() -> void:
+	if _meeting_transition:
+		_meeting_transition.visible = false
 
 ## 切换显示模式: "card" (小头像卡片) | "meeting" (大图) | "presentation" (演示)
 func set_display_mode(mode: String) -> void:
@@ -1112,6 +1195,8 @@ func _layout_meeting_char(mdata: Dictionary) -> void:
 		"left": center_x = screen_w * MEETING_POS_LEFT_X
 		"right": center_x = screen_w * MEETING_POS_RIGHT_X
 		"center": center_x = screen_w * MEETING_POS_CENTER_X
+		"briefing_left": center_x = screen_w * 0.15
+		"briefing_right": center_x = screen_w * 0.36
 
 	# ★ 计算同 slot 重叠偏移
 	var overlap_offset: float = _compute_meeting_overlap_offset(str(mdata.get("character_id", "")), slot)
@@ -1329,6 +1414,9 @@ func hide_meeting_char(char_id: String) -> void:
 #  清理
 # ══════════════════════════════════════════
 func cleanup() -> void:
+	if _terminal_spacer and is_instance_valid(_terminal_spacer):
+		_terminal_spacer.queue_free()
+		_terminal_spacer = null
 	flush_history_to_disk()
 	clear_cards()
 	if _slide_tween:
@@ -1343,6 +1431,9 @@ func cleanup() -> void:
 	if _root and is_instance_valid(_root):
 		_root.queue_free()
 		_root = null
+	if _overlay_layer and is_instance_valid(_overlay_layer):
+		_overlay_layer.queue_free()
+		_overlay_layer = null
 	_dialog_bar = null
 	_name_label = null
 	_text_label = null

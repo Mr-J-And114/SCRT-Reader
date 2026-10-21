@@ -493,21 +493,8 @@ func get_binary_data(path: String) -> PackedByteArray:
 # 内置诊断文件系统（彩蛋 / 无磁盘时的回退）
 # ============================================================
 func init_test_file_system() -> void:
-	file_system = {
-		"/welcome.txt": {
-			"type": "file",
-			"content": "欢迎接入 SCP 基金会安全终端。\n当前无虚拟磁盘载入，系统运行于诊断模式。\n请将 .scp 文件放入 vdisc/ 目录后输入 scan。"
-		},
-		"/.hidden": { "type": "folder" },
-		"/.hidden/note.txt": {
-			"type": "file",
-			"content": "你找到了隐藏的诊断分区。\n\n[DATA EXPUNGED]\n\n如果你正在阅读这条消息，\n说明你的好奇心已经引起了我们的注意。\n\n不用担心，这不一定是坏事。\n\n- O5-██"
-		}
-	}
+	file_system = {"/welcome.txt": {"type": "file", "content": "Reader Core ready. Add a lawful .scp package to vdisc/ and run scan."}}
 
-# ============================================================
-# 数据重置
-# ============================================================
 func clear_all() -> void:
 	file_system.clear()
 	story_permissions.clear()

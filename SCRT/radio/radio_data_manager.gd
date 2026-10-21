@@ -84,6 +84,12 @@ func _load_signal_from_file(path: String) -> RadioConfigParser.RadioSignal:
 	var visible: bool = bool(data.get("visible", true))
 	if not visible:
 		return null
+	# 信号有效日不写回公共文件，避免不同玩家互相影响；重载也会过滤。
+	var day: int = main.env_monitor.current_day if main and main.env_monitor else 0
+	if data.has("start_day") and day < int(data["start_day"]):
+		return null
+	if data.has("end_day") and day > int(data["end_day"]):
+		return null
 
 	var sig := RadioConfigParser.RadioSignal.new()
 	sig.id = str(data.get("id", path.get_file().get_basename()))
@@ -97,6 +103,10 @@ func _load_signal_from_file(path: String) -> RadioConfigParser.RadioSignal:
 	# 从本地文件系统加载资源内容（content_file 优先于 content_text）
 	if not sig.content_file.is_empty():
 		_load_content_from_local(sig)
+	if not sig.spectrum_image_file.is_empty():
+		var image_path: String = sig.spectrum_image_file
+		if not image_path.is_absolute_path(): image_path = _radio_dir.path_join(image_path)
+		if FileAccess.file_exists(image_path): sig.spectrum_image = FileAccess.get_file_as_bytes(image_path)
 
 	return sig
 
@@ -127,6 +137,8 @@ func _load_content_from_local(sig: RadioConfigParser.RadioSignal) -> void:
 			if fa != null:
 				sig.content_audio = fa.get_buffer(fa.get_length())
 				fa.close()
+		"data":
+			sig.content_data = FileAccess.get_file_as_bytes(content_path)
 
 # ══════════════════════════════════════════
 #  写入与修改
@@ -242,9 +254,16 @@ func import_from_vdisc(manifest: Dictionary, fs, signal_ids: Array = []) -> int:
 							fa.store_buffer(sig.content_audio)
 							fa.close()
 							copied = true
+				"data":
+					if not sig.content_data.is_empty():
+						copied = RadioFileReceiver.atomic_write(_radio_dir.path_join(res_name), sig.content_data)
 
 			if copied:
 				data["content_file"] = res_name
+		if not sig.spectrum_image_file.is_empty() and not sig.spectrum_image.is_empty():
+			var image_name: String = sig.spectrum_image_file.get_file()
+			if RadioFileReceiver.atomic_write(_radio_dir.path_join(image_name), sig.spectrum_image):
+				data["spectrum_image_file"] = image_name
 
 		# 写入 JSON 定义
 		if _write_signal_json(sig.id, data):
@@ -283,6 +302,19 @@ func _signal_to_dict(sig: RadioConfigParser.RadioSignal) -> Dictionary:
 	d["repeat_count"] = sig.repeat_count
 	d["hidden"] = sig.hidden
 	d["proximity_range"] = sig.proximity_range
+	d["omnidirectional"] = sig.omnidirectional
+	d["transfer"] = sig.transfer.duplicate(true)
+	d["audio_role"] = sig.audio_role
+	d["audio_gain_db"] = sig.audio_gain_db
+	d["repeat_delay"] = sig.repeat_delay
+	d["speech_library"] = sig.speech_library
+	d["speech_letter_gap"] = sig.speech_letter_gap
+	d["speech_word_gap"] = sig.speech_word_gap
+	if sig.type == "audio" and sig.audio_role == "speech": d["content_text"] = sig.content_text
+	d["waterfall_text"] = sig.waterfall_text
+	d["spectrum_image_file"] = sig.spectrum_image_file
+	d["spectrum_duration"] = sig.spectrum_duration
+	d["spectrum_repeat_gap"] = sig.spectrum_repeat_gap
 	return d
 
 ## 自动类型解析（字符串 → 合适的类型）

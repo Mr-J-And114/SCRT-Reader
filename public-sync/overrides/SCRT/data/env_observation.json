@@ -1,0 +1,29 @@
+{
+  "capture_seconds": 1.0,
+  "map_texture": "",
+  "map_note": "虚构示例坐标",
+  "nearshore_radius_m": 1000,
+  "nearshore_grid_m": 100,
+  "sea_radius_nm": 10,
+  "sea_grid_nm": 1,
+  "contacts": [],
+  "regions": [
+    {
+      "id": "example",
+      "name": "示例测点",
+      "position": [
+        0,
+        0
+      ],
+      "position_m": [
+        0,
+        0
+      ],
+      "source": "合成配置",
+      "sensors": [
+        "air_temp"
+      ],
+      "view": "nearshore"
+    }
+  ]
+}

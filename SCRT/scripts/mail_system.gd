@@ -25,6 +25,7 @@ var _temp_inbox: Array[Dictionary] = []
 
 # ── 全局收件箱索引（从磁盘加载） ──
 var _global_inbox: Array[Dictionary] = []
+var _inbox_owner: String = ""
 
 # ── 合并视图（供列表展示用，按时间降序） ──
 var _merged_inbox: Array[Dictionary] = []
@@ -34,6 +35,7 @@ var _pending_deliveries: Array[Dictionary] = []
 
 # ── 邮件定义缓存 ──
 var _mail_defs: Dictionary = {}
+var _allowed_mail_ids: Array = []
 
 # ── 闪烁控制 ──
 var _blink_active: bool = false
@@ -41,6 +43,12 @@ var _blink_timer: float = 0.0
 
 # ── 防止重入 ──
 var _mail_busy: bool = false
+var _read_generation: int = 0
+const InboxViewer := preload("res://scripts/mail_inbox_viewer.gd")
+var inbox_viewer: Control
+var _connected_once := false
+var _reading_id := ""
+var _reading_mail := false
 
 # ── 邮件阅读后待触发的剧情对话（延迟到邮件界面关闭后，避免与查看器重叠） ──
 var _pending_mail_read: Array = []
@@ -56,9 +64,25 @@ func setup(p_main: Control, p_fs: FileSystem, p_theme: Variant) -> void:
 	main = p_main
 	fs = p_fs
 	T = p_theme
+	var policy_file := FileAccess.open("res://data/main/manifest.json", FileAccess.READ)
+	if policy_file:
+		var manifest: Variant = JSON.parse_string(policy_file.get_as_text())
+		if manifest is Dictionary:
+			_allowed_mail_ids = manifest.get("mail_policy", {}).get("allowed_ids", [])
+
+## 当前 Demo 只投递作者已安排的邮件；后续在主线清单中扩充名单。
+func is_mail_enabled(mail_id: String) -> bool:
+	return _allowed_mail_ids.is_empty() or mail_id in _allowed_mail_ids
 
 func set_trigger_system(p_trigger) -> void:
 	trigger_system = p_trigger
+
+## 剧情任务核查使用，不依赖收件箱当前排序或查看器是否打开。
+func is_mail_read(mail_id: String) -> bool:
+	for mail in _global_inbox + _temp_inbox:
+		if str(mail.get("id", "")) == mail_id and bool(mail.get("read", false)):
+			return true
+	return false
 
 # ============================================================
 # 邮箱文件夹路径
@@ -128,6 +152,20 @@ func _save_inbox_index() -> void:
 
 ## 从磁盘加载全局收件箱（登录后调用）
 func load_global_inbox() -> void:
+	var username: String = main.user_mgr.get_username() if main.user_mgr and main.user_mgr.is_logged_in else ""
+	if username != _inbox_owner:
+		_delivered_ids.clear()
+		_temp_inbox.clear()
+		_pending_deliveries.clear()
+		_pending_mail_read.clear()
+		_inbox_owner = username
+	_connected_once = false
+	_reading_id = ""
+	_reading_mail = false
+	if inbox_viewer != null:
+		inbox_viewer.close(false)
+		inbox_viewer.queue_free()
+		inbox_viewer = null
 	_global_inbox.clear()
 	var index_path: String = _get_inbox_index_path()
 	if index_path.is_empty() or not FileAccess.file_exists(index_path):
@@ -154,7 +192,7 @@ func load_global_inbox() -> void:
 		if not (item is Dictionary):
 			continue
 		var mail_id: String = str(item.get("id", ""))
-		if mail_id.is_empty():
+		if mail_id.is_empty() or not is_mail_enabled(mail_id):
 			continue
 		# 检查 .txt 文件是否存在
 		var mail_dir: String = _get_mail_dir()
@@ -190,8 +228,65 @@ func _rebuild_merged() -> void:
 		_merged_inbox.append(mail)
 	# 按投递时间降序
 	_merged_inbox.sort_custom(func(a, b):
-		return str(a.get("delivered_at", "")) > str(b.get("delivered_at", ""))
+		var a_time := str(a.get("delivered_at", ""))
+		var b_time := str(b.get("delivered_at", ""))
+		return a_time > b_time if a_time != b_time else str(a.get("id", "")) < str(b.get("id", ""))
 	)
+	if inbox_viewer != null and inbox_viewer.is_active:
+		inbox_viewer.refresh()
+
+func get_inbox_items() -> Array[Dictionary]:
+	return _merged_inbox.duplicate(true)
+
+func get_attachment_label(mail_id: String) -> String:
+	if main.vdisc_task_mgr == null:
+		return ""
+	for task_id in main.vdisc_task_mgr.definitions:
+		var definition: Dictionary = main.vdisc_task_mgr.definitions[task_id]
+		if str(definition.get("download", {}).get("mail_attachment", "")) == mail_id:
+			var status: String = main.vdisc_task_mgr.get_task_status(str(task_id))
+			return {"not_started": "未领取", "downloaded": "已领取", "submitted": "已上交", "confiscated": "已没收"}.get(status, status)
+	return ""
+
+func read_mail_id(mail_id: String) -> void:
+	_rebuild_merged()
+	for index in range(_merged_inbox.size()):
+		if str(_merged_inbox[index].get("id", "")) == mail_id:
+			await _read_mail(index + 1)
+			return
+	_mail_error("邮件不存在：" + mail_id)
+
+func _mail_error(message: String) -> void:
+	if inbox_viewer != null and inbox_viewer.is_active:
+		inbox_viewer.show_message(message)
+	else:
+		var color: String = T.error_hex if T else "#FF6666"
+		main.append_output("[color=" + color + "]" + message + "[/color]\n", false)
+
+func adjacent_mail(step: int) -> void:
+	var items: Array[Dictionary] = inbox_viewer._items if inbox_viewer != null else _merged_inbox
+	for index in range(items.size()):
+		if str(items[index].get("id", "")) == _reading_id:
+			var next_index := index + step
+			if next_index < 0 or next_index >= items.size():
+				return
+			var next_id := str(items[next_index].get("id", ""))
+			_suppress_flush = true
+			for viewer in [main.email_viewer, main.chat_viewer, main.article_viewer, main.two_page_viewer, main.doc_viewer]:
+				if viewer != null and viewer.is_active:
+					viewer.close()
+			read_mail_id(next_id)
+			_suppress_flush = false
+			return
+
+func _connect_inbox() -> void:
+	if not _connected_once:
+		var color: String = T.muted_hex if T else "#888888"
+		main.append_output("\n[color=" + color + "]Connecting to mail server...[/color]\n", false)
+		await main.tw.show_progress_bar(200, 3.0)
+		await main.get_tree().create_timer(0.2).timeout
+		_connected_once = true
+	_open_inbox_viewer()
 
 # ============================================================
 # 每帧驱动
@@ -238,6 +333,8 @@ func stop_blink() -> void:
 # 投递邮件（由触发器调用）
 # ============================================================
 func deliver_mail(mail_id: String, context_path: String = "", persistent: bool = false) -> void:
+	if not is_mail_enabled(mail_id):
+		return
 	# 已投递过的邮件不再重复投递
 	if _delivered_ids.has(mail_id):
 		return
@@ -269,6 +366,8 @@ func deliver_mail(mail_id: String, context_path: String = "", persistent: bool =
 
 
 func _do_deliver(mail_id: String, _context_path: String, persistent: bool) -> void:
+	if not is_mail_enabled(mail_id):
+		return
 	# 再次检查防止重复
 	var target: Array[Dictionary] = _global_inbox if persistent else _temp_inbox
 	for mail in target:
@@ -308,6 +407,8 @@ func _do_deliver(mail_id: String, _context_path: String, persistent: bool) -> vo
 
 ## 投递内联邮件（无需虚拟文件系统，用于主线剧情）
 func deliver_inline_mail(mail_id: String, title: String, from: String, body_text: String, persistent: bool = true) -> void:
+	if not is_mail_enabled(mail_id):
+		return
 	if _delivered_ids.has(mail_id):
 		return
 	for mail in _global_inbox:
@@ -370,6 +471,8 @@ func _load_mail_raw_content(mail_id: String) -> String:
 # 加载邮件定义信息（从虚拟文件系统的 header 解析元数据）
 # ============================================================
 func _load_mail_info(mail_id: String) -> Dictionary:
+	if not is_mail_enabled(mail_id):
+		return {}
 	if _mail_defs.has(mail_id):
 		return _mail_defs[mail_id].duplicate()
 
@@ -486,10 +589,7 @@ func handle_mail_command(args: Array) -> void:
 
 	if args.is_empty() or str(args[0]).to_lower() == "list":
 		# ★ 显示快速进度条后打开收件箱列表
-		main.append_output("\n[color=" + m + "]Connecting to mail server...[/color]\n", false)
-		await main.tw.show_progress_bar(200, 3.0)
-		await main.get_tree().create_timer(0.2).timeout
-		_open_inbox_viewer()
+		await _connect_inbox()
 		_mail_busy = false
 		return
 
@@ -497,26 +597,22 @@ func handle_mail_command(args: Array) -> void:
 	match sub:
 		"read":
 			if args.size() < 2:
-				main.append_output("\n[color=" + m + "]Connecting to mail server...[/color]\n", false)
-				await main.tw.show_progress_bar(200, 3.0)
-				await main.get_tree().create_timer(0.2).timeout
-				_open_inbox_viewer()
+				await _connect_inbox()
 				_mail_busy = false
 				return
-			var idx: int = str(args[1]).to_int()
-			if idx > 0:
-				_read_mail(idx)
+			var target := str(args[1])
+			if target.is_valid_int() and int(target) > 0:
+				await _read_mail(int(target))
+			elif not target.is_valid_int():
+				await read_mail_id(target)
 			else:
 				_open_inbox_viewer()
 		_:
 			var idx: int = sub.to_int()
 			if idx > 0:
-				_read_mail(idx)
+				await _read_mail(idx)
 			else:
-				main.append_output("\n[color=" + m + "]Connecting to mail server...[/color]\n", false)
-				await main.tw.show_progress_bar(200, 3.0)
-				await main.get_tree().create_timer(0.2).timeout
-				_open_inbox_viewer()
+				await _connect_inbox()
 	_mail_busy = false
 
 
@@ -524,100 +620,21 @@ func handle_mail_command(args: Array) -> void:
 # 打开收件箱列表（全屏 DocumentViewer）
 # ============================================================
 func _open_inbox_viewer() -> void:
-	# ★ 收件箱已打开时不重复呼出（防止快速连点/重复点击重建覆盖层）
-	if main.doc_viewer != null and main.doc_viewer.is_active:
+	if _suppress_flush:
 		return
 	_rebuild_merged()
-	var content: String = _build_inbox_page()
-	if main.doc_viewer != null:
-		var unread: int = get_unread_count()
-		var title_str: String = "INBOX"
-		if unread > 0:
-			title_str += " (" + str(unread) + " unread)"
-		var pages: Array[Dictionary] = [{"content": content}]
-		main.doc_viewer.open("mail_inbox", pages, title_str, Callable(self, "_on_inbox_closed"))
-	else:
-		main.append_output("\n" + content + "\n", false)
+	if inbox_viewer == null:
+		inbox_viewer = InboxViewer.new()
+		inbox_viewer.setup(main, self)
+	inbox_viewer.open()
 
-func _build_inbox_page() -> String:
-	var p: String = T.primary_hex if T else "#A0FFA0"
-	var m: String = T.muted_hex if T else "#888888"
-	var w: String = T.warning_hex if T else "#FFFF80"
-	var e: String = T.error_hex if T else "#FF6666"
-	var s: String = T.success_hex if T else "#80FF80"
-
-	var divider: String = "========================================================"
-
-	var lines: Array[String] = []
-	lines.append("[color=" + p + "]" + divider + "[/color]")
-	lines.append("[color=" + p + "][b]  INBOX[/b][/color]")
-	lines.append("[color=" + p + "]" + divider + "[/color]")
-	lines.append("")
-
-	var unread_count: int = get_unread_count()
-	lines.append("[color=" + m + "]  " + str(unread_count) + " unread / " + str(_merged_inbox.size()) + " total[/color]")
-	lines.append("")
-
-	if _merged_inbox.is_empty():
-		lines.append("[color=" + m + "]  (empty)[/color]")
-	else:
-		for i in range(_merged_inbox.size()):
-			var mail: Dictionary = _merged_inbox[i]
-			var idx: int = i + 1
-			var is_read: bool = bool(mail.get("read", false))
-			var title: String = str(mail.get("title", "无标题"))
-			var from: String = str(mail.get("from", "未知"))
-			var is_persistent: bool = bool(mail.get("persistent", false))
-			var priority: String = str(mail.get("priority", "normal")).to_lower()
-			var template: String = str(mail.get("template", "email")).to_lower()
-
-			# 未读标记
-			var marker: String
-			if is_read:
-				marker = "[color=" + m + "]  [/color]"
-			else:
-				marker = "[color=" + w + "] *[/color]"
-
-			# 类型标记
-			var type_tag: String
-			if is_persistent:
-				type_tag = "[color=" + s + "][G][/color]"
-			else:
-				type_tag = "[color=" + m + "][T][/color]"
-
-			# 模板标记
-			var tmpl_tag: String = "[color=" + m + "][" + template.left(4).to_upper() + "][/color]"
-
-			# 优先级标记
-			var pri_tag: String = ""
-			if priority in ["high", "urgent"]:
-				pri_tag = " [color=" + e + "][!][/color]"
-
-			var idx_str: String = str(idx).lpad(3, " ")
-			var from_str: String = from.left(12).rpad(12, " ")
-
-			# 可点击链接
-			var line_text: String = marker + " [url=cmd://mail read " + str(idx) + "][color=" + p + "]" + idx_str + "[/color] " + type_tag + " " + tmpl_tag + " " + from_str + " " + title + pri_tag + "[/url]"
-			lines.append(line_text)
-
-	lines.append("")
-	lines.append("[color=" + p + "]" + divider + "[/color]")
-	lines.append("")
-	lines.append("[color=" + m + "]  [G]=Global  [T]=Temporary  *=Unread[/color]")
-	lines.append("[color=" + m + "]  [EMAI]=Email  [DOCU]=Document  [CHAT]=Chat  [REPO]=Report[/color]")
-	lines.append("")
-	lines.append("[color=" + m + "]  Click title to read  |  [/color][color=" + p + "]Q/Esc[/color][color=" + m + "] close inbox[/color]")
-
-	return "\n".join(lines)
-
-# ============================================================
-# 阅读邮件（根据模板选择查看器）
-# ============================================================
+# 根据邮件模板打开正文。
 func _read_mail(idx: int) -> void:
+	_read_generation += 1
+	var generation: int = _read_generation
 	_rebuild_merged()
 	if idx < 1 or idx > _merged_inbox.size():
-		var err_c: String = T.error_hex if T else "#FF6666"
-		main.append_output("[color=" + err_c + "]无效的邮件编号: " + str(idx) + "[/color]\n", false)
+		_mail_error("无效的邮件编号：" + str(idx))
 		_mail_busy = false
 		return
 
@@ -626,12 +643,6 @@ func _read_mail(idx: int) -> void:
 		main.audio_manager.play_beep()
 
 	var mail: Dictionary = _merged_inbox[idx - 1]
-	# 标记为已读
-	mail["read"] = true
-	if bool(mail.get("persistent", false)):
-		_save_inbox_index()
-	_refresh_mail_icon()  # 所有邮件读取后都刷新图标和未读计数
-
 	# 获取原始内容
 	var raw_content: String = ""
 	# ★ 优先检查内联正文（程序注入的邮件使用 _body_text 字段）
@@ -648,8 +659,7 @@ func _read_mail(idx: int) -> void:
 	else:
 		raw_content = _load_mail_raw_content(str(mail.get("id", "")))
 	if raw_content.is_empty():
-		var err_c: String = T.error_hex if T else "#FF6666"
-		main.append_output("[color=" + err_c + "]Cannot read mail content.[/color]\n", false)
+		_mail_error("无法读取邮件正文；该邮件仍保持未读。")
 		_mail_busy = false
 		return
 
@@ -657,15 +667,35 @@ func _read_mail(idx: int) -> void:
 	var header_result: Dictionary = HeaderParser.parse(raw_content)
 	var header: Dictionary = header_result.get("header", {})
 	var body: String = header_result.get("body", "")
+	# 内置剧情邮件阅读采用当前正文；账号中的原始邮件文件与已读记录保留。
+	var story_mail_id: String = str(mail.get("id", ""))
+	if bool(mail.get("persistent", false)) and not story_mail_id.is_empty() and main.daily_dialogue_mgr:
+		for day in ["0", "1"]:
+			for definition in main.daily_dialogue_mgr._daily_config.get(day, {}).get("mail_deliveries", []):
+				if str(definition.get("id", "")) == story_mail_id:
+					body = str(definition.get("body", body))
+	if main.crtml != null:
+		var current_main = main
+		var ready: bool = await main.crtml.prepare_math(body, func() -> bool: return is_instance_valid(current_main) and current_main.is_inside_tree() and generation == _read_generation)
+		if not ready:
+			_mail_busy = false
+			return
+
 
 	# 变量替换
 	if main.user_mgr != null and main.user_mgr.is_logged_in:
 		body = body.replace("{username}", main.user_mgr.get_username())
 	if main.vdisc_task_mgr and main.vdisc_task_mgr.has_mail_attachment(str(mail.get("id", ""))):
-		body += "\n\n[下载 Vdisc 附件](vdisc://mail/" + str(mail.get("id", "")).uri_encode() + ")\n也可输入 mail download " + str(idx) + " 下载。"
+		var attachment_status := get_attachment_label(str(mail.get("id", "")))
+		body += "\n\n[Vdisc 附件 · " + attachment_status + "](vdisc://mail/" + str(mail.get("id", "")).uri_encode() + ")\n也可输入 mail download " + str(mail.get("id", "")) + " 下载。"
 
 	var template_name: String = str(mail.get("template", str(header.get("template", "email")))).to_lower()
 	var display_title: String = str(mail.get("title", "邮件"))
+	_reading_id = str(mail.get("id", ""))
+	_reading_mail = true
+	if inbox_viewer != null:
+		inbox_viewer.selected_id = _reading_id
+		inbox_viewer.close(false)
 
 	# 关闭当前的收件箱列表（如果还开着）
 	# ★ 抑制 flush：随后即将打开邮件查看器，若此时触发来电会与查看器重叠
@@ -674,7 +704,7 @@ func _read_mail(idx: int) -> void:
 		main.doc_viewer.close()
 
 	# ★ 退出回调：阅读完毕后返回收件箱列表
-	var return_to_inbox: Callable = Callable(self, "_open_inbox_viewer")
+	var return_to_inbox: Callable = Callable(self, "_return_to_inbox")
 
 	# 根据模板选择查看器
 	match template_name:
@@ -682,22 +712,24 @@ func _read_mail(idx: int) -> void:
 			if main.email_viewer != null:
 				main.email_viewer.open(display_title, header, body, return_to_inbox)
 			else:
-				_display_mail_in_terminal(display_title, body)
+				await _display_mail_in_terminal(display_title, body)
 		"chat":
 			if main.chat_viewer != null:
 				main.chat_viewer.open(display_title, header, body, return_to_inbox)
 			else:
-				_display_mail_in_terminal(display_title, body)
+				await _display_mail_in_terminal(display_title, body)
 		"article":
 			if main.article_viewer != null:
 				main.article_viewer.open(display_title, header, body, return_to_inbox)
 			else:
-				_display_mail_in_terminal(display_title, body)
-		"two_page", "twopage":
+				await _display_mail_in_terminal(display_title, body)
+		"two_page", "twopage", "two-page":
 			if main.two_page_viewer != null:
-				main.two_page_viewer.open(display_title, header, body, return_to_inbox)
+				var parsed_body: String = main.crtml.parse(body) if main.crtml != null else body
+				var pages: Array[Dictionary] = [{"content": parsed_body}]
+				main.two_page_viewer.open("mail_" + _reading_id, pages, display_title, return_to_inbox)
 			else:
-				_display_mail_in_terminal(display_title, body)
+				await _display_mail_in_terminal(display_title, body)
 		"document", "raw", _:
 			# 默认用 DocumentViewer
 			if main.doc_viewer != null:
@@ -708,7 +740,13 @@ func _read_mail(idx: int) -> void:
 				var pages: Array[Dictionary] = [{"content": parsed_body}]
 				main.doc_viewer.open("mail_" + str(mail.get("id", "")), pages, display_title, return_to_inbox)
 			else:
-				_display_mail_in_terminal(display_title, body)
+				await _display_mail_in_terminal(display_title, body)
+
+	# 正文成功加载并打开之后才记为已读，失败保留未读状态。
+	mail["read"] = true
+	if bool(mail.get("persistent", false)):
+		_save_inbox_index()
+	_refresh_mail_icon()
 
 	# 统一的自动保存请求（优先 DiscManager，失败则直接 SaveManager）
 	_request_auto_save()
@@ -736,6 +774,8 @@ func _flush_pending_mail_read() -> void:
 
 ## 检查任一邮件相关查看器是否打开
 func _any_mail_viewer_active() -> bool:
+	if inbox_viewer != null and inbox_viewer.is_active:
+		return true
 	if main.doc_viewer != null and main.doc_viewer.is_active:
 		return true
 	if main.email_viewer != null and main.email_viewer.is_active:
@@ -750,9 +790,15 @@ func _any_mail_viewer_active() -> bool:
 
 ## 收件箱关闭（回到主界面）时，触发挂起的邮件阅读对话
 func _on_inbox_closed() -> void:
+	_read_generation += 1
 	if _suppress_flush:
 		return
 	_flush_pending_mail_read()
+
+func _return_to_inbox() -> void:
+	_read_generation += 1
+	_reading_mail = false
+	_open_inbox_viewer()
 
 func _display_mail_in_terminal(title: String, body: String) -> void:
 	var p: String = T.primary_hex if T else "#A0FFA0"
@@ -766,7 +812,7 @@ func _display_mail_in_terminal(title: String, body: String) -> void:
 		parsed = main.crtml.parse(body)
 	if main.user_mgr != null and main.user_mgr.is_logged_in:
 		parsed = parsed.replace("{username}", main.user_mgr.get_username())
-	main.append_output(parsed + "\n", true)
+	await main.append_output(parsed + "\n", true)
 	main.append_output("\n[color=" + p + "]" + divider + "[/color]\n", false)
 	main.append_output("[color=" + m + "]END OF MESSAGE[/color]\n", false)
 
@@ -783,7 +829,10 @@ func _refresh_mail_icon() -> void:
 	if not has_unread:
 		stop_blink()
 	# 调用 _update_status_bar() 会自动设置邮件图标文本
+	var viewer_path: String = main.path_label.text
 	main._update_status_bar()
+	if _any_mail_viewer_active():
+		main.path_label.text = viewer_path
 
 
 func get_unread_count() -> int:
@@ -928,6 +977,14 @@ func clear() -> void:
 	_refresh_mail_icon()
 
 func clear_all() -> void:
+	_connected_once = false
+	_reading_id = ""
+	_reading_mail = false
+	_pending_mail_read.clear()
+	if inbox_viewer != null:
+		inbox_viewer.close(false)
+		inbox_viewer.queue_free()
+		inbox_viewer = null
 	_temp_inbox.clear()
 	_global_inbox.clear()
 	_merged_inbox.clear()

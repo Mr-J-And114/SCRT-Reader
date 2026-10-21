@@ -48,6 +48,7 @@
 # ============================================================
 class_name BootSequence
 extends RefCounted
+const BootLogoTransition := preload("res://scripts/boot_logo_transition.gd")
 
 # ── 引用 ──
 var main = null
@@ -78,6 +79,13 @@ var _progress_bar_active: bool = false
 var _progress_bar_start: float = 0.0
 var _progress_bar_duration: float = 6.0
 var _progress_bar_last_percent: int = -1
+var _progress_bar_label: String = "加载中"
+var _progress_bar_line: String = ""
+var _progress_bar_paragraph: int = 0
+var _logo_transition := BootLogoTransition.new()
+var _visual_tweens: Array[Tween] = []
+var _power_base: Dictionary = {}
+var _bbcode_buffer: String = ""
 
 # ── 关机音效 ──
 var _shutdown_sound_player: AudioStreamPlayer = null
@@ -86,6 +94,7 @@ var _shutdown_sound_player: AudioStreamPlayer = null
 var _black_overlay: ColorRect = null
 
 var skippable: bool = false  # 是否允许用户跳过
+var quit_on_shutdown: bool = true  # Main 返回封面；封面关机仍退出进程
 
 # ── 配置 ──
 var _boot_config: Dictionary = {}
@@ -104,6 +113,7 @@ func setup(p_main, p_audio_manager, p_crt_shader) -> void:
 	audio_manager = p_audio_manager
 	crt_shader = p_crt_shader
 	effect_settings = main.effect_settings if main else null
+	_logo_transition.setup(main, main.background_logo, main.output_text)
 	# 创建音频播放器
 	_boot_audio_player = AudioStreamPlayer.new()
 	_boot_audio_player.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
@@ -194,61 +204,58 @@ func _load_json_file(path: String) -> Dictionary:
 	return {}
 
 # ============================================================
-# 内置默认配置（基于 start.mp3 参数）
+# 内置默认配置（与 boot_config.json 同步）
 # ============================================================
 func _get_builtin_default() -> Dictionary:
 	return {
-		"boot": {
-			"audio": "res://audio/startup.mp3",
-			"audio_start_offset": 0.5,
-			"audio_volume": 0.8,
-			"total_duration": 20.0,
-			"audio_fade_out_start": 15.0,
-			"audio_fade_out_end": 20.0,
-			"keyframes": [
-				{"time": 0.0, "action": "screen_off"},
-				{"time": 0.1, "action": "audio_play"},
-				{"time": 0.3, "action": "fade_in", "params": {"duration": 1.5, "from": "#000000"}},
-				{"time": 0.5, "action": "background", "params": {"action": "fade_in", "duration": 2.5}},
-				{"time": 0.8, "action": "logo", "params": {"action": "blink", "blink_count": 4, "duration": 1.5}},
-				{"time": 3.5, "action": "scanlines", "params": {"intensity": 2.0}},
-				{"time": 4.0, "action": "text", "params": {"content": "BIOS POST v2.14.7", "color": "muted"}},
-				{"time": 4.5, "action": "text", "params": {"content": "MEM CHECK: 640K OK", "color": "muted"}},
-				{"time": 5.0, "action": "text", "params": {"content": "FDD 0: 3.5\" 1.44MB", "color": "muted"}},
-				{"time": 5.3, "action": "text", "params": {"content": "HDD 0: SCP-VDISC CONTROLLER", "color": "muted"}},
-				{"time": 5.5, "action": "text", "params": {"content": "", "color": "primary"}},
-				{"time": 5.8, "action": "beep"},
-				{"time": 5.8, "action": "text", "params": {"content": "POST CHECK COMPLETE - ALL SYSTEMS OK", "color": "success"}},
-				{"time": 6.0, "action": "glitch", "params": {"intensity": 0.2, "duration": 0.3}},
-				{"time": 6.5, "action": "text", "params": {"content": "", "color": "primary"}},
-				{"time": 7.0, "action": "text", "params": {"content": "LOADING SCP TERMINAL OS v4.6.1 ...", "color": "primary"}},
-				{"time": 7.5, "action": "scanlines", "params": {"intensity": 1.2}},
-				{"time": 8.0, "action": "progress_bar", "params": {"duration": 8.0, "label": "SYSTEM LOAD"}},
-				{"time": 16.5, "action": "text", "params": {"content": "INITIALIZATION COMPLETE", "color": "success"}},
-				{"time": 17.0, "action": "scanlines", "params": {"intensity": 1.0}},
-				{"time": 17.5, "action": "glitch", "params": {"intensity": 0.15, "duration": 0.2}},
-				{"time": 18.5, "action": "clear"},
-				{"time": 19.0, "action": "text", "params": {"content": "TERMINAL READY.", "color": "primary"}},
-				{"time": 20.0, "action": "complete"}
-			]
-		},
-		"shutdown": {
-			"total_duration": 5.0,
-			"keyframes": [
-				{"time": 0.0, "action": "text", "params": {"content": "\nSHUTTING DOWN TERMINAL...", "color": "muted"}},
-				{"time": 0.3, "action": "glitch", "params": {"intensity": 0.3, "duration": 0.3}},
-				{"time": 0.8, "action": "clear"},
-				{"time": 0.8, "action": "shutdown_sound"},
-				{"time": 1.0, "action": "logo", "params": {"action": "hide", "duration": 0.3}},
-				{"time": 1.0, "action": "background", "params": {"action": "hide", "duration": 0.5}},
-				{"time": 1.3, "action": "screen_collapse"},
-				{"time": 3.0, "action": "screen_off"},
-				{"time": 5.0, "action": "quit"}
-			]
-		}
+	  "boot": {
+		"audio": "res://audio/startup.mp3",
+		"audio_start_offset": 0.5,
+		"audio_volume": 0.8,
+		"total_duration": 20.0,
+		"audio_fade_out_start": 18.0,
+		"audio_fade_out_end": 20.0,
+		"keyframes": [
+		  {"action":"screen_off","time":0.0},
+		  {"action":"audio_play","time":0.1},
+		  {"params":{"duration":1.4},"action":"crt_power_on","time":0.2},
+		  {"params":{"action":"fade_in","duration":2.0},"action":"background","time":0.25},
+		  {"params":{"content":"SCRT / SCP TERMINAL","color":"primary"},"action":"text","time":1.7},
+		  {"params":{"content":"BIOS POST v2.14.7","color":"muted"},"action":"text","time":1.95},
+		  {"params":{"content":"MEM CHECK: 640K                         [ OK ]","color":"muted"},"action":"text","time":2.3},
+		  {"params":{"content":"FDD 0: 3.5\" 1.44MB                      [ OK ]","color":"muted"},"action":"text","time":2.55},
+		  {"params":{"content":"HDD 0: SCP-VDISC CONTROLLER             [ OK ]","color":"muted"},"action":"text","time":2.85},
+		  {"params":{"size":64,"duration":2.2,"prefix":"SCP IDENTITY: ","hold":1.0},"action":"logo_from_line","time":3.3},
+		  {"action":"beep","time":6.6},
+		  {"params":{"content":"POST CHECK COMPLETE - ALL SYSTEMS OK","color":"success"},"action":"text","time":6.6},
+		  {"params":{"content":"","color":"primary"},"action":"text","time":6.8},
+		  {"params":{"content":"LOADING SCP TERMINAL OS v4.6.1 ...","color":"primary"},"action":"text","time":6.8},
+		  {"params":{"label":"KERNEL LOAD","duration":2.5},"action":"progress_bar","time":7.0},
+		  {"params":{"label":"VDISC CONTROLLER","duration":2.5},"action":"progress_bar","time":9.7},
+		  {"params":{"label":"TERMINAL SERVICES","duration":3.2},"action":"progress_bar","time":12.4},
+		  {"params":{"content":"","color":"primary"},"action":"text","time":15.9},
+		  {"params":{"content":"INITIALIZATION COMPLETE","color":"success"},"action":"text","time":16.1},
+		  {"action":"beep","time":16.5},
+		  {"action":"clear","time":18.2},
+		  {"params":{"content":"TERMINAL READY.","color":"primary"},"action":"text","time":18.35},
+		  {"action":"complete","time":20.0}
+		]
+	  },
+	  "shutdown": {
+		"total_duration": 5.0,
+		"keyframes": [
+		  {"time":0.0,"action":"text","params":{"content":"\nSHUTTING DOWN TERMINAL...","color":"muted"}},
+		  {"time":0.3,"action":"glitch","params":{"intensity":0.3,"duration":0.3}},
+		  {"time":0.8,"action":"clear"},
+		  {"time":0.8,"action":"shutdown_sound"},
+		  {"time":1.0,"action":"logo","params":{"action":"hide","duration":0.3}},
+		  {"time":1.0,"action":"background","params":{"action":"hide","duration":0.5}},
+		  {"time":1.3,"action":"screen_collapse"},
+		  {"time":3.0,"action":"screen_off"},
+		  {"time":5.0,"action":"quit"}
+		]
+	  }
 	}
-
-
 
 # ============================================================
 # 启动开机序列
@@ -268,6 +275,8 @@ func play_boot() -> void:
 	_audio_started = false
 	_progress_bar_active = false
 	_progress_bar_last_percent = -1
+	_progress_bar_line = ""
+	_bbcode_buffer = ""
 	# 解析配置
 	_total_duration = float(_boot_config.get("total_duration", 20.0))
 	_audio_start_offset = float(_boot_config.get("audio_start_offset", 0.5))
@@ -283,6 +292,10 @@ func play_boot() -> void:
 			_keyframes.append(kf as Dictionary)
 	# 按时间排序
 	_keyframes.sort_custom(_sort_by_time)
+	for frame in _keyframes:
+		if frame.get("action") == "logo_from_line":
+			_logo_transition.prepare()
+			break
 	# 清屏准备
 	if main and main.output_text:
 		main.output_text.text = ""
@@ -330,6 +343,10 @@ func process(delta: float) -> void:
 	if not _active or _completed:
 		return
 	_elapsed += delta
+	_logo_transition.advance(delta)
+	# 先刷新进度，再输出到时的记录，避免覆盖新文字。
+	if _progress_bar_active:
+		_update_progress_bar()
 	# 执行到时间的关键帧
 	while _next_kf_index < _keyframes.size():
 		var kf: Dictionary = _keyframes[_next_kf_index]
@@ -342,9 +359,6 @@ func process(delta: float) -> void:
 	# 更新音频淡出
 	if _is_boot and _audio_started:
 		_update_audio_fade()
-	# 更新进度条
-	if _progress_bar_active:
-		_update_progress_bar()
 	# 超时强制完成
 	if _elapsed >= _total_duration + 2.0 and not _completed:
 		_finish()
@@ -361,6 +375,11 @@ func _execute_keyframe(kf: Dictionary) -> void:
 		"screen_on":
 			var speed: float = float(params.get("speed", 0.8))
 			_action_screen_on(speed)
+		"crt_power_on":
+			_action_crt_power_on(float(params.get("duration", 1.4)))
+		"logo_from_line":
+			_bbcode_buffer += _logo_transition.start(params)
+			main._request_scroll()
 		"audio_play":
 			_action_audio_play()
 		"text":
@@ -421,9 +440,30 @@ func _action_screen_on(speed: float) -> void:
 	# 遮罩淡出（模拟屏幕渐亮）
 	if _black_overlay and main:
 		var fade_duration: float = 1.0 / maxf(speed, 0.1)
-		var tween: Tween = main.create_tween()
+		var tween: Tween = _make_tween()
 		tween.tween_property(_black_overlay, "color", Color(0, 0, 0, 0), fade_duration)
 		tween.tween_callback(func(): _black_overlay.visible = false)
+
+func _action_crt_power_on(duration: float) -> void:
+	# 光敏／关闭模式使用平稳淡入，完整模式从中央细线展开，不增加白色闪屏。
+	if effect_settings and (effect_settings.is_off() or effect_settings.photosensitive_mode):
+		_action_fade_in(0.8, "#000000")
+		return
+	if crt_shader == null:
+		_action_fade_in(0.8, "#000000")
+		return
+	var material: ShaderMaterial = crt_shader.get_shader_material()
+	if material == null:
+		_action_fade_in(0.8, "#000000")
+		return
+	for key in ["screen_height_ratio", "boot_glow", "brightness"]:
+		_power_base[key] = material.get_shader_parameter(key)
+	_black_overlay.visible = false
+	material.set_shader_parameter("screen_height_ratio", 0.003)
+	material.set_shader_parameter("boot_glow", effect_settings.apply_intensity(0.6) if effect_settings else 0.6)
+	var tween: Tween = _make_tween().set_parallel(true)
+	tween.tween_property(material, "shader_parameter/screen_height_ratio", 1.0, maxf(0.1, duration)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(material, "shader_parameter/boot_glow", 0.0, maxf(0.1, duration)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 func _action_audio_play() -> void:
 	if _audio_started:
@@ -447,10 +487,16 @@ func _action_text(content: String, color_name: String) -> void:
 	if main == null or main.output_text == null:
 		return
 	var color_hex: String = _resolve_color(color_name)
+	if not _is_boot:
+		# 关机仍在当前游戏记录末尾追加，不能恢复开机时的旧 buffer。
+		main.output_text.append_text("[color=" + color_hex + "]" + content + "[/color]\n" if not content.is_empty() else "\n")
+		main._request_scroll()
+		return
 	if content.is_empty():
-		main.output_text.append_text("\n")
+		_bbcode_buffer += "\n"
 	else:
-		main.output_text.append_text("[color=" + color_hex + "]" + content + "[/color]\n")
+		_bbcode_buffer += "[color=" + color_hex + "]" + content + "[/color]\n"
+	main.output_text.text = _bbcode_buffer
 	main._request_scroll()
 
 
@@ -461,7 +507,7 @@ func _action_beep() -> void:
 func _action_glitch(intensity: float, duration: float) -> void:
 	# 经过效果设置衰减
 	if effect_settings:
-		if effect_settings.is_off():
+		if effect_settings.is_off() or effect_settings.photosensitive_mode:
 			return
 		intensity = effect_settings.apply_intensity(intensity)
 		duration = effect_settings.apply_duration(duration)
@@ -469,16 +515,31 @@ func _action_glitch(intensity: float, duration: float) -> void:
 		crt_shader.play_glitch(intensity, duration)
 
 func _action_scanlines(intensity: float) -> void:
+	if effect_settings:
+		if effect_settings.is_off():
+			return
+		intensity = lerpf(1.0, intensity, 0.4) if effect_settings.is_mild() else intensity
 	if crt_shader and crt_shader.has_method("set_scanline_intensity"):
 		crt_shader.set_scanline_intensity(intensity)
 
-func _action_start_progress_bar(duration: float, _label: String) -> void:
+func _action_start_progress_bar(duration: float, label: String) -> void:
 	_progress_bar_active = true
 	_progress_bar_start = _elapsed
-	_progress_bar_duration = duration
+	_progress_bar_duration = maxf(0.001, duration)
 	_progress_bar_last_percent = -1
+	_progress_bar_label = label
+	_progress_bar_line = ""
+	if not _is_boot and main and main.output_text:
+		main.output_text.append_text("\n")
+		_progress_bar_paragraph = maxi(0, main.output_text.get_paragraph_count() - 1)
+	_update_progress_bar()
 
 func _action_clear() -> void:
+	_bbcode_buffer = ""
+	_progress_bar_active = false
+	_progress_bar_line = ""
+	if _logo_transition.is_active():
+		_logo_transition.finish()
 	if main and main.output_text:
 		main.output_text.text = ""
 
@@ -543,7 +604,7 @@ func _action_quit() -> void:
 	_completed = true
 	shutdown_completed.emit()
 	# 延迟一帧后退出，确保信号处理完
-	if main:
+	if main and quit_on_shutdown:
 		main.get_tree().quit.call_deferred()
 
 
@@ -554,7 +615,7 @@ func _action_fade_in(duration: float, from_color_hex: String) -> void:
 	from_color.a = 1.0
 	_black_overlay.color = from_color
 	_black_overlay.visible = true
-	var tween: Tween = main.create_tween()
+	var tween: Tween = _make_tween()
 	tween.tween_property(_black_overlay, "color:a", 0.0, duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	tween.tween_callback(func(): _black_overlay.visible = false)
 
@@ -572,12 +633,12 @@ func _action_background(bg_action: String, bg_path: String, duration: float) -> 
 				var target_alpha: float = 0.5
 				mat.set_shader_parameter("brightness", 0.0)
 				mat.set_shader_parameter("alpha", 0.0)
-				var tween: Tween = main.create_tween().set_parallel(true)
+				var tween: Tween = _make_tween().set_parallel(true)
 				tween.tween_method(func(v: float): mat.set_shader_parameter("brightness", v), 0.0, target_brightness, duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 				tween.tween_method(func(v: float): mat.set_shader_parameter("alpha", v), 0.0, target_alpha, duration).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 			else:
 				bg_tex.modulate = Color(1, 1, 1, 0)
-				var tween: Tween = main.create_tween()
+				var tween: Tween = _make_tween()
 				tween.tween_property(bg_tex, "modulate:a", 1.0, duration)
 		"change":
 			if not bg_path.is_empty() and ResourceLoader.exists(bg_path):
@@ -588,11 +649,11 @@ func _action_background(bg_action: String, bg_path: String, duration: float) -> 
 			_action_background("fade_in", "", duration)
 		"hide":
 			if mat:
-				var tween: Tween = main.create_tween().set_parallel(true)
+				var tween: Tween = _make_tween().set_parallel(true)
 				tween.tween_method(func(v: float): mat.set_shader_parameter("brightness", v), mat.get_shader_parameter("brightness"), 0.0, duration)
 				tween.tween_method(func(v: float): mat.set_shader_parameter("alpha", v), mat.get_shader_parameter("alpha"), 0.0, duration)
 			else:
-				var tween: Tween = main.create_tween()
+				var tween: Tween = _make_tween()
 				tween.tween_property(bg_tex, "modulate:a", 0.0, duration)
 		"show":
 			if mat:
@@ -609,10 +670,8 @@ func _action_logo(logo_action: String, logo_text: String, logo_ascii: String, bl
 	if logo_node == null:
 		# 没有 logo 节点则回退到文字
 		if not logo_text.is_empty() or not logo_ascii.is_empty():
-			var p: String = _resolve_color("primary")
 			var content: String = logo_ascii if not logo_ascii.is_empty() else logo_text
-			main.output_text.append_text("[color=" + p + "]" + content + "[/color]\n")
-			main._request_scroll()
+			_action_text(content, "primary")
 		return
 	var mat: ShaderMaterial = logo_node.material as ShaderMaterial
 	match logo_action:
@@ -628,20 +687,20 @@ func _action_logo(logo_action: String, logo_text: String, logo_ascii: String, bl
 			if mat:
 				mat.set_shader_parameter("brightness", 0.0)
 				mat.set_shader_parameter("alpha", 0.0)
-				var tween: Tween = main.create_tween().set_parallel(true)
+				var tween: Tween = _make_tween().set_parallel(true)
 				tween.tween_method(func(v: float): mat.set_shader_parameter("brightness", v), 0.0, 0.0, duration)
 				tween.tween_method(func(v: float): mat.set_shader_parameter("alpha", v), 0.0, 0.4, duration).set_ease(Tween.EASE_OUT)
 			else:
 				logo_node.modulate = Color(1, 1, 1, 0)
-				var tween: Tween = main.create_tween()
+				var tween: Tween = _make_tween()
 				tween.tween_property(logo_node, "modulate:a", 1.0, duration)
 		"hide":
 			if mat:
-				var tween: Tween = main.create_tween().set_parallel(true)
+				var tween: Tween = _make_tween().set_parallel(true)
 				tween.tween_method(func(v: float): mat.set_shader_parameter("brightness", v), mat.get_shader_parameter("brightness"), 0.0, duration)
 				tween.tween_method(func(v: float): mat.set_shader_parameter("alpha", v), mat.get_shader_parameter("alpha"), 0.0, duration)
 			else:
-				var tween: Tween = main.create_tween()
+				var tween: Tween = _make_tween()
 				tween.tween_property(logo_node, "modulate:a", 0.0, duration)
 
 
@@ -661,7 +720,7 @@ func _blink_logo_node(logo_node: TextureRect, blink_count: int, total_duration: 
 	# 开始前确保不可见
 	mat.set_shader_parameter("brightness", 0.0)
 	mat.set_shader_parameter("alpha", 0.0)
-	var tween: Tween = main.create_tween()
+	var tween: Tween = _make_tween()
 	# 快速闪烁（每次闪烁约 0.15s）
 	for i in range(blink_count):
 		# 闪亮
@@ -682,7 +741,7 @@ func _blink_logo_node(logo_node: TextureRect, blink_count: int, total_duration: 
 
 ## modulate 回退方案
 func _blink_logo_modulate(logo_node: TextureRect, blink_count: int, _total_duration: float) -> void:
-	var tween: Tween = main.create_tween()
+	var tween: Tween = _make_tween()
 	logo_node.modulate = Color(1, 1, 1, 0)
 	for i in range(blink_count):
 		tween.tween_property(logo_node, "modulate:a", 1.0, 0.04)
@@ -731,18 +790,19 @@ func _update_progress_bar() -> void:
 	if percent == _progress_bar_last_percent:
 		return
 	_progress_bar_last_percent = percent
-	# 构建进度条
-	var bar_width: int = 40
-	var filled: int = int(progress * bar_width)
-	var empty_count: int = bar_width - filled
-	var bar: String = "█".repeat(filled) + "░".repeat(empty_count)
 	var p: String = T.primary_hex if T else "#00ff00"
 	var m: String = T.muted_hex if T else "#888888"
-	# 用最后一行替换的方式（追加然后覆盖）
-	# 简化实现：每5%输出一次
-	if percent % 5 == 0 or percent == 100:
-		main.output_text.append_text("[color=" + m + "][" + bar + "] [/color][color=" + p + "]" + str(percent) + "%[/color]\n")
-		main._request_scroll()
+	var current: String = Typewriter.progress_bbcode(progress, _progress_bar_label, p, m) + "\n"
+	if _is_boot:
+		_bbcode_buffer = Typewriter.replace_progress_line(_bbcode_buffer, _progress_bar_line, current)
+		main.output_text.text = _bbcode_buffer
+	else:
+		if not _progress_bar_line.is_empty():
+			main.output_text.remove_paragraph(_progress_bar_paragraph)
+			_progress_bar_paragraph = maxi(0, main.output_text.get_paragraph_count() - 1)
+		main.output_text.append_text(current)
+	_progress_bar_line = current
+	main._request_scroll()
 	if progress >= 1.0:
 		_progress_bar_active = false
 
@@ -753,6 +813,17 @@ func _finish() -> void:
 	_completed = true
 	_active = false
 	_progress_bar_active = false
+	for tween in _visual_tweens:
+		if tween.is_valid():
+			tween.kill()
+	_visual_tweens.clear()
+	if _is_boot:
+		_logo_transition.finish()
+		if crt_shader != null and not _power_base.is_empty():
+			var material: ShaderMaterial = crt_shader.get_shader_material()
+			for key in _power_base:
+				material.set_shader_parameter(key, _power_base[key])
+		_power_base.clear()
 	# 确保遮罩被隐藏（开机完成时）
 	if _is_boot and _black_overlay:
 		_black_overlay.visible = false
@@ -791,8 +862,16 @@ func _resolve_color(color_name: String) -> String:
 		"info": return T.info_hex if not T.info_hex.is_empty() else T.primary_hex
 		_: return T.primary_hex
 
+func _make_tween() -> Tween:
+	var tween: Tween = main.create_tween()
+	_visual_tweens.append(tween)
+	return tween
+
 func is_active() -> bool:
 	return _active
+
+func is_booting() -> bool:
+	return _active and _is_boot
 
 func skip(force: bool = false) -> void:
 	if not _active:

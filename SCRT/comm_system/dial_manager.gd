@@ -635,14 +635,8 @@ func _update_progress_display(progress: float) -> void:
 	var speed_display: String = "%.1f" % (_simulated_speed / 1024.0) + " KB/s"
 
 	# ★ 紧凑单行格式，每次一行
-	if percent >= 100:
-		_output("[color=" + T.success_hex + "] " + received_kb + " / " + total_kb + " KB  [100%]  TRANSFER COMPLETE[/color]\n")
-	else:
-		# 简短的进度指示：用 ▓ 和 ░ 构建 10 格迷你进度条
-		var filled: int = int(progress * 10.0)
-		var empty_count: int = 10 - filled
-		var bar: String = "▓".repeat(filled) + "░".repeat(empty_count)
-		_output("[color=" + T.primary_hex + "]  " + bar + "  " + str(percent) + "%  " + received_kb + "/" + total_kb + " KB  " + speed_display + "[/color]\n")
+	var color: String = T.success_hex if percent >= 100 else T.primary_hex
+	_output("  " + Typewriter.progress_bbcode(progress, "下载中", color, T.muted_hex) + "[color=" + color + "]  " + received_kb + "/" + total_kb + " KB  " + speed_display + "[/color]\n")
 
 
 func _enter_modem_complete() -> void:
@@ -775,25 +769,7 @@ func get_phonebook_text() -> String:
 				src_tag = " [color=" + w + "]" + entry["source"] + "[/color]"
 			lines.append("[color=" + p + "]    " + entry["number"] + "[/color]  [color=" + m + "]" + entry["label"] + "[/color]" + src_tag)
 
-	# Modem 号码
-	var modem_entries: Array[Dictionary] = []
-	for number in _system_modem_directory:
-		var info: Dictionary = _system_modem_directory[number]
-		modem_entries.append({"number": number, "label": str(info.get("label", "")), "source": ""})
-	for number in _story_modem_directory:
-		var info: Dictionary = _story_modem_directory[number]
-		modem_entries.append({"number": number, "label": str(info.get("label", "")), "source": "[DISC]"})
-
-	if not modem_entries.is_empty():
-		lines.append("")
-		lines.append("[color=" + w + "]  MODEM LINES:[/color]")
-		for entry in modem_entries:
-			var src_tag: String = ""
-			if not entry["source"].is_empty():
-				src_tag = " [color=" + w + "]" + entry["source"] + "[/color]"
-			lines.append("[color=" + p + "]    " + entry["number"] + "[/color]  [color=" + m + "]" + entry["label"] + "[/color]" + src_tag)
-
-	if voice_entries.is_empty() and modem_entries.is_empty():
+	if voice_entries.is_empty():
 		lines.append("")
 		lines.append("[color=" + m + "]  (无可用号码)[/color]")
 

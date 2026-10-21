@@ -2,7 +2,7 @@ class_name CommVoice
 extends RefCounted
 ## 逐字符短音：基础音色 + 谐波明亮度 + 音量包络。
 const SAMPLE_RATE: int = 22050
-const PUNCTUATION: String = "，。！？；：、…—,.!?;:（）()「」『』“”\""
+const PUNCTUATION: String = "，。！？；：、…—,.!?;:（）()「」『』“”‘’\"'[]{}<>《》〈〉【】〔〕·•－-–_／/\\|~～"
 const DEFAULT_CONFIG: Dictionary = {
 	"tone": "warm", "base_frequency_hz": 345.0, "pitch_variance": 0.04,
 	"char_sound_duration": 65, "brightness": 0.25, "volume_db": -13.0,

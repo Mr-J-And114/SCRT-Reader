@@ -9,25 +9,25 @@
 class_name EnvTaskManager
 extends RefCounted
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  信号
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 signal task_completed(task_id: String)
 signal task_failed(task_id: String, reason: String)
 signal all_tasks_completed()
 signal day_can_advance()
 signal special_task_added(task_id: String, task_data: Dictionary)
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  引用
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 var main = null
 var env_monitor: EnvMonitor = null
 var T = null
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  任务状态
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 
 ## 任务定义 (从 env_config.json 的 tasks 段加载)
 var task_definitions: Dictionary = {}  # task_id -> {name, description, type, ...}
@@ -65,9 +65,9 @@ var scan_results: Dictionary = {}  # 扫描仪式结果汇总
 ## ★ 剧情版本（由 main 从主线 manifest 同步；存档版本不匹配时自动重置进度）
 var save_story_version: String = ""
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  初始化
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 func setup(p_main, p_env_monitor: EnvMonitor, p_theme) -> void:
 	main = p_main
 	env_monitor = p_env_monitor
@@ -75,9 +75,9 @@ func setup(p_main, p_env_monitor: EnvMonitor, p_theme) -> void:
 	# 从 env_monitor 获取任务定义
 	task_definitions = env_monitor.task_defs.duplicate(true)
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  存档
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 func get_save_data() -> Dictionary:
 	return {
 		"observation_data": observation_data.duplicate(true),
@@ -96,6 +96,7 @@ func get_save_data() -> Dictionary:
 	}
 
 func load_save_data(data: Dictionary) -> void:
+	reset_for_new_day(false)
 	observation_data = data.get("observation_data", {}).duplicate(true)
 	observation_history = data.get("observation_history", []).duplicate(true)
 	if data.has("task_status"):
@@ -120,9 +121,9 @@ func load_save_data(data: Dictionary) -> void:
 	if data.has("scan_daily_focus_items"):
 		scan_daily_focus_items = data["scan_daily_focus_items"]
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  每日重置
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 func reset_for_new_day(preserve_history: bool = true) -> void:
 	if not preserve_history:
 		observation_history.clear()
@@ -146,9 +147,9 @@ func reset_for_new_day(preserve_history: bool = true) -> void:
 	for tid in task_definitions.keys():
 		task_status[tid] = "pending"
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  任务执行
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 
 func begin_task(task_id: String) -> Dictionary:
 	if is_task_completed(task_id):
@@ -196,7 +197,6 @@ func complete_task(task_id: String, data: Dictionary = {}) -> void:
 	task_results[task_id] = data
 	task_order_log.append(task_id)
 	task_completed.emit(task_id)
-	# ★ 绩效加分（Day0 教程日由剧情口径统一计分，不自动加分）
 	# 保留既有单次 +1 口径，但基础采集不逐项发分；特殊任务仍单独计分。
 	if main.get("perf_mgr") and env_monitor.current_day > 0 and (task_id == "daily_report" or special_tasks.has(task_id)):
 		main.perf_mgr.add_score(1, "daily")
@@ -206,9 +206,9 @@ func fail_task(task_id: String, reason: String = "") -> void:
 	task_status[task_id] = "failed"
 	task_failed.emit(task_id, reason)
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  各类任务执行逻辑
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 
 func _execute_inspection(task_id: String, tdef: Dictionary) -> Dictionary:
 	## 设备状态检查 —— 列出所有传感器的在线/离线/退化状态
@@ -277,7 +277,7 @@ func _execute_recording(task_id: String, tdef: Dictionary) -> Dictionary:
 			if base_arr is Array and base_arr.size() > month_idx:
 				var expected: float = float(base_arr[month_idx])
 				var deviation: float = absf(val - expected)
-				var threshold: float = expected * 0.3 if absf(expected) > 1 else 5.0
+				var threshold: float = absf(expected) * 0.3 if absf(expected) > 1 else 5.0
 				if deviation > threshold:
 					readings[sid]["anomalous"] = true
 					anomalies.append(sid)
@@ -374,9 +374,9 @@ func _execute_generic(task_id: String, tdef: Dictionary) -> Dictionary:
 	complete_task(task_id, result_data)
 	return {"success": true, "message": "", "data": result_data}
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  特殊任务（动态添加）
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 func add_special_task(task_id: String, task_data: Dictionary) -> void:
 	## 由事件系统或故事包动态添加特殊任务
 	special_tasks[task_id] = task_data
@@ -389,9 +389,9 @@ func remove_special_task(task_id: String) -> void:
 	task_definitions.erase(task_id)
 	task_status.erase(task_id)
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  查询接口
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 func get_task_list() -> Array[Dictionary]:
 	## 返回按 order 排序的任务列表
 	var result: Array[Dictionary] = []
@@ -463,9 +463,9 @@ func _check_all_completed() -> void:
 		if can_advance_day():
 			day_can_advance.emit()
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  ★ 扫描仪式方法
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 
 func start_scan_ritual(mode: int = 1, focused_sectors: Array = []) -> Dictionary:
 	## 初始化扫描仪式，设置扫描模式
@@ -550,9 +550,9 @@ func get_sector_info() -> Array[Dictionary]:
 		})
 	return result
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  格式化输出辅助
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 func format_task_checklist(theme_colors: Dictionary) -> String:
 	## 生成终端可用的任务清单 BBCode 文本
 	var primary: String = str(theme_colors.get("primary", "#00ff00"))
@@ -565,7 +565,7 @@ func format_task_checklist(theme_colors: Dictionary) -> String:
 	var progress: Dictionary = get_progress()
 
 	var lines: Array = []
-	lines.append("[color=%s]═══ 每日任务清单 (%s) ═══[/color]" % [primary, env_monitor.get_day_display()])
+	lines.append("[color=%s][lb] 每日任务清单 (%s) [rb][/color]" % [primary, env_monitor.get_day_display()])
 	lines.append("[color=%s]进度: %d/%d (%.0f%%)[/color]\n" % [
 		muted, progress["completed"], progress["total"], progress["percentage"]])
 
@@ -593,7 +593,7 @@ func format_task_checklist(theme_colors: Dictionary) -> String:
 
 	lines.append("")
 	if progress["can_advance"]:
-		lines.append("[color=%s]所有必要任务已完成。输入 [b]env advance[/b] 进入下一天。[/color]" % success)
+		lines.append("[color=%s]所有必要任务已完成。输入 [b]reboot[/b]，或 exit 返回封面后重新登录以进入下一天。[/color]" % success)
 	else:
 		lines.append("[color=%s]完成所有标 * 的必要任务后即可推进。[/color]" % muted)
 
@@ -609,7 +609,7 @@ func format_recording_result(data: Dictionary, theme_colors: Dictionary) -> Stri
 	var lines: Array = []
 	var readings: Dictionary = data.get("readings", {})
 
-	lines.append("[color=%s]── 数据记录完成 ──[/color]" % primary)
+	lines.append("[color=%s][lb] 数据记录完成 [rb][/color]" % primary)
 	lines.append("[color=%s]时间: %s[/color]\n" % [muted, env_monitor.get_current_hour_display()])
 
 	for sid in readings.keys():
@@ -627,7 +627,7 @@ func format_recording_result(data: Dictionary, theme_colors: Dictionary) -> Stri
 
 	var anomalies: Array = data.get("anomalies_found", [])
 	if anomalies.size() > 0:
-		lines.append("\n[color=%s]⚠ 检测到 %d 个异常读数[/color]" % [warning, anomalies.size()])
+		lines.append("\n[color=%s][lb]WARN[rb] 检测到 %d 个异常读数[/color]" % [warning, anomalies.size()])
 
 	return "\n".join(lines)
 
@@ -640,7 +640,7 @@ func format_inspection_result(data: Dictionary, theme_colors: Dictionary) -> Str
 	var error: String = str(theme_colors.get("error", "#ff4444"))
 
 	var lines: Array = []
-	lines.append("[color=%s]── 设备状态检查 ──[/color]\n" % primary)
+	lines.append("[color=%s][lb] 设备状态检查 [rb][/color]\n" % primary)
 
 	var checks: Array = data.get("sensors_checked", [])
 	for c in checks:
@@ -660,7 +660,7 @@ func format_inspection_result(data: Dictionary, theme_colors: Dictionary) -> Str
 	if issues == 0:
 		lines.append("\n[color=%s]所有传感器运行正常。[/color]" % success)
 	else:
-		lines.append("\n[color=%s]发现 %d 个问题。使用 env repair <传感器> 尝试修复。[/color]" % [warning, issues])
+		lines.append("\n[color=%s]发现 %d 个问题。打开 env details，点击项目进行维护。[/color]" % [warning, issues])
 
 	return "\n".join(lines)
 
@@ -670,7 +670,7 @@ func format_calibration_result(data: Dictionary, theme_colors: Dictionary) -> St
 	var success: String = str(theme_colors.get("success", "#00ff00"))
 
 	var lines: Array = []
-	lines.append("[color=%s]── 仪器校准 ──[/color]\n" % primary)
+	lines.append("[color=%s][lb] 仪器校准 [rb][/color]\n" % primary)
 
 	var cals: Dictionary = data.get("calibrations", {})
 	for sid in cals.keys():
@@ -690,7 +690,7 @@ func format_anomaly_result(data: Dictionary, theme_colors: Dictionary) -> String
 	var error: String = str(theme_colors.get("error", "#ff4444"))
 
 	var lines: Array = []
-	lines.append("[color=%s]── 异常检查报告 ──[/color]\n" % primary)
+	lines.append("[color=%s][lb] 异常检查报告 [rb][/color]\n" % primary)
 
 	var anomalies: Array = data.get("confirmed_anomalies", [])
 	if anomalies.size() == 0:
@@ -719,54 +719,54 @@ func format_daily_report(data: Dictionary, theme_colors: Dictionary) -> String:
 	var readings: Dictionary = data.get("readings", {})
 
 	var lines: Array = []
-	lines.append("[color=%s]╔══════════════════════════════════════════════╗[/color]" % primary)
-	lines.append("[color=%s]║  Site-██ 环境监测日报  %s              ║[/color]" % [primary, env_monitor.get_day_display()])
-	lines.append("[color=%s]║  时间: %s  天气: %s[/color]" % [primary, str(data.get("hour", "00:00")), str(data.get("weather", "未知"))])
-	lines.append("[color=%s]╠══════════════════════════════════════════════╣[/color]" % primary)
+	lines.append("[color=%s]┌──────────────────────────────────────────────┐[/color]" % primary)
+	lines.append("[color=%s]│  CORE 环境监测日报  %s              │[/color]" % [primary, env_monitor.get_day_display()])
+	lines.append("[color=%s]│  时间: %s  天气: %s[/color]" % [primary, str(data.get("hour", "00:00")), str(data.get("weather", "未知"))])
+	lines.append("[color=%s]├──────────────────────────────────────────────┤[/color]" % primary)
 
 	# 大气参数
-	lines.append("[color=%s]║ 【大气参数】[/color]" % primary)
-	lines.append("[color=%s]║  气温: %s°C  湿度: %s%%[/color]" % [muted,
+	lines.append("[color=%s]│ 【大气参数】[/color]" % primary)
+	lines.append("[color=%s]│  气温: %s°C  湿度: %s%%[/color]" % [muted,
 		_fmt_r(readings, "air_temp"), _fmt_r(readings, "humidity")])
-	lines.append("[color=%s]║  气压: %shPa  风速: %sm/s[/color]" % [muted,
+	lines.append("[color=%s]│  气压: %shPa  风速: %sm/s[/color]" % [muted,
 		_fmt_r(readings, "pressure"), _fmt_r(readings, "wind_speed")])
-	lines.append("[color=%s]║  风向: %s  能见度: %skm[/color]" % [muted,
+	lines.append("[color=%s]│  风向: %s  能见度: %skm[/color]" % [muted,
 		env_monitor.get_wind_direction_name(), _fmt_r(readings, "visibility")])
 
 	# 海洋参数
-	lines.append("[color=%s]╠══════════════════════════════════════════════╣[/color]" % primary)
-	lines.append("[color=%s]║ 【海洋参数】[/color]" % primary)
-	lines.append("[color=%s]║  海温: %s°C  潮位: %sm[/color]" % [muted,
+	lines.append("[color=%s]├──────────────────────────────────────────────┤[/color]" % primary)
+	lines.append("[color=%s]│ 【海洋参数】[/color]" % primary)
+	lines.append("[color=%s]│  海温: %s°C  潮位: %sm[/color]" % [muted,
 		_fmt_r(readings, "sea_temp"), _fmt_r(readings, "tide_level")])
-	lines.append("[color=%s]║  浪高: %sm  盐度: %sPSU[/color]" % [muted,
+	lines.append("[color=%s]│  浪高: %sm  盐度: %sPSU[/color]" % [muted,
 		_fmt_r(readings, "wave_height"), _fmt_r(readings, "salinity")])
 
 	# 地球物理
-	lines.append("[color=%s]╠══════════════════════════════════════════════╣[/color]" % primary)
-	lines.append("[color=%s]║ 【地球物理】[/color]" % primary)
-	lines.append("[color=%s]║  磁场: %snT  辐射: %sμSv/h[/color]" % [muted,
+	lines.append("[color=%s]├──────────────────────────────────────────────┤[/color]" % primary)
+	lines.append("[color=%s]│ 【地球物理】[/color]" % primary)
+	lines.append("[color=%s]│  磁场: %snT  辐射: %sμSv/h[/color]" % [muted,
 		_fmt_r(readings, "mag_field"), _fmt_r(readings, "radiation")])
 
 	# 大气成分
-	lines.append("[color=%s]╠══════════════════════════════════════════════╣[/color]" % primary)
-	lines.append("[color=%s]║ 【大气成分】[/color]" % primary)
-	lines.append("[color=%s]║  O2: %s%%  CO2: %sppm[/color]" % [muted,
+	lines.append("[color=%s]├──────────────────────────────────────────────┤[/color]" % primary)
+	lines.append("[color=%s]│ 【大气成分】[/color]" % primary)
+	lines.append("[color=%s]│  O2: %s%%  CO2: %sppm[/color]" % [muted,
 		_fmt_r(readings, "o2_concentration"), _fmt_r(readings, "co2_concentration")])
 
 	# 汇总
-	lines.append("[color=%s]╠══════════════════════════════════════════════╣[/color]" % primary)
-	lines.append("[color=%s]║  异常事件: %d  活跃事件: %d[/color]" % [muted,
+	lines.append("[color=%s]├──────────────────────────────────────────────┤[/color]" % primary)
+	lines.append("[color=%s]│  异常事件: %d  活跃事件: %d[/color]" % [muted,
 		int(data.get("anomaly_count", 0)), int(data.get("active_events", 0))])
-	lines.append("[color=%s]║  任务完成: %d/%d  操作员: %s[/color]" % [muted,
+	lines.append("[color=%s]│  任务完成: %d/%d  操作员: %s[/color]" % [muted,
 		int(data.get("tasks_completed", 0)), int(data.get("tasks_total", 0)), str(data.get("operator", ""))])
-	lines.append("[color=%s]╚══════════════════════════════════════════════╝[/color]" % primary)
+	lines.append("[color=%s]└──────────────────────────────────────────────┘[/color]" % primary)
 
 	lines.append("\n[color=%s]日报已提交至总部。[/color]" % success)
 	return "\n".join(lines)
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  工具
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 func _fmt_value(val, unit: String) -> String:
 	if val is float:
 		if absf(val) >= 1000:
@@ -795,9 +795,9 @@ func _trend_icon(trend: String) -> String:
 		_:
 			return "?"
 
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 #  玩家专属存档（跨磁盘/跨会话持久化）
-# ══════════════════════════════════════════
+# ──────────────────────────────────────────
 func _get_task_progress_path() -> String:
 	if main == null:
 		return ""
@@ -808,17 +808,13 @@ func _get_task_progress_path() -> String:
 	var user_dir: String = main.save_mgr.get_game_root_dir() + "saves/" + main.user_mgr.get_username() + "/"
 	return user_dir + "env_task_progress.json"
 
-func save_task_progress() -> void:
+func save_task_progress() -> Dictionary:
+	if main == null or main.get("user_mgr") == null or main.get("save_mgr") == null:
+		return SaveManager.save_result("failed", "dependency", ERR_UNCONFIGURED)
+	if not main.user_mgr.is_logged_in:
+		return SaveManager.save_result("skipped", "no_account")
 	var path: String = _get_task_progress_path()
-	if path.is_empty():
-		return
-	var dir_path: String = path.get_base_dir()
-	if not DirAccess.dir_exists_absolute(dir_path):
-		DirAccess.make_dir_recursive_absolute(dir_path)
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		file.store_string(JSON.stringify(get_save_data(), "\t"))
-		file.close()
+	return SaveManager.write_json_checked(path, get_save_data())
 
 func load_task_progress() -> bool:
 	var path: String = _get_task_progress_path()

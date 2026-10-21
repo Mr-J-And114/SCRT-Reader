@@ -13,7 +13,6 @@ const MIN_USERNAME_LENGTH: int = 2
 const MAX_USERNAME_LENGTH: int = 16
 const MIN_PASSWORD_LENGTH: int = 4
 const ADMIN_USERNAME: String = "Admin"
-const ADMIN_PASSWORD: String = "admin"
 
 # ============================================================
 # 引用
@@ -82,31 +81,9 @@ func ensure_mail_dir(username: String = "") -> String:
 # 管理员预设账户
 # ============================================================
 func _ensure_admin_account() -> void:
-	if not user_exists(ADMIN_USERNAME):
-		var profile: Dictionary = _create_default_profile(ADMIN_USERNAME, ADMIN_PASSWORD)
-		profile["role"] = "admin"
-		profile["title"] = "系统管理员"
-		profile["badge"] = "O5-COUNCIL"
-		profile["system_notes"] = [
-			{
-				"from": "SYSTEM",
-				"date": _get_current_datetime(),
-				"content": "管理员账户已自动创建。此账户拥有最高权限。",
-				"tone": "neutral"
-			},
-			{
-				"from": "O5-1",
-				"date": _get_current_datetime(),
-				"content": "欢迎来到基金会终端系统。请谨慎操作。",
-				"tone": "warning"
-			}
-		]
-		_save_profile(ADMIN_USERNAME, profile)
-		print("[UserManager] 管理员账户已创建: ", ADMIN_USERNAME, "/", ADMIN_PASSWORD)
+	# Public installations create accounts through the normal registration command.
+	pass
 
-# ============================================================
-# 账户查询
-# ============================================================
 func user_exists(username: String) -> bool:
 	return FileAccess.file_exists(_get_profile_path(username))
 
@@ -152,7 +129,8 @@ func register(username: String, password: String, extra: Dictionary = {}) -> Dic
 			"tone": "neutral"
 		}
 	]
-	_save_profile(username, profile)
+	if not _save_profile(username, profile):
+		return { "success": false, "message": "档案保存失败，请检查存档目录写入权限后重试。" }
 
 	current_user = profile
 	is_logged_in = true
@@ -715,12 +693,33 @@ func _validate_username(username: String) -> Dictionary:
 		return { "valid": false, "message": "用户名长度不能少于 " + str(MIN_USERNAME_LENGTH) + " 个字符。" }
 	if username.length() > MAX_USERNAME_LENGTH:
 		return { "valid": false, "message": "用户名长度不能超过 " + str(MAX_USERNAME_LENGTH) + " 个字符。" }
-	var forbidden: Array[String] = ["/", "\\", ":", "*", "?", "\"", "<", ">", "|", ".", " "]
+	# 代号仍作为目录名：开放常用文字与标点，隔离 Emoji／控制符。
+	var forbidden: Array[String] = ["/", "\\", ":", "*", "?", "\"", "<", ">", "|"]
 	for ch in forbidden:
 		if username.contains(ch):
-			return { "valid": false, "message": "用户名不能包含特殊字符: " + ch }
-	if username.begins_with("_"):
-		return { "valid": false, "message": "用户名不能以下划线开头。" }
+			return { "valid": false, "message": "用户名不能包含路径特殊字符: " + ch }
+	if username.begins_with("_") or username.begins_with("."):
+		return { "valid": false, "message": "用户名不能以下划线或句点开头。" }
+	if username.ends_with(".") or username.ends_with(" ") or username.begins_with(" "):
+		return { "valid": false, "message": "用户名首尾不能有空格，末尾不能是句点。" }
+	var device_name := username.get_slice(".", 0).strip_edges().to_upper()
+	var devices := ["CON", "PRN", "AUX", "NUL"]
+	for number in range(1, 10):
+		devices.append("COM%d" % number)
+		devices.append("LPT%d" % number)
+	for suffix in ["¹", "²", "³"]:
+		devices.append("COM" + suffix)
+		devices.append("LPT" + suffix)
+	if device_name in devices:
+		return { "valid": false, "message": "该用户名是系统保留名称，请使用其他代号。" }
+	for index in username.length():
+		var codepoint := username.unicode_at(index)
+		if codepoint == 0x20e3 or (codepoint >= 0xfe00 and codepoint <= 0xfe0f) or (codepoint >= 0xe0100 and codepoint <= 0xe01ef):
+			return { "valid": false, "message": "用户名不支持 Emoji 或特殊组合符号，请使用常用文字和标点。" }
+	var common_chars := RegEx.new()
+	common_chars.compile(r"^[\p{L}\p{N}\p{M}\p{P}\p{Sc}\p{Sm} ]+$")
+	if common_chars.search(username) == null:
+		return { "valid": false, "message": "用户名不支持 Emoji、不可见控制字符或非常见符号，请使用常用文字和标点。" }
 	# 禁止与管理员账户同名（不区分大小写）
 	if username.to_lower() == ADMIN_USERNAME.to_lower() and username != ADMIN_USERNAME:
 		return { "valid": false, "message": "该用户名为保留名称。" }
@@ -800,33 +799,27 @@ func _load_profile(username: String) -> Dictionary:
 		return json.data
 	return {}
 
-func _save_profile(username: String, profile: Dictionary) -> void:
-	var user_dir: String = _get_user_dir(username)
-	if not DirAccess.dir_exists_absolute(user_dir):
-		DirAccess.make_dir_recursive_absolute(user_dir)
+func _save_profile(username: String, profile: Dictionary) -> bool:
 	var path: String = _get_profile_path(username)
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		file.store_string(JSON.stringify(profile, "\t"))
-		file.close()
+	return SaveManager.write_json_checked(path, profile).status == "saved"
 
-func _save_current_profile() -> void:
-	if is_logged_in and current_user.has("username"):
-		_save_profile(get_username(), current_user)
+func _save_current_profile() -> Dictionary:
+	if not is_logged_in or not current_user.has("username"):
+		return SaveManager.save_result("skipped", "no_account")
+	return SaveManager.write_json_checked(_get_profile_path(get_username()), current_user)
 
 # ============================================================
 # 故事包存档（当前用户）
 # ============================================================
-func save_story_progress(story_id: String, data: Dictionary) -> void:
+func save_story_progress(story_id: String, data: Dictionary) -> Dictionary:
 	if not is_logged_in or story_id.is_empty():
-		return
+		return SaveManager.save_result("skipped", "no_account_or_story")
 	var path: String = get_save_path_for_user(get_username(), story_id)
-	var file := FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		data["username"] = get_username()
-		file.store_string(JSON.stringify(data, "\t"))
-		file.close()
+	data["username"] = get_username()
+	var result: Dictionary = SaveManager.write_json_checked(path, data)
+	if result.status == "saved":
 		print("[UserManager] 已保存故事进度: ", path)
+	return result
 
 func load_story_progress(story_id: String) -> Dictionary:
 	if not is_logged_in or story_id.is_empty():

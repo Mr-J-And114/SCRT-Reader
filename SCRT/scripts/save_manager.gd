@@ -72,6 +72,47 @@ func has_save(story_id: String) -> bool:
 # ============================================================
 # 自动保存
 # ============================================================
+static func save_result(status: String, stage: String = "", error: Error = OK) -> Dictionary:
+	return {"status": status, "stage": stage, "error": error}
+
+## 确认本次JSON的实际写入；不提供原子替换或断电保证。
+## opener仅用于局部测试接缝，正常调用始终使用FileAccess.open。
+static func write_json_checked(path: String, data: Dictionary, opener: Callable = Callable()) -> Dictionary:
+	if path.strip_edges().is_empty():
+		return save_result("failed", "path", ERR_INVALID_PARAMETER)
+	var directory: String = path.get_base_dir()
+	if not DirAccess.dir_exists_absolute(directory):
+		var directory_error: Error = DirAccess.make_dir_recursive_absolute(directory)
+		if directory_error != OK:
+			return save_result("failed", "mkdir", directory_error)
+	var text: String = JSON.stringify(data, "\t")
+	var expected: PackedByteArray = text.to_utf8_buffer()
+	var file: FileAccess = opener.call(path, FileAccess.WRITE) if opener.is_valid() else FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return save_result("failed", "open", FileAccess.get_open_error())
+	var stored: bool = file.store_string(text)
+	var write_error: Error = file.get_error()
+	if not stored or write_error != OK:
+		file.close()
+		return save_result("failed", "write", write_error)
+	file.flush()
+	var flush_error: Error = file.get_error()
+	file.close()
+	if flush_error != OK:
+		return save_result("failed", "flush", flush_error)
+	var reader: FileAccess = opener.call(path, FileAccess.READ) if opener.is_valid() else FileAccess.open(path, FileAccess.READ)
+	if reader == null:
+		return save_result("failed", "reopen", FileAccess.get_open_error())
+	var actual: PackedByteArray = reader.get_buffer(reader.get_length())
+	var read_error: Error = reader.get_error()
+	reader.close()
+	if read_error != OK:
+		return save_result("failed", "readback", read_error)
+	if actual != expected:
+		# 字节不符不一定伴随操作系统错误，不能伪造错误码。
+		return save_result("failed", "byte_mismatch")
+	return save_result("saved")
+
 func auto_save(
 		story_id: String,
 		player_clearance: int,
@@ -80,9 +121,9 @@ func auto_save(
 		unlocked_file_passwords: Array[String],
 		current_path: String,
 		extra_data: Dictionary = {}
-	) -> void:
+	) -> Dictionary:
 	if story_id.is_empty():
-		return
+		return save_result("skipped", "no_story")
 	var sid: String = _sanitize_story_id(story_id)
 
 	# 用户管理器分支（保存到用户目录）
@@ -98,11 +139,9 @@ func auto_save(
 		# 合并额外数据：触发器、邮件、无线电等
 		for key in extra_data.keys():
 			save_data[key] = extra_data[key]
-		_user_mgr.save_story_progress(sid, save_data)
-		return
+		return _user_mgr.save_story_progress(sid, save_data)
 
 	# 兜底分支（保存到本地 saves/ 目录）
-	ensure_saves_dir()
 	var save_data_local: Dictionary = {
 		"story_id": sid,
 		"player_clearance": player_clearance,
@@ -117,11 +156,10 @@ func auto_save(
 
 	var path: String = get_save_path(sid)
 	print("[SaveManager] 存档路径: " + path)
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(save_data_local, "\t"))
-		f.close()
+	var result: Dictionary = write_json_checked(path, save_data_local)
+	if result.status == "saved":
 		print("[SaveManager] 已保存: " + path)
+	return result
 
 # ============================================================
 # 加载存档，返回 Dictionary 或 null
@@ -147,8 +185,11 @@ func load_save(story_id: String) -> Variant:
 					var fb: Dictionary = json.data
 					f.close()
 					# 迁移到用户目录
-					_user_mgr.save_story_progress(sid, fb)
-					print("[SaveManager] 已迁移全局存档到用户目录。")
+					var migration: Dictionary = _user_mgr.save_story_progress(sid, fb)
+					if migration.status == "saved":
+						print("[SaveManager] 已迁移全局存档到用户目录。")
+					else:
+						push_warning("[SaveManager] 已读取全局存档，但迁移写入未完成: " + str(migration))
 					return fb
 				f.close()
 		print("[SaveManager] 用户目录与全局目录均无存档，使用默认设置")

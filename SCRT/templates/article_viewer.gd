@@ -10,6 +10,7 @@ extends RefCounted
 # ══════════════════════════════════════════
 #  引用
 # ══════════════════════════════════════════
+var _inline_images: Array[Dictionary] = []
 var main: Control = null
 var fs: FileSystem = null
 var T: Variant = null
@@ -20,8 +21,7 @@ var T: Variant = null
 var overlay: Panel = null
 var content_rtl: RichTextLabel = null
 var nav_label: RichTextLabel = null
-var progress_bar: ColorRect = null       # 顶部细进度条
-var progress_bg: ColorRect = null
+var progress_bar: Label = null           # 共用字符阅读进度
 
 # ══════════════════════════════════════════
 #  状态
@@ -85,26 +85,13 @@ func _ensure_overlay() -> void:
 	vbox.add_theme_constant_override("separation", 2)
 	margin.add_child(vbox)
 
-	# ── 进度条（顶部细线） ──
-	var progress_container := Control.new()
-	progress_container.custom_minimum_size = Vector2(0, 3)
-	progress_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_child(progress_container)
-
-	progress_bg = ColorRect.new()
-	progress_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	progress_bg.color = Color(0.15, 0.15, 0.15, 0.6)
-	progress_container.add_child(progress_bg)
-
-	progress_bar = ColorRect.new()
-	progress_bar.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	progress_bar.position = Vector2.ZERO
-	progress_bar.size = Vector2(0, 3)
-	var bar_color: Color = Color(0.4, 1.0, 0.4, 0.8)
-	if T:
-		bar_color = Color(T.primary.r, T.primary.g, T.primary.b, 0.8)
-	progress_bar.color = bar_color
-	progress_container.add_child(progress_bar)
+	# ── 与 load vdisc 一致的字符进度 ──
+	progress_bar = Label.new()
+	progress_bar.custom_minimum_size.y = 28
+	progress_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	progress_bar.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	progress_bar.text = Typewriter.format_progress_bar(0.0, "阅读进度")
+	vbox.add_child(progress_bar)
 
 	# ── 主内容 ──
 	content_rtl = RichTextLabel.new()
@@ -113,6 +100,7 @@ func _ensure_overlay() -> void:
 	content_rtl.scroll_active = true
 	content_rtl.scroll_following = false
 	content_rtl.selection_enabled = true
+	UIManager.setup_text_selection(content_rtl)
 	content_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_rtl.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -160,7 +148,8 @@ func _ensure_overlay() -> void:
 		tree.process_frame.connect(_on_process_frame)
 
 func _on_process_frame() -> void:
-	if not is_active:
+	if not is_active or not overlay.visible:
+		_last_frame_ms = Time.get_ticks_msec()
 		return
 	var now_ms: int = Time.get_ticks_msec()
 	var delta: float = max(0.001, float(now_ms - _last_frame_ms) / 1000.0) if _last_frame_ms > 0 else 0.016
@@ -196,7 +185,7 @@ func open(p_title: String, p_header: Dictionary, p_body: String, p_on_exit: Call
 	main.prompt_label.visible = false
 	_cached_output_text = main.output_text.text
 	main.output_text.text = ""
-	main.path_label.text = "READER | " + viewer_title + " | Q/Esc 退出"
+	main.path_label.text = "READER | " + viewer_title + (" | Q/Esc 返回收件箱 | Alt+←→ 上一封/下一封" if main.mail_sys != null and main.mail_sys._reading_mail else " | Q/Esc 退出")
 
 	# overlay 置顶
 	var root_control: Control = main as Control
@@ -212,6 +201,7 @@ func open(p_title: String, p_header: Dictionary, p_body: String, p_on_exit: Call
 	var parsed: String = p_body
 	if main.crtml != null:
 		parsed = main.crtml.parse(p_body)
+		_inline_images = main.crtml.get_inline_images()
 	if main.user_mgr != null and main.user_mgr.is_logged_in:
 		parsed = parsed.replace("{username}", main.user_mgr.get_username())
 
@@ -377,7 +367,7 @@ func _append_line_with_images(rtl: RichTextLabel, line: String) -> void:
 		rtl.append_text(line)
 		return
 
-	var images: Array[Dictionary] = crtml_ref.get_inline_images()
+	var images: Array[Dictionary] = _inline_images
 	var remaining: String = line
 	while true:
 		var start_pos: int = remaining.find("\u0001IMG:")
@@ -413,7 +403,7 @@ func _append_line_with_images(rtl: RichTextLabel, line: String) -> void:
 # 进度条
 # ============================================================
 func _update_progress() -> void:
-	if progress_bar == null or progress_bg == null:
+	if progress_bar == null:
 		return
 	if content_rtl == null or not is_instance_valid(content_rtl):
 		return
@@ -433,8 +423,7 @@ func _update_progress() -> void:
 	if _typing and v_scroll.value <= 0:
 		ratio = float(_line_index) / max(1.0, float(_lines.size()))
 
-	var bg_width: float = progress_bg.size.x
-	progress_bar.size.x = bg_width * ratio
+	progress_bar.text = Typewriter.format_progress_bar(ratio, "阅读进度")
 
 	_update_nav_with_progress(ratio)
 

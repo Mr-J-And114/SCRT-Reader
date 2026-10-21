@@ -366,7 +366,7 @@ func decode_base64(input_text: String) -> DecodeResult:
 	result.cipher_type = CipherType.BASE64
 	result.input_text = input_text
 
-	var clean_input: String = input_text.strip_edges()
+	var clean_input: String = input_text.replace("\r", "").replace("\n", "").replace("\t", "").replace(" ", "")
 	var decoded_bytes: PackedByteArray = Marshalls.base64_to_raw(clean_input)
 
 	if decoded_bytes.is_empty() and not clean_input.is_empty():
@@ -375,11 +375,16 @@ func decode_base64(input_text: String) -> DecodeResult:
 		return result
 
 	result.output_text = decoded_bytes.get_string_from_utf8()
+	if result.output_text.to_utf8_buffer() != decoded_bytes:
+		result.success = false
+		result.error_message = "Base64 内容不是有效的 UTF-8 文本"
+		return result
 
 	# 生成步骤：每4个字符一组
 	var step_idx: int = 0
 	var b64_chars: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 	var i: int = 0
+	var emitted_text := ""
 	while i < clean_input.length():
 		var chunk: String = ""
 		var chunk_end: int = mini(i + 4, clean_input.length())
@@ -398,17 +403,21 @@ func decode_base64(input_text: String) -> DecodeResult:
 			if val >= 0:
 				values.append(val)
 
-		var decoded_chunk: String = ""
-		if values.size() >= 2:
-			var byte1: int = (values[0] << 2) | (values[1] >> 4)
-			decoded_chunk += char(byte1)
-			if values.size() >= 3 and chunk.length() > 2 and chunk[2] != "=":
-				var byte2: int = ((values[1] & 0xF) << 4) | (values[2] >> 2)
-				decoded_chunk += char(byte2)
-			if values.size() >= 4 and chunk.length() > 3 and chunk[3] != "=":
-				var byte3: int = ((values[2] & 0x3) << 6) | values[3]
-				decoded_chunk += char(byte3)
-
+		# 四个 Base64 字符得到三个字节，可能切断 UTF-8 字符。
+		# 只展示已完整收到的文字，后续字节补齐后再输出该字符。
+		var byte_end := mini((i / 4 + 1) * 3, decoded_bytes.size())
+		var complete_end := byte_end
+		if byte_end > 0 and byte_end < decoded_bytes.size():
+			var start := byte_end - 1
+			while start > 0 and decoded_bytes[start] >= 0x80 and decoded_bytes[start] < 0xC0:
+				start -= 1
+			var lead: int = decoded_bytes[start]
+			var length := 4 if lead >= 0xF0 else (3 if lead >= 0xE0 else (2 if lead >= 0xC0 else 1))
+			if start + length > byte_end:
+				complete_end = start
+		var complete_text := decoded_bytes.slice(0, complete_end).get_string_from_utf8()
+		var decoded_chunk := complete_text.substr(emitted_text.length())
+		emitted_text = complete_text
 		step.result_char = decoded_chunk
 
 		# 二进制表示
@@ -438,16 +447,13 @@ func decode_morse(input_text: String) -> DecodeResult:
 	result.input_text = input_text
 
 	# 按空格分割摩斯码单元，/ 表示单词分隔
-	var words: PackedStringArray = input_text.strip_edges().split("/")
+	var normalized := input_text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+	var words: PackedStringArray = normalized.strip_edges().split("/")
 	var output: String = ""
 	var step_idx: int = 0
 
 	for w_idx in range(words.size()):
 		var word: String = words[w_idx].strip_edges()
-		if word.is_empty():
-			output += " "
-			continue
-
 		var codes: PackedStringArray = word.split(" ", false)
 		for code in codes:
 			var step := DecodeStep.new()
@@ -467,6 +473,13 @@ func decode_morse(input_text: String) -> DecodeResult:
 
 		if w_idx < words.size() - 1:
 			output += " "
+			var separator := DecodeStep.new()
+			separator.step_index = step_idx
+			separator.source_char = "/"
+			separator.result_char = " "
+			separator.description = "'/' → 单词分隔空格"
+			result.steps.append(separator)
+			step_idx += 1
 
 	result.output_text = output
 	return result
@@ -475,7 +488,9 @@ func decode_morse(input_text: String) -> DecodeResult:
 #  ROT13 解码
 # ══════════════════════════════════════════
 func decode_rot13(input_text: String) -> DecodeResult:
-	return decode_caesar(input_text, "13")
+	var result := decode_caesar(input_text, "13")
+	result.cipher_type = CipherType.ROT13
+	return result
 
 # ══════════════════════════════════════════
 #  Atbash 密码解码

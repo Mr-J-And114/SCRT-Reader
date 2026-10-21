@@ -217,9 +217,14 @@ func start() -> void:
 func start_from_random() -> void:
 	if events.is_empty():
 		return
-	# 随机选一个事件位置（避免选到尾部）
-	var max_start: int = maxi(1, events.size() - 10)
-	event_index = randi_range(0, max_start)
+	# 只从字符首个音符切入，避免半个字母和尾部 END 被当作开头。
+	var starts: Array[int] = []
+	for i in range(events.size()):
+		var evt: MorseEvent = events[i]
+		if evt.type not in [EventType.DIT, EventType.DAH]: continue
+		if i == 0 or events[i - 1].type in [EventType.WORD_GAP, EventType.PAUSE] or (events[i - 1].type == EventType.CHAR_GAP and events[i - 1].duration_ms >= unit_ms * 3.0):
+			starts.append(i)
+	event_index = starts.pick_random() if not starts.is_empty() else 0
 	event_timer = 0.0
 	is_playing = true
 	is_tone_on = false
@@ -265,6 +270,7 @@ func process(delta: float, signal_quality: float) -> Dictionary:
 			event_index = 0
 			decoded_chars = ""
 			current_morse = ""
+			current_char_code = ""
 			morse_display_buffer = ""
 			decoded_lines.clear()
 		else:
@@ -306,7 +312,8 @@ func process(delta: float, signal_quality: float) -> Dictionary:
 			is_tone_on = false
 			event_timer = evt.duration_ms
 		EventType.END:
-			is_playing = false
+			# 保持循环会话；下一次 process 从第一个事件开始，不能重新随机。
+			is_playing = loop
 			is_tone_on = false
 			result["finished"] = true
 	result["tone_on"] = is_tone_on

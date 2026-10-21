@@ -1,0 +1,12 @@
+{
+  "cover_fade": 0.5,
+  "slides": [
+    {
+      "text": "SCRT-Reader Core",
+      "font_size": 70,
+      "fade_in": 0.3,
+      "hold": 0.5,
+      "fade_out": 0.3
+    }
+  ]
+}
