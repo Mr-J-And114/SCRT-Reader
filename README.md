@@ -95,10 +95,10 @@ Core 框架代码采用 [MIT License](LICENSE)。随仓库分发的 Sarasa Mono 
 </p>
 
 <p>
-  <a href="https://ko-fi.com/scrts"><img src="docs/assets/support-kofi.svg" width="200" alt="在 Ko-fi 支持 SCRT Studio"></a>
+  <a href="https://ko-fi.com/scrtstudio"><img src="docs/assets/support-kofi.svg" width="200" alt="在 Ko-fi 支持 SCRT Studio"></a>
   <a href="https://www.patreon.com/SCRTStudio"><img src="docs/assets/support-patreon.svg" width="200" alt="在 Patreon 支持 SCRT Studio"></a>
 </p>
 
-[爱发电：SCRT Studio](https://afdian.com/a/scrtstudio?tab=home) · [Ko-fi：scrts](https://ko-fi.com/scrts) · [Patreon：SCRTStudio](https://www.patreon.com/SCRTStudio)
+[爱发电：SCRT Studio](https://afdian.com/a/scrtstudio?tab=home) · [Ko-fi：scrtstudio](https://ko-fi.com/scrtstudio) · [Patreon：SCRTStudio](https://www.patreon.com/SCRTStudio)
 
 感谢每一位试玩、反馈、分享和支持项目的朋友。
