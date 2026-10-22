@@ -1,5 +1,6 @@
 version = 1
 maintained = [
+  ".github/FUNDING.yml",
   ".gitattributes",
   ".gitignore",
   "LICENSE",
@@ -9,6 +10,8 @@ maintained = [
   "docs/VALIDATION.md",
   "docs/PUBLISHING.md",
   "docs/content-pack.md",
+  "docs/assets/support-kofi.svg",
+  "docs/assets/support-patreon.svg",
   "public-sync/README.md",
   "public-sync/allowlist.toml",
   "public-sync/checks/audit.py",
