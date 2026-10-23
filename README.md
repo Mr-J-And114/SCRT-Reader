@@ -9,7 +9,7 @@ SCRT-Reader 是 SCRT Studio 在开发终端交互式叙事游戏《SCRT》过程
 
 本仓库当前公开的是 **SCRT-Reader Core 无剧情源码版**，供开发者学习、修改，以及制作自己的终端阅读与交互内容。面向玩家的、包含剧情与配套素材的版本通过 **Releases 发行附件**提供。
 
-[下载含剧情的试玩版本](https://github.com/Mr-J-And114/SCRT-Reader/releases/latest) · [查看全部发行版本](https://github.com/Mr-J-And114/SCRT-Reader/releases) · [反馈问题](https://github.com/Mr-J-And114/SCRT-Reader/issues) · [支持开发](#支持开发)
+[itch.io 试玩页面](https://mr-j-and.itch.io/scrt) · [下载含剧情的试玩版本](https://github.com/Mr-J-And114/SCRT-Reader/releases/latest) · [查看全部发行版本](https://github.com/Mr-J-And114/SCRT-Reader/releases) · [反馈问题](https://github.com/Mr-J-And114/SCRT-Reader/issues) · [支持开发](#支持开发)
 
 ## 公开源码与游戏发行版
 
