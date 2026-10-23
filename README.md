@@ -1,5 +1,8 @@
 # SCRT-Reader Core
 
+<img width="2560" height="1600" alt="Demo-V1 1 1-preview-01" src="https://github.com/user-attachments/assets/bf9d9b3a-7bb5-4fb1-866f-2bcd3fe83fa1" />
+
+
 **CRT 终端模拟器 · 内容包阅读器 · 可扩展叙事框架**
 
 SCRT-Reader 是 SCRT Studio 在开发终端交互式叙事游戏《SCRT》过程中构建的软件框架，使用 Godot 4.7.1 与 GDScript。它以模拟计算机终端为交互入口，将档案阅读、虚拟文件系统、通讯、无线电和环境观测等功能组织在同一个界面中。
@@ -102,3 +105,13 @@ Core 框架代码采用 [MIT License](LICENSE)。随仓库分发的 Sarasa Mono 
 [爱发电：SCRT Studio](https://afdian.com/a/scrtstudio?tab=home) · [Ko-fi：scrtstudio](https://ko-fi.com/scrtstudio) · [Patreon：SCRTStudio](https://www.patreon.com/SCRTStudio)
 
 感谢每一位试玩、反馈、分享和支持项目的朋友。
+
+预览图：
+
+<img width="2560" height="1567" alt="Demo-V1 1 1-preview-02" src="https://github.com/user-attachments/assets/b47c6037-335f-4c71-aef3-c521b0484952" />
+
+<img width="2544" height="1431" alt="Demo-V1 1 1-preview-03" src="https://github.com/user-attachments/assets/9d1bef15-4379-48c8-9ea9-1054c5192494" />
+
+<img width="2544" height="1431" alt="Demo-V1 1 1-preview-04" src="https://github.com/user-attachments/assets/27a250fe-461e-423e-b1c1-5f4f72b7e4ea" />
+
+<img width="2560" height="1564" alt="Demo-V1 1 1-preview-05" src="https://github.com/user-attachments/assets/a96ceb79-70a1-42c4-955c-683da4ac1658" />
